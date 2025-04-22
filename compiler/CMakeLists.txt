@@ -1,3 +1,0 @@
-add_executable(wdf_compiler)
-target_sources(wdf_compiler PRIVATE wdf_compiler.cpp)
-target_compile_features(wdf_compiler PRIVATE cxx_std_20)
