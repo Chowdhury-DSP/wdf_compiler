@@ -23,9 +23,119 @@ main :: () {
     if !fread_success { exit (1); }
 
     sections := parse_file_sections (file_str);
-    print("circuit:\n%\n", sections.circuit);
-    print("inputs:\n%\n", sections.inputs);
-    print("outputs:\n%\n", sections.outputs);
+    // print("circuit:\n%\n", sections.circuit);
+    // print("inputs:\n%\n", sections.inputs);
+    // print("outputs:\n%\n", sections.outputs);
+
+    circuit_tokens := parse_circuit(sections.circuit);
+    generate_circuit(circuit_tokens);
+}
+
+Token_Type :: enum {
+        Ideal_Voltage_Source;
+        Ideal_Current_Source;
+        Resistor;
+        Capacitor;
+        Series;
+        Parallel;
+    }
+
+Token :: struct {
+    name: string;
+    type: Token_Type;
+    args: [] string;
+    parent: *Token;
+}
+
+generate_circuit :: (tokens: [] Token) {
+    is_root :: (token: Token) -> bool {
+        if token.type == {
+            case .Ideal_Voltage_Source; return true;
+            case .Ideal_Current_Source; return true;
+        }
+        return false;
+    }
+
+    state_vars : [..] string;
+    impedance_vars : [..] string;
+    methods : [..] string;
+
+    for token : tokens {
+        array_add(*state_vars, tprint("%_a", token.name));
+        array_add(*state_vars, tprint("%_b", token.name));
+        
+        if token.type == {
+            case .Capacitor; array_add(*state_vars, tprint("%_z", token.name));
+        }
+
+        if ! is_root(token) {
+            array_add(*impedance_vars, tprint("%_R", token.name));
+            array_add(*impedance_vars, tprint("%_G", token.name));
+
+
+        }
+    }
+
+    print("%\n", tokens);
+    print("%\n", state_vars);
+    print("%\n", impedance_vars);
+}
+
+parse_circuit :: (circuit_str: string) -> [] Token {
+    split_tokens := String.split(circuit_str, cast(u8) #char ";");
+
+    tokens : [..] Token;
+    Children :: struct {
+        token: *Token;
+        num_children: int;
+        countdown: int;
+    }
+    children_stack: [..] Children;
+
+    for *token : split_tokens {
+        token_str := String.trim(token.*);
+        if token_str.count == 0 { continue; }
+        
+        found_token_tag, tag, args := String.split_from_left(token_str, #char "(");
+        // remove closing parenthese from args
+        assert(args[args.count - 1] == #char ")", tprint("Token % is missing closing parenthese", tag));
+        args.count = args.count - 1;
+
+        num_children := 0;
+        new_token: Token;
+        if tag == {
+            case "R"; new_token.type = .Resistor;
+            case "C"; new_token.type = .Capacitor;
+            case "IVs";
+                new_token.type = .Ideal_Voltage_Source;
+                num_children = 1;
+            case "Series";
+                new_token.type = .Series;
+                num_children = 2;
+            case; assert(false, tprint("Unknown token type: %", tag));
+        }
+
+        args_split := String.split(args, cast(u8) #char ",");
+        new_token.name = args_split[0];
+
+        new_token.args.data = args_split.data + 1;
+        new_token.args.count = args_split.count - 1;
+
+        if children_stack.count != 0 {
+            parent_children := peek_pointer(children_stack);
+            parent_children.countdown = parent_children.countdown - 1;
+            new_token.parent = parent_children.token;
+
+        }
+        
+        array_add(*tokens, new_token);
+        
+        if num_children != 0 {
+            array_add(*children_stack, .{peek_pointer(tokens), num_children, num_children});
+        }
+    }
+    // print("%\n", tokens);
+    return tokens;
 }
 
 File_Sections :: struct {
