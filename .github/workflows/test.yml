@@ -30,4 +30,4 @@ jobs:
       working-directory: tests/rc_lowpass
       run: |
         ../../compiler/wdf_compiler rc_lowpass.wdf
-        clang rc_lowpass.cpp --std=c++20 -lstdc++ -o rc_lowpass.exe && ./rc_lowpass.exe
+        gcc rc_lowpass.cpp --std=c++20 -lstdc++ -o rc_lowpass.exe && ./rc_lowpass.exe
