@@ -112,8 +112,6 @@ generate_process :: (tokens: [] Token, input_config: string, output_config: stri
             case .Ideal_Voltage_Source;
                 input_token.args = .[input];
         }
-
-        print("%, %\n", input_token.*, input);
     }
 
     down_tree_statements : [..] string;
