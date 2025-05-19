@@ -19,6 +19,9 @@ jobs:
     - name: Jai check
       run: ~/ChowDSP/jai/bin/jai-macos -version
 
+    - name: Checkout code
+      uses: actions/checkout@v2
+
     - name: Build wdf_compiler
       working-directory: compiler
       run: ~/ChowDSP/jai/bin/jai-macos wdf_compiler.jai
