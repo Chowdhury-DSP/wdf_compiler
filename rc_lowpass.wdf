@@ -8,4 +8,4 @@ inputs:
 Vin
 
 outputs:
-V(C1)
+V:C1

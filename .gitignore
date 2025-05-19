@@ -2,5 +2,6 @@ build*/
 .build/
 *.dSYM
 wdf_compiler
+*.exe
 
 .focus-config
