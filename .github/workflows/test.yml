@@ -1,0 +1,31 @@
+name: Test
+
+on:
+  pull_request:
+    branches:
+    - main
+    - develop
+  push:
+    branches:
+    - ci
+
+  workflow_dispatch:
+
+jobs:
+  build_and_test:
+    name: Test WDF Compiler
+    runs-on: [self-hosted, macOS]
+
+    steps:
+    - name: Jai check
+      run: jai -version
+
+    - name: Build wdf_compiler
+      working-directory: compiler
+      run: jai wdf_compiler.jai
+
+    - name: RC Lowpass Test
+      working-directory: tests/rc_lowpass
+      run: |
+        ../../compiler/wdf_compiler rc_lowpass.wdf
+        clang rc_lowpass.cpp --std=c++20 -lstdc++ -o rc_lowpass.exe && ./rc_lowpass.exe

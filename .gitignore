@@ -4,4 +4,6 @@ build*/
 wdf_compiler
 *.exe
 
+/.idea
+/.vscode
 .focus-config
