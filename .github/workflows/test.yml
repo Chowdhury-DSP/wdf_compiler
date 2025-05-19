@@ -16,15 +16,12 @@ jobs:
     runs-on: [self-hosted, macOS]
 
     steps:
-    - name: Setup environment
-      run: source ~/.bashrc
-
     - name: Jai check
-      run: jai -version
+      run: ~/ChowDSP/jai/bin/jai-macos -version
 
     - name: Build wdf_compiler
       working-directory: compiler
-      run: jai wdf_compiler.jai
+      run: ~/ChowDSP/jai/bin/jai-macos wdf_compiler.jai
 
     - name: RC Lowpass Test
       working-directory: tests/rc_lowpass
