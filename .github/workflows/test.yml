@@ -29,5 +29,5 @@ jobs:
     - name: RC Lowpass Test
       working-directory: tests/rc_lowpass
       run: |
-        ../../compiler/wdf_compiler rc_lowpass.wdf
+        ../../compiler/wdf_compiler rc_lowpass.wdf rc_lowpass.h
         gcc rc_lowpass.cpp --std=c++20 -lstdc++ -o rc_lowpass.exe && ./rc_lowpass.exe

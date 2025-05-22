@@ -7,7 +7,7 @@ set(WDF_COMPILER ${CMAKE_CURRENT_SOURCE_DIR}/../compiler/wdf_compiler)
 add_custom_command(
     OUTPUT rc_lowpass/rc_lowpass.h
     COMMAND ${CMAKE_COMMAND} -E echo "Compiling rc_lowpass WDF"
-    COMMAND ${WDF_COMPILER} ${CMAKE_CURRENT_SOURCE_DIR}/rc_lowpass/rc_lowpass.wdf
+    COMMAND ${WDF_COMPILER} ${CMAKE_CURRENT_SOURCE_DIR}/rc_lowpass/rc_lowpass.wdf ${CMAKE_CURRENT_SOURCE_DIR}/rc_lowpass/rc_lowpass.h
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/rc_lowpass/rc_lowpass.wdf
 )
 add_executable(rc_lowpass
