@@ -1,0 +1,11 @@
+circuit:
+IIs(Iin);
+    Series(S1);
+        R(R1, 1k);
+        L(L1, 1m);
+
+inputs:
+Iin
+
+outputs:
+I:R1
