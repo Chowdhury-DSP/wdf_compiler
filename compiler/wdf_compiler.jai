@@ -150,10 +150,10 @@ generate_process :: (tokens: [] Token, input_config: string, output_config: stri
             case .Resistor;
                 array_add(*up_tree_statements, tprint("state.%1_b = 0; // %1 reflected", token.name));
             case .Capacitor;
-                array_add(*up_tree_statements, tprint("state.%1_b = -state.%1_z; // %1 reflected", token.name));
+                array_add(*up_tree_statements, tprint("state.%1_b = state.%1_z; // %1 reflected", token.name));
                 array_add(*down_tree_statements, tprint("state.%1_z = state.%1_a; // %1 state update", token.name));
             case .Inductor;
-                array_add(*up_tree_statements, tprint("state.%1_b = state.%1_z; // %1 reflected", token.name));
+                array_add(*up_tree_statements, tprint("state.%1_b = -state.%1_z; // %1 reflected", token.name));
                 array_add(*down_tree_statements, tprint("state.%1_z = state.%1_a; // %1 state update", token.name));
             case .Series;
                 child0_token := tokens[token.children[0]];
@@ -162,6 +162,13 @@ generate_process :: (tokens: [] Token, input_config: string, output_config: stri
                 array_add(*down_tree_statements, tprint("const auto pr_%1 = impedances.%2_R * impedances.%1_G; // %1 coefficient calculation (@TODO: pre-compute this)", token.name, child0_token.name));
                 array_add(*down_tree_statements, tprint("state.%2_a = state.%2_b - pr_%1 * (state.%1_a + state.%2_b + state.%3_b); // %2 incident", token.name, child0_token.name, child1_token.name));
                 array_add(*down_tree_statements, tprint("state.%3_a = -(state.%1_a + state.%2_a); // %3 incident", token.name, child0_token.name, child1_token.name));
+            case .Parallel;
+                child0_token := tokens[token.children[0]];
+                child1_token := tokens[token.children[1]];
+                array_add(*up_tree_statements, tprint("state.%1_b = state.%3_b - pr_%1 * (state.%3_b - state.%2_b); // %1 reflected", token.name, child0_token.name, child1_token.name));
+                array_add(*up_tree_statements, tprint("const auto pr_%1 = impedances.%2_G * impedances.%1_R; // %1 coefficient calculation (@TODO: pre-compute this)", token.name, child0_token.name));
+                array_add(*down_tree_statements, tprint("state.%2_a = state.%1_b - state.%2_b + state.%1_a; // %2 incident", token.name, child0_token.name));
+                array_add(*down_tree_statements, tprint("state.%3_a = state.%1_b - state.%3_b + state.%1_a; // %3 incident", token.name, child0_token.name, child1_token.name));
         }
     }
 
@@ -278,7 +285,7 @@ generate_circuit :: (tokens: [] Token) -> string {
     }
 
     while impedance_update_todos.count > 0 {
-        impedance_todo := impedance_update_todos[0];
+        impedance_todo := impedance_update_todos[impedance_update_todos.count - 1];
         token := impedance_todo.token;
         if token.type == {
             case .Series;
@@ -287,6 +294,12 @@ generate_circuit :: (tokens: [] Token) -> string {
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_R = impedances.%2_R + impedances.%3_R;", token.name, child0_token.name, child1_token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_G = 1.0f / impedances.%1_R;\n", token.name));
+            case .Parallel;
+                child0_token := impedance_todo.children[0];
+                child1_token := impedance_todo.children[1];
+                array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
+                array_add(*impedance_updates, tprint("impedances.%1_G = impedances.%2_G + impedances.%3_G;", token.name, child0_token.name, child1_token.name));
+                array_add(*impedance_updates, tprint("impedances.%1_R = 1.0f / impedances.%1_G;\n", token.name));
         }
 
         if token.parent != root_token {
@@ -297,7 +310,6 @@ generate_circuit :: (tokens: [] Token) -> string {
         }
 
         // This is leaky, but I don't think we care?
-        impedance_update_todos.data += 1;
         impedance_update_todos.count -= 1;
     }
 
@@ -350,6 +362,9 @@ parse_circuit :: (circuit_str: string) -> [] Token {
                 num_children = 1;
             case "Series";
                 new_token.type = .Series;
+                num_children = 2;
+            case "Parallel";
+                new_token.type = .Parallel;
                 num_children = 2;
             case; assert(false, tprint("Unknown token type: %", tag));
         }

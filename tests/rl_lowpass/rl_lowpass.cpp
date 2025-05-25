@@ -7,8 +7,8 @@ struct Reference_WDF
 {
     chowdsp::wdft::ResistorT<float> R1 { 1000.0f };
     chowdsp::wdft::InductorT<float> L1 { 1.0e-3f };
-    chowdsp::wdft::WDFSeriesT<float, decltype (R1), decltype (L1)> S1 { R1, L1 };
-    chowdsp::wdft::IdealCurrentSourceT<float, decltype (S1)> Iin { S1 };
+    chowdsp::wdft::WDFParallelT<float, decltype (R1), decltype (L1)> P1 { R1, L1 };
+    chowdsp::wdft::IdealCurrentSourceT<float, decltype (P1)> Iin { P1 };
 
     void prepare (float fs)
     {
@@ -18,8 +18,8 @@ struct Reference_WDF
     float process (float I)
     {
         Iin.setCurrent (I);
-        Iin.incident (S1.reflected());
-        S1.incident (Iin.reflected());
+        Iin.incident (P1.reflected());
+        P1.incident (Iin.reflected());
         return chowdsp::wdft::current<float> (R1);
     }
 };
