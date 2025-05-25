@@ -31,3 +31,15 @@ jobs:
       run: |
         ../../compiler/wdf_compiler rc_lowpass.wdf rc_lowpass.h
         gcc rc_lowpass.cpp --std=c++20 -lstdc++ -o rc_lowpass.exe && ./rc_lowpass.exe
+
+    - name: RL Lowpass Test
+      working-directory: tests/rl_lowpass
+      run: |
+        ../../compiler/wdf_compiler rl_lowpass.wdf rl_lowpass.h
+        gcc rl_lowpass.cpp --std=c++20 -lstdc++ -o rl_lowpass.exe && ./rl_lowpass.exe
+
+    - name: RC Bandpass Test
+      working-directory: tests/rc_bandpass
+      run: |
+        ../../compiler/wdf_compiler rc_bandpass.wdf rc_bandpass.h
+        gcc rc_bandpass.cpp --std=c++20 -lstdc++ -o rc_bandpass.exe && ./rc_bandpass.exe
