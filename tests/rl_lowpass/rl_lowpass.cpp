@@ -1,4 +1,4 @@
-#include "rc_lowpass.h"
+#include "rl_lowpass.h"
 
 #include "../chowdsp_wdf.h"
 #include <iostream>
@@ -6,27 +6,27 @@
 struct Reference_WDF
 {
     chowdsp::wdft::ResistorT<float> R1 { 1000.0f };
-    chowdsp::wdft::CapacitorT<float> C1 { 1.0e-6f };
-    chowdsp::wdft::WDFSeriesT<float, decltype (R1), decltype (C1)> S1 { R1, C1 };
-    chowdsp::wdft::IdealVoltageSourceT<float, decltype (S1)> Vin { S1 };
+    chowdsp::wdft::InductorT<float> L1 { 1.0e-3f };
+    chowdsp::wdft::WDFParallelT<float, decltype (R1), decltype (L1)> P1 { R1, L1 };
+    chowdsp::wdft::IdealCurrentSourceT<float, decltype (P1)> Iin { P1 };
 
     void prepare (float fs)
     {
-        C1.prepare (fs);
+        L1.prepare (fs);
     }
 
-    float process (float V)
+    float process (float I)
     {
-        Vin.setVoltage (V);
-        Vin.incident (S1.reflected());
-        S1.incident (Vin.reflected());
-        return chowdsp::wdft::voltage<float> (C1);
+        Iin.setCurrent (I);
+        Iin.incident (P1.reflected());
+        P1.incident (Iin.reflected());
+        return chowdsp::wdft::current<float> (R1);
     }
 };
 
 int main()
 {
-    std::cout << "RC Lowpass test\n";
+    std::cout << "RL Lowpass test\n";
 
     static constexpr float fs = 48000.0f;
 
