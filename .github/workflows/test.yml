@@ -43,3 +43,7 @@ jobs:
       run: |
         ../../compiler/wdf_compiler rc_bandpass.wdf rc_bandpass.h
         gcc rc_bandpass.cpp --std=c++20 -lstdc++ -o rc_bandpass.exe && ./rc_bandpass.exe
+
+    - name: Error Checks
+      working-directory: tests/bad_configs
+      run: python3 run_tests.py
