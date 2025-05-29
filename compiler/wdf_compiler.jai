@@ -8,12 +8,20 @@ Args :: struct {
     verbose : bool = false; @"?Verbose"
 }
 
+error_assert :: (cond: bool, message: string) #expand {
+    if ! cond {
+        print("Compilation error: %\n", message);
+        exit(1);
+    }
+}
+
 main :: () {
     context.allocator = temp;
     args_success, args, is_set, free_args := CLI.parse_arguments (Args);
 
     if !args_success || free_args.count < 2 {
-        CLI.show_help (Args, CLI.Default_Argument_Flags, .[]);
+        print("Incorrect arguments! Usage: wdf_compiler <input_file> <output_file>\n");
+        // CLI.show_help (Args, CLI.Default_Argument_Flags, .[]);
         exit (1);
     }
 
@@ -25,9 +33,9 @@ main :: () {
     if !fread_success { exit (1); }
 
     sections := parse_file_sections (file_str);
-    // print("circuit:\n%\n", sections.circuit);
-    // print("inputs:\n%\n", sections.inputs);
-    // print("outputs:\n%\n", sections.outputs);
+    error_assert(sections.circuit.count > 0, "Missing \"circuit\" section");
+    error_assert(sections.inputs.count > 0, "Missing \"input\" section");
+    error_assert(sections.outputs.count > 0, "Missing \"output\" section");
 
     circuit_tokens := parse_circuit(sections.circuit);
     gen_code := generate_circuit(circuit_tokens);
@@ -82,7 +90,7 @@ generate_method :: (name: string, args: [] string, lines: [] string, return_type
 
 get_value :: (val_str: string) -> float32 {
     val, success, remainder := string_to_float(val_str);
-    assert(success);
+    assert(success); // @TODO: error check here!
     if remainder[0] == {
         case #char "k";
             val *= 1.0e3;
@@ -113,7 +121,7 @@ generate_process :: (tokens: [] Token, input_config: string, output_config: stri
                 break;
             }
         }
-        assert(input_token != null);
+        error_assert(input_token != null, tprint("Unable to find input circuit element: %", input));
         array_add(*input_args, tprint("float %", input));
 
         if input_token.type == {
@@ -121,6 +129,8 @@ generate_process :: (tokens: [] Token, input_config: string, output_config: stri
                 input_token.args = .[input];
             case .Ideal_Current_Source;
                 input_token.args = .[input];
+            case;
+                error_assert(false, tprint("Input element % has invalid type: %", input, input_token.type));
         }
     }
 
@@ -190,7 +200,7 @@ generate_process :: (tokens: [] Token, input_config: string, output_config: stri
     array_add(*code_statements, "");
 
     outputs := String.split(output_config, "\n");
-    assert(outputs.count == 1); // @TODO
+    assert(outputs.count == 1); // @TODO: support multiple outputs
     for output : outputs {
         output_info := String.split(output, ":");
         // print("%\n", output_info);
@@ -202,14 +212,15 @@ generate_process :: (tokens: [] Token, input_config: string, output_config: stri
                 break;
             }
         }
-        assert(output_token != null);
-        // print("%\n", output_token.*);
+        error_assert(output_token != null, tprint("Unable to find output circuit element: %", output_info[1]));
 
         if output_info[0] == {
             case "V";
                 array_add(*code_statements, tprint("return (state.%1_a + state.%1_b) * 0.5f; // %1 voltage", output_token.name));
             case "I";
                 array_add(*code_statements, tprint("return (state.%1_a - state.%1_b) * (0.5f * impedances.%1_G); // %1 current", output_token.name));
+            case;
+                error_assert(false, tprint("Invalid output type: %", output_info[0]));
         }
     }
 
@@ -345,7 +356,7 @@ parse_circuit :: (circuit_str: string) -> [] Token {
         
         found_token_tag, tag, args := String.split_from_left(token_str, #char "(");
         // remove closing parenthese from args
-        assert(args[args.count - 1] == #char ")", tprint("Token % is missing closing parenthese", tag));
+        error_assert(args[args.count - 1] == #char ")", tprint("Token % is missing closing parenthese", tag));
         args.count = args.count - 1;
 
         num_children := 0;
@@ -366,7 +377,7 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             case "Parallel";
                 new_token.type = .Parallel;
                 num_children = 2;
-            case; assert(false, tprint("Unknown token type: %", tag));
+            case; error_assert(false, tprint("Unknown token type: %", tag));
         }
 
         args_split := String.split(args, cast(u8) #char ",");
