@@ -36,10 +36,15 @@ main :: () {
     error_assert(sections.circuit.count > 0, "Missing \"circuit\" section");
     error_assert(sections.inputs.count > 0, "Missing \"input\" section");
     error_assert(sections.outputs.count > 0, "Missing \"output\" section");
+    
+    inputs := String.split(sections.inputs, "\n");
+    assert(inputs.count == 1); // @TODO: support multiple inputs
+    outputs := String.split(sections.outputs, "\n");
+    assert(outputs.count == 1); // @TODO: support multiple outputs
 
     circuit_tokens := parse_circuit(sections.circuit);
-    gen_code := generate_circuit(circuit_tokens);
-    gen_code = tprint("%\n%", gen_code, generate_process(circuit_tokens, sections.inputs, sections.outputs));
+    gen_code := generate_circuit(circuit_tokens, inputs);
+    gen_code = tprint("%\n%", gen_code, generate_process(circuit_tokens, inputs, outputs));
 
     gen_file, success := File.file_open(output_file, true);
     File.file_write(*gen_file, gen_code);
@@ -49,6 +54,8 @@ main :: () {
 Token_Type :: enum {
         Ideal_Voltage_Source;
         Ideal_Current_Source;
+        Resistive_Voltage_Source;
+        Resistive_Current_Source;
         Resistor;
         Capacitor;
         Inductor;
@@ -62,12 +69,13 @@ Token :: struct {
     args: [] string;
     parent: *Token;
     children: [..] s64;
+    input: string;
 }
 
-generate_vars_struct :: (impedance_vars: [] string, name: string) -> string {
+generate_struct :: (impedance_vars: [] string, name: string) -> string {
     struct_code := tprint("struct % {\n", name);
     for var : impedance_vars {
-        struct_code = tprint("%    float %;\n", struct_code, var);
+        struct_code = tprint("%    %\n", struct_code, var);
     }
     struct_code = tprint("%};\n", struct_code);
     return struct_code;
@@ -91,6 +99,7 @@ generate_method :: (name: string, args: [] string, lines: [] string, return_type
 get_value :: (val_str: string) -> float32 {
     val, success, remainder := string_to_float(val_str);
     assert(success); // @TODO: error check here!
+    if remainder.count == 0 { return val; }
     if remainder[0] == {
         case #char "k";
             val *= 1.0e3;
@@ -106,9 +115,7 @@ get_value :: (val_str: string) -> float32 {
     return val;
 }
 
-generate_process :: (tokens: [] Token, input_config: string, output_config: string) -> string {
-    inputs := String.split(input_config, "\n");
-
+generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) -> string {
     input_args : [..] string;
     array_add (*input_args, "State& state");
     array_add (*input_args, "const Impedances& impedances");
@@ -125,10 +132,11 @@ generate_process :: (tokens: [] Token, input_config: string, output_config: stri
         array_add(*input_args, tprint("float %", input));
 
         if input_token.type == {
-            case .Ideal_Voltage_Source;
-                input_token.args = .[input];
-            case .Ideal_Current_Source;
-                input_token.args = .[input];
+            case .Ideal_Voltage_Source; #through;
+            case .Ideal_Current_Source; #through;
+            case .Resistive_Voltage_Source; #through;
+            case .Resistive_Current_Source;
+                input_token.input = input;
             case;
                 error_assert(false, tprint("Input element % has invalid type: %", input, input_token.type));
         }
@@ -145,12 +153,12 @@ generate_process :: (tokens: [] Token, input_config: string, output_config: stri
                 case .Ideal_Voltage_Source;
                     child_token := tokens[token.children[0]];
                     array_add(*up_tree_statements, tprint("state.%1_a = state.%2_b; // %1 incident", token.name, child_token.name));
-                    array_add(*down_tree_statements, tprint("state.%1_b = -state.%1_a + 2 * %2; // %1 reflected", token.name, token.args[0]));
+                    array_add(*down_tree_statements, tprint("state.%1_b = -state.%1_a + 2 * %2; // %1 reflected", token.name, token.input));
                     array_add(*down_tree_statements, tprint("state.%2_a = state.%1_b; // %2 incident", token.name, child_token.name));
                 case .Ideal_Current_Source;
                     child_token := tokens[token.children[0]];
                     array_add(*up_tree_statements, tprint("state.%1_a = state.%2_b; // %1 incident", token.name, child_token.name));
-                    array_add(*down_tree_statements, tprint("state.%1_b = 2 * impedances.%3_R * %2 + state.%1_a; // %1 reflected (@TODO: 2 * R?)", token.name, token.args[0], child_token.name));
+                    array_add(*down_tree_statements, tprint("state.%1_b = 2 * impedances.%3_R * %2 + state.%1_a; // %1 reflected (@TODO: 2 * R?)", token.name, token.input, child_token.name));
                     array_add(*down_tree_statements, tprint("state.%2_a = state.%1_b; // %2 incident", token.name, child_token.name));
             }
             continue;
@@ -165,6 +173,10 @@ generate_process :: (tokens: [] Token, input_config: string, output_config: stri
             case .Inductor;
                 array_add(*up_tree_statements, tprint("state.%1_b = -state.%1_z; // %1 reflected", token.name));
                 array_add(*down_tree_statements, tprint("state.%1_z = state.%1_a; // %1 state update", token.name));
+            case .Resistive_Voltage_Source;
+                array_add(*up_tree_statements, tprint("state.%1_b = %2; // %1 reflected", token.name, token.input));
+            case .Resistive_Current_Source;
+                array_add(*up_tree_statements, tprint("state.%1_b = impedances.%1_R * %2; // %1 reflected", token.name, token.input));
             case .Series;
                 child0_token := tokens[token.children[0]];
                 child1_token := tokens[token.children[1]];
@@ -199,8 +211,6 @@ generate_process :: (tokens: [] Token, input_config: string, output_config: stri
     // print("%\n", code_statements);
     array_add(*code_statements, "");
 
-    outputs := String.split(output_config, "\n");
-    assert(outputs.count == 1); // @TODO: support multiple outputs
     for output : outputs {
         output_info := String.split(output, ":");
         // print("%\n", output_info);
@@ -230,10 +240,11 @@ generate_process :: (tokens: [] Token, input_config: string, output_config: stri
                            "float");
 }
 
-generate_circuit :: (tokens: [] Token) -> string {
+generate_circuit :: (tokens: [] Token, inputs: [] string) -> string {
     state_vars : [..] string;
     impedance_vars : [..] string;
-    
+    params_vars : [..] string;
+
     impedance_updates : [..] string;
     Impedance_Update_Info :: struct {
         token: *Token;
@@ -253,45 +264,106 @@ generate_circuit :: (tokens: [] Token) -> string {
         array_add(todos, new_todo);
     }
 
+    is_input :: (token: *Token, inputs: [] string) -> bool {
+        found, idx := array_find(inputs, token.name);
+        return found;
+    }
+
+    // returns true if the param value is defined in the config (i.e. known at compile-time)
+    write_param :: (params_vars : *[..] string, token: *Token, idx := 0, suffix := "value") -> bool {
+        is_defined_arg := idx < token.args.count;
+        if is_defined_arg {
+            is_defined_arg &= token.args[idx] != "?";
+        }
+
+        if is_defined_arg {
+            array_add(params_vars, tprint("static constexpr float %1_%3 = %2;", token.name, get_value(token.args[idx]), suffix));
+        } else {
+            array_add(params_vars, tprint("float %1_%2;", token.name, suffix));
+        }
+
+        return is_defined_arg;
+    }
+
     root_token := *tokens[0];
     for *token : tokens {
-        array_add(*state_vars, tprint("%_a", token.name));
-        array_add(*state_vars, tprint("%_b", token.name));
+        array_add(*state_vars, tprint("float %_a;", token.name));
+        array_add(*state_vars, tprint("float %_b;", token.name));
         
         if token != root_token {
-            array_add(*impedance_vars, tprint("%_R", token.name));
-            array_add(*impedance_vars, tprint("%_G", token.name));
+            array_add(*impedance_vars, tprint("float %_R;", token.name));
+            array_add(*impedance_vars, tprint("float %_G;", token.name));
             // @TODO: some components have extra "intermediate" values we might want to compute here...
             // e.g. the Series adaptor.
         }
 
         if token.type == {
             case .Resistor;
+                write_param(*params_vars, token);
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                if token.args.count > 0 {
-                    array_add(*impedance_updates, tprint("static constexpr float %1_value = %2;", token.name, get_value(token.args[0])));
-                }
-                array_add(*impedance_updates, tprint("impedances.%1_R = %1_value;", token.name));
+                array_add(*impedance_updates, tprint("impedances.%1_R = params.%1_value;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_G = 1.0f / impedances.%1_R;\n", token.name));
                 add_impedance_update_todo(*impedance_update_todos, token.parent, token);
+
             case .Capacitor;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                if token.args.count > 0 {
-                    array_add(*impedance_updates, tprint("static constexpr float %1_value = %2;", token.name, get_value(token.args[0])));
-                }
-                array_add(*state_vars, tprint("%_z", token.name));
-                array_add(*impedance_updates, tprint("impedances.%1_G = 2.0f * %1_value * fs;", token.name));
+                write_param(*params_vars, token);
+                array_add(*state_vars, tprint("float %_z;", token.name));
+                array_add(*impedance_updates, tprint("impedances.%1_G = 2.0f * params.%1_value * fs;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_R = 1.0f / impedances.%1_G;\n", token.name));
                 add_impedance_update_todo(*impedance_update_todos, token.parent, token);
+
             case .Inductor;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                if token.args.count > 0 {
-                    array_add(*impedance_updates, tprint("static constexpr float %1_value = %2;", token.name, get_value(token.args[0])));
-                }
-                array_add(*state_vars, tprint("%_z", token.name));
-                array_add(*impedance_updates, tprint("impedances.%1_R = 2.0f * %1_value * fs;", token.name));
+                write_param(*params_vars, token);
+                array_add(*state_vars, tprint("float %_z;", token.name));
+                array_add(*impedance_updates, tprint("impedances.%1_R = 2.0f * params.%1_value * fs;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_G = 1.0f / impedances.%1_R;\n", token.name));
                 add_impedance_update_todo(*impedance_update_todos, token.parent, token);
+
+            case .Ideal_Voltage_Source;
+                if ! is_input(token, inputs) {
+                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    if is_known {
+                        array_add(*impedance_vars, tprint("static constexpr float %_V = Params::%1_v_value;", token.name));
+                    } else {
+                        array_add(*impedance_vars, tprint("float %_V;", token.name));
+                        array_add(*impedance_updates, tprint("// Computing voltage for: %1;", token.name));
+                        array_add(*impedance_updates, tprint("impedances.%1_V = params.%1_v_value;\n", token.name));
+                    }
+                    token.input = tprint("impedances.%1_V", token.name);
+                }
+
+            case .Ideal_Current_Source;
+                error_assert(false, "Not Implemented!");
+
+            case .Resistive_Voltage_Source;
+                is_input_source := is_input(token, inputs);
+
+                if ! is_input_source {
+                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    if is_known {
+                        array_add(*impedance_vars, tprint("static constexpr float %_V = Params::%1_v_value;", token.name));
+                    } else {
+                        array_add(*impedance_vars, tprint("float %_V;", token.name));
+                        array_add(*impedance_updates, tprint("// Computing voltage for: %1;", token.name));
+                        array_add(*impedance_updates, tprint("impedances.%1_V = params.%1_v_value;\n", token.name));
+                    }
+                    token.input = tprint("impedances.%1_V", token.name);
+                }
+
+                array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
+                if is_input_source {
+                    write_param(*params_vars, token, 0, "res_value");
+                } else {
+                    write_param(*params_vars, token, 1, "res_value");
+                }
+                array_add(*impedance_updates, tprint("impedances.%1_R = params.%1_res_value;", token.name));
+                array_add(*impedance_updates, tprint("impedances.%1_G = 1.0f / impedances.%1_R;\n", token.name));
+                add_impedance_update_todo(*impedance_update_todos, token.parent, token);
+
+            case .Resistive_Current_Source;
+                error_assert(false, "Not Implemented!");
         }
     }
 
@@ -331,10 +403,11 @@ generate_circuit :: (tokens: [] Token) -> string {
     // print("%\n", impedance_update_todos);
 
     gen_code := "#pragma once\n";
-    gen_code = tprint("%\n%", gen_code, generate_vars_struct(impedance_vars, "Impedances"));
-    gen_code = tprint("%\n%", gen_code, generate_vars_struct(state_vars, "State"));
+    gen_code = tprint("%\n%", gen_code, generate_struct(params_vars, "Params"));
+    gen_code = tprint("%\n%", gen_code, generate_struct(impedance_vars, "Impedances"));
+    gen_code = tprint("%\n%", gen_code, generate_struct(state_vars, "State"));
     gen_code = tprint("%\n%", gen_code, generate_method("calc_impedances",
-                                                        .["Impedances& impedances", "float fs"],
+                                                        .["Impedances& impedances", "float fs", "Params params = {}"],
                                                         impedance_updates));
     return gen_code;
 }
@@ -365,6 +438,8 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             case "R"; new_token.type = .Resistor;
             case "C"; new_token.type = .Capacitor;
             case "L"; new_token.type = .Inductor;
+            case "RVs"; new_token.type = .Resistive_Voltage_Source;
+            case "RIs"; new_token.type = .Resistive_Current_Source;
             case "IVs";
                 new_token.type = .Ideal_Voltage_Source;
                 num_children = 1;
@@ -382,6 +457,10 @@ parse_circuit :: (circuit_str: string) -> [] Token {
 
         args_split := String.split(args, cast(u8) #char ",");
         new_token.name = args_split[0];
+
+        for old_token : tokens {
+            error_assert(new_token.name != old_token.name, tprint("Duplicate token name: %", new_token.name));
+        }
 
         new_token.args.data = args_split.data + 1;
         new_token.args.count = args_split.count - 1;
