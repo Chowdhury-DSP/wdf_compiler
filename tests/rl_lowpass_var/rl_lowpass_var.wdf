@@ -1,0 +1,15 @@
+circuit:
+IIs(Iplus);
+    Parallel(P1);
+        RIs(Iin, 1k);
+        Parallel(P2);
+            RIs(Ivar, ?, 2k);
+            Parallel(P3);
+                R(R1, ?);
+                L(L1, 1m);
+
+inputs:
+Iin
+
+outputs:
+I:R1
