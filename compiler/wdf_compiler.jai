@@ -336,7 +336,15 @@ generate_circuit :: (tokens: [] Token, inputs: [] string) -> string {
 
             case .Ideal_Current_Source;
                 if ! is_input(token, inputs) {
-                    error_assert(false, "Not Implemented!");
+                    is_known := write_param(*params_vars, token, 0, "i_value");
+                    if is_known {
+                        array_add(*impedance_vars, tprint("static constexpr float %_I = Params::%1_i_value;", token.name));
+                    } else {
+                        array_add(*impedance_vars, tprint("float %_I;", token.name));
+                        array_add(*impedance_updates, tprint("// Computing current for: %1;", token.name));
+                        array_add(*impedance_updates, tprint("impedances.%1_I = params.%1_i_value;\n", token.name));
+                    }
+                    token.input = tprint("impedances.%1_I", token.name);
                 }
 
             case .Resistive_Voltage_Source;
@@ -365,7 +373,28 @@ generate_circuit :: (tokens: [] Token, inputs: [] string) -> string {
                 add_impedance_update_todo(*impedance_update_todos, token.parent, token);
 
             case .Resistive_Current_Source;
-                error_assert(false, "Not Implemented!");
+                is_input_source := is_input(token, inputs);
+                if ! is_input(token, inputs) {
+                    is_known := write_param(*params_vars, token, 0, "i_value");
+                    if is_known {
+                        array_add(*impedance_vars, tprint("static constexpr float %_I = Params::%1_i_value;", token.name));
+                    } else {
+                        array_add(*impedance_vars, tprint("float %_I;", token.name));
+                        array_add(*impedance_updates, tprint("// Computing current for: %1;", token.name));
+                        array_add(*impedance_updates, tprint("impedances.%1_I = params.%1_i_value;\n", token.name));
+                    }
+                    token.input = tprint("impedances.%1_I", token.name);
+                }
+
+                array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
+                if is_input_source {
+                    write_param(*params_vars, token, 0, "res_value");
+                } else {
+                    write_param(*params_vars, token, 1, "res_value");
+                }
+                array_add(*impedance_updates, tprint("impedances.%1_R = params.%1_res_value;", token.name));
+                array_add(*impedance_updates, tprint("impedances.%1_G = 1.0f / impedances.%1_R;\n", token.name));
+                add_impedance_update_todo(*impedance_update_todos, token.parent, token);
         }
     }
 
