@@ -335,7 +335,9 @@ generate_circuit :: (tokens: [] Token, inputs: [] string) -> string {
                 }
 
             case .Ideal_Current_Source;
-                error_assert(false, "Not Implemented!");
+                if ! is_input(token, inputs) {
+                    error_assert(false, "Not Implemented!");
+                }
 
             case .Resistive_Voltage_Source;
                 is_input_source := is_input(token, inputs);
