@@ -16,7 +16,10 @@ error_assert :: (cond: bool, message: string) #expand {
 }
 
 main :: () {
+    // context setup...
     context.allocator = temp;
+    context.print_style.default_format_float.mode = .SCIENTIFIC;
+
     args_success, args, is_set, free_args := CLI.parse_arguments (Args);
 
     if !args_success || free_args.count < 2 {
@@ -36,7 +39,7 @@ main :: () {
     error_assert(sections.circuit.count > 0, "Missing \"circuit\" section");
     error_assert(sections.inputs.count > 0, "Missing \"input\" section");
     error_assert(sections.outputs.count > 0, "Missing \"output\" section");
-    
+
     inputs := String.split(sections.inputs, "\n");
     assert(inputs.count == 1); // @TODO: support multiple inputs
     outputs := String.split(sections.outputs, "\n");
@@ -67,9 +70,11 @@ Token :: struct {
     name: string;
     type: Token_Type;
     args: [] string;
-    parent: *Token;
+    parent: s64;
+    tree_depth: s64 = 0;
     children: [..] s64;
     input: string;
+    index: s64 = 0;
 }
 
 generate_struct :: (impedance_vars: [] string, name: string) -> string {
@@ -246,22 +251,21 @@ generate_circuit :: (tokens: [] Token, inputs: [] string) -> string {
     params_vars : [..] string;
 
     impedance_updates : [..] string;
-    Impedance_Update_Info :: struct {
-        token: *Token;
-        children: [..] *Token;
-    }
-    impedance_update_todos : [..] Impedance_Update_Info;
-    add_impedance_update_todo :: (todos: *[..] Impedance_Update_Info, token: *Token, new_child: *Token) {
-        for *todo : todos.* {
-            if todo.token == token {
-                array_add(*todo.children, new_child);
+    impedance_update_todos : [..] *Token;
+    add_impedance_update_todo :: (todos: *[..] *Token, token: *Token, new_child: *Token, append := true) {
+        for todo : todos.* {
+            if todo == token {
+                // array_add(*todo.children, new_child);
                 return;
             }
         }
-        new_todo: Impedance_Update_Info;
-        new_todo.token = token;
-        array_add(*new_todo.children, new_child);
-        array_add(todos, new_todo);
+        if append {
+            array_add(todos, token);
+        }
+        else
+        {
+            array_insert_at(todos, token, 0);
+        }
     }
 
     is_input :: (token: *Token, inputs: [] string) -> bool {
@@ -289,7 +293,7 @@ generate_circuit :: (tokens: [] Token, inputs: [] string) -> string {
     for *token : tokens {
         array_add(*state_vars, tprint("float %_a;", token.name));
         array_add(*state_vars, tprint("float %_b;", token.name));
-        
+
         if token != root_token {
             array_add(*impedance_vars, tprint("float %_R;", token.name));
             array_add(*impedance_vars, tprint("float %_G;", token.name));
@@ -303,7 +307,7 @@ generate_circuit :: (tokens: [] Token, inputs: [] string) -> string {
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_R = params.%1_value;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_G = 1.0f / impedances.%1_R;\n", token.name));
-                add_impedance_update_todo(*impedance_update_todos, token.parent, token);
+                add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Capacitor;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
@@ -311,7 +315,7 @@ generate_circuit :: (tokens: [] Token, inputs: [] string) -> string {
                 array_add(*state_vars, tprint("float %_z;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_G = 2.0f * params.%1_value * fs;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_R = 1.0f / impedances.%1_G;\n", token.name));
-                add_impedance_update_todo(*impedance_update_todos, token.parent, token);
+                add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Inductor;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
@@ -319,7 +323,7 @@ generate_circuit :: (tokens: [] Token, inputs: [] string) -> string {
                 array_add(*state_vars, tprint("float %_z;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_R = 2.0f * params.%1_value * fs;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_G = 1.0f / impedances.%1_R;\n", token.name));
-                add_impedance_update_todo(*impedance_update_todos, token.parent, token);
+                add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Ideal_Voltage_Source;
                 if ! is_input(token, inputs) {
@@ -370,7 +374,7 @@ generate_circuit :: (tokens: [] Token, inputs: [] string) -> string {
                 }
                 array_add(*impedance_updates, tprint("impedances.%1_R = params.%1_res_value;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_G = 1.0f / impedances.%1_R;\n", token.name));
-                add_impedance_update_todo(*impedance_update_todos, token.parent, token);
+                add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistive_Current_Source;
                 is_input_source := is_input(token, inputs);
@@ -394,37 +398,38 @@ generate_circuit :: (tokens: [] Token, inputs: [] string) -> string {
                 }
                 array_add(*impedance_updates, tprint("impedances.%1_R = params.%1_res_value;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_G = 1.0f / impedances.%1_R;\n", token.name));
-                add_impedance_update_todo(*impedance_update_todos, token.parent, token);
+                add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
         }
     }
 
     while impedance_update_todos.count > 0 {
+        Sort.quick_sort (impedance_update_todos, x => x.tree_depth);
         impedance_todo := impedance_update_todos[impedance_update_todos.count - 1];
-        token := impedance_todo.token;
+        token := impedance_todo;
         if token.type == {
             case .Series;
-                child0_token := impedance_todo.children[0];
-                child1_token := impedance_todo.children[1];
+                child0_token := tokens[impedance_todo.children[0]];
+                child1_token := tokens[impedance_todo.children[1]];
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_R = impedances.%2_R + impedances.%3_R;", token.name, child0_token.name, child1_token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_G = 1.0f / impedances.%1_R;\n", token.name));
             case .Parallel;
-                child0_token := impedance_todo.children[0];
-                child1_token := impedance_todo.children[1];
+                child0_token := tokens[impedance_todo.children[0]];
+                child1_token := tokens[impedance_todo.children[1]];
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_G = impedances.%2_G + impedances.%3_G;", token.name, child0_token.name, child1_token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_R = 1.0f / impedances.%1_G;\n", token.name));
         }
 
-        if token.parent != root_token {
+        // This is leaky, but I don't think we care?
+        impedance_update_todos.count -= 1;
+
+        if *tokens[token.parent] != root_token {
             // @TODO: test me!!
-            add_impedance_update_todo(*impedance_update_todos, token.parent, token);
+            add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token, false);
         } else {
             // print("Finished climbing impedance tree!");
         }
-
-        // This is leaky, but I don't think we care?
-        impedance_update_todos.count -= 1;
     }
 
     // print("%\n", tokens);
@@ -448,7 +453,7 @@ parse_circuit :: (circuit_str: string) -> [] Token {
 
     tokens : [..] Token;
     Children :: struct {
-        token: *Token;
+        token_index: int;
         num_children: int;
         countdown: int;
     }
@@ -457,7 +462,7 @@ parse_circuit :: (circuit_str: string) -> [] Token {
     for *token : split_tokens {
         token_str := String.trim(token.*);
         if token_str.count == 0 { continue; }
-        
+
         found_token_tag, tag, args := String.split_from_left(token_str, #char "(");
         // remove closing parenthese from args
         error_assert(args[args.count - 1] == #char ")", tprint("Token % is missing closing parenthese", tag));
@@ -502,14 +507,20 @@ parse_circuit :: (circuit_str: string) -> [] Token {
         if children_stack.count != 0 {
             parent_children := peek_pointer(children_stack);
             parent_children.countdown = parent_children.countdown - 1;
-            new_token.parent = parent_children.token;
-            array_add(*parent_children.token.children, tokens.count);
+            assert(parent_children.countdown >= 0);
+            new_token.parent = tokens[parent_children.token_index].index;
+            new_token.tree_depth = tokens[new_token.parent].tree_depth + 1;
+            array_add(*tokens[parent_children.token_index].children, tokens.count);
+            if parent_children.countdown == 0 {
+                pop(*children_stack);
+            }
         }
-        
+
+        new_token.index = tokens.count;
         array_add(*tokens, new_token);
-        
+
         if num_children != 0 {
-            array_add(*children_stack, .{peek_pointer(tokens), num_children, num_children});
+            array_add(*children_stack, .{peek_pointer(tokens).index, num_children, num_children});
         }
     }
     // print("%\n", tokens);
