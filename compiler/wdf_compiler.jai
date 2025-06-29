@@ -16,7 +16,10 @@ error_assert :: (cond: bool, message: string) #expand {
 }
 
 main :: () {
+    // context setup...
     context.allocator = temp;
+    context.print_style.default_format_float.mode = .SCIENTIFIC;
+
     args_success, args, is_set, free_args := CLI.parse_arguments (Args);
 
     if !args_success || free_args.count < 2 {

@@ -6,4 +6,5 @@ wdf_compiler
 
 /.idea
 /.vscode
+/.zed
 .focus-config
