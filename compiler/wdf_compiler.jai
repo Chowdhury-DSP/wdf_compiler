@@ -251,10 +251,6 @@ generate_circuit :: (tokens: [] Token, inputs: [] string) -> string {
     params_vars : [..] string;
 
     impedance_updates : [..] string;
-    // Impedance_Update_Info :: struct {
-    //     token: *Token;
-    //     // children: [..] *Token;
-    // }
     impedance_update_todos : [..] *Token;
     add_impedance_update_todo :: (todos: *[..] *Token, token: *Token, new_child: *Token, append := true) {
         for todo : todos.* {
@@ -263,9 +259,6 @@ generate_circuit :: (tokens: [] Token, inputs: [] string) -> string {
                 return;
             }
         }
-        // new_todo: Impedance_Update_Info;
-        // new_todo.token = token;
-        // array_add(*new_todo.children, new_child);
         if append {
             array_add(todos, token);
         }
