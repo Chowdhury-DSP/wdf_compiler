@@ -27,6 +27,7 @@ cpp_test rl_lowpass
 cpp_test rc_lowpass_var
 cpp_test rl_lowpass_var
 cpp_test preamp_eq
+cpp_test preamp_eq_comb
 
 if [[ "$*" = *bad_configs* ]]; then
     echo "Running bad config tests..."

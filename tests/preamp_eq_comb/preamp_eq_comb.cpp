@@ -1,4 +1,4 @@
-#include "preamp_eq.h"
+#include "preamp_eq_comb.h"
 
 #include "../chowdsp_wdf.h"
 #include <iostream>
