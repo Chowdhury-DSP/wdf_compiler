@@ -1,0 +1,19 @@
+circuit:
+IVs(v_in, 0);
+    Series(s_i);
+        CVs(lfc_cap, 4.7n);
+        Series(s_o);
+            Parallel(p_p);
+                R(r_series, 10k);
+                RCSeries(hfl_res_cap, 80k, 2.7n);
+            Parallel(p_s);
+                C(hfc_cap, 3.3u);
+                Series(s_s);
+                    R(r_shunt, 4.674k);
+                    RCParallel(lfl_res_cap, 15k, 0.15u);
+
+inputs:
+lfc_cap
+
+outputs:
+V:hfc_cap
