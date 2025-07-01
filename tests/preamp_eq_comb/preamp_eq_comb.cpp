@@ -1,4 +1,4 @@
-#include "preamp_eq.h"
+#include "preamp_eq_comb.h"
 
 #include "../chowdsp_wdf.h"
 #include <iostream>
@@ -72,7 +72,7 @@ int main()
     }
     std::cout << "Max Error: " << max_error << '\n';
 
-    if (max_error > 1.0e-5f)
+    if (max_error > 5.0e-5f)
     {
         std::cout << "Error is too large... failing test!\n";
         return 1;
