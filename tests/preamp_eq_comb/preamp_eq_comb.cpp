@@ -72,7 +72,7 @@ int main()
     }
     std::cout << "Max Error: " << max_error << '\n';
 
-    if (max_error > 5.0e-5f)
+    if (max_error > 2.5e-7f)
     {
         std::cout << "Error is too large... failing test!\n";
         return 1;
