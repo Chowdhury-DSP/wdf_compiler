@@ -3,6 +3,7 @@ build*/
 *.dSYM
 wdf_compiler
 *.exe
+*.pdb
 
 /.idea
 /.vscode

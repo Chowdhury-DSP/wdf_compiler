@@ -9,3 +9,6 @@ Iin
 
 outputs:
 I:R1
+
+meta:
+namespace:rl_lowpass
