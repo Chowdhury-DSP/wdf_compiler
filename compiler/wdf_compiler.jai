@@ -205,53 +205,53 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
             if token.type == {
                 case .Ideal_Voltage_Source;
                     child_token := tokens[token.children[0]];
-                    array_add(*up_tree_statements, tprint("state.%1_a = state.%2_b; // %1 incident", token.name, child_token.name));
-                    array_add(*down_tree_statements, tprint("state.%1_b = -state.%1_a + 2 * %2; // %1 reflected", token.name, token.input));
-                    array_add(*down_tree_statements, tprint("state.%2_a = state.%1_b; // %2 incident", token.name, child_token.name));
+                    array_add(*up_tree_statements, tprint("const auto %1_a = %2_b; // %1 incident", token.name, child_token.name));
+                    array_add(*down_tree_statements, tprint("const auto %1_b = -%1_a + 2 * %2; // %1 reflected", token.name, token.input));
+                    array_add(*down_tree_statements, tprint("const auto %2_a = %1_b; // %2 incident", token.name, child_token.name));
                 case .Ideal_Current_Source;
                     child_token := tokens[token.children[0]];
-                    array_add(*up_tree_statements, tprint("state.%1_a = state.%2_b; // %1 incident", token.name, child_token.name));
-                    array_add(*down_tree_statements, tprint("state.%1_b = 2 * impedances.%3_R * %2 + state.%1_a; // %1 reflected (@TODO: 2 * R?)", token.name, token.input, child_token.name));
-                    array_add(*down_tree_statements, tprint("state.%2_a = state.%1_b; // %2 incident", token.name, child_token.name));
+                    array_add(*up_tree_statements, tprint("const auto %1_a = %2_b; // %1 incident", token.name, child_token.name));
+                    array_add(*down_tree_statements, tprint("const auto %1_b = 2 * impedances.%3_R * %2 + %1_a; // %1 reflected (@TODO: 2 * R?)", token.name, token.input, child_token.name));
+                    array_add(*down_tree_statements, tprint("const auto %2_a = %1_b; // %2 incident", token.name, child_token.name));
             }
             continue;
         }
 
         if token.type == {
             case .Resistor;
-                array_add(*up_tree_statements, tprint("state.%1_b = 0; // %1 reflected", token.name));
+                array_add(*up_tree_statements, tprint("const auto %1_b = 0; // %1 reflected", token.name));
             case .Capacitor;
-                array_add(*up_tree_statements, tprint("state.%1_b = state.%1_z; // %1 reflected", token.name));
-                array_add(*down_tree_statements, tprint("state.%1_z = state.%1_a; // %1 state update", token.name));
+                array_add(*up_tree_statements, tprint("const auto %1_b = state.%1_z; // %1 reflected", token.name));
+                array_add(*down_tree_statements, tprint("state.%1_z = %1_a; // %1 state update", token.name));
             case .Inductor;
-                array_add(*up_tree_statements, tprint("state.%1_b = -state.%1_z; // %1 reflected", token.name));
-                array_add(*down_tree_statements, tprint("state.%1_z = state.%1_a; // %1 state update", token.name));
+                array_add(*up_tree_statements, tprint("const auto %1_b = -state.%1_z; // %1 reflected", token.name));
+                array_add(*down_tree_statements, tprint("state.%1_z = %1_a; // %1 state update", token.name));
             case .Resistor_Capacitor_Series;
-                array_add(*up_tree_statements, tprint("state.%1_b = -state.%1_z; // %1 reflected", token.name));
-                array_add(*down_tree_statements, tprint("state.%1_z -= impedances.%1_T_over_T_plus_2RC * (state.%1_a + state.%1_z); // %1 state update", token.name));
+                array_add(*up_tree_statements, tprint("const auto %1_b = -state.%1_z; // %1 reflected", token.name));
+                array_add(*down_tree_statements, tprint("state.%1_z -= impedances.%1_T_over_T_plus_2RC * (%1_a + state.%1_z); // %1 state update", token.name));
             case .Resistor_Capacitor_Parallel;
-                array_add(*up_tree_statements, tprint("state.%1_b = impedances.%1_twoRC_over_twoRC_plus_T * state.%1_z; // %1 reflected", token.name));
-                array_add(*down_tree_statements, tprint("state.%1_z = state.%1_b + state.%1_a - state.%1_z; // %1 state update", token.name));
+                array_add(*up_tree_statements, tprint("const auto %1_b = impedances.%1_twoRC_over_twoRC_plus_T * state.%1_z; // %1 reflected", token.name));
+                array_add(*down_tree_statements, tprint("state.%1_z = %1_b + %1_a - state.%1_z; // %1 state update", token.name));
             case .Resistive_Voltage_Source;
-                array_add(*up_tree_statements, tprint("state.%1_b = %2; // %1 reflected", token.name, token.input));
+                array_add(*up_tree_statements, tprint("const auto %1_b = %2; // %1 reflected", token.name, token.input));
             case .Resistive_Current_Source;
-                array_add(*up_tree_statements, tprint("state.%1_b = impedances.%1_R * %2; // %1 reflected", token.name, token.input));
-            case .Capacitive_Voltage_Source; // @TODO_NOW
+                array_add(*up_tree_statements, tprint("const auto %1_b = impedances.%1_R * %2; // %1 reflected", token.name, token.input));
+            case .Capacitive_Voltage_Source;
                 array_add(*up_tree_statements, tprint("state.%1_v1 = %2; // %1 state update", token.name, token.input));
-                array_add(*up_tree_statements, tprint("state.%1_b = state.%1_z + %2 - state.%1_v1; // %1 reflected", token.name, token.input));
-                array_add(*down_tree_statements, tprint("state.%1_z = state.%1_a; // %1 state update", token.name));
+                array_add(*up_tree_statements, tprint("const auto %1_b = state.%1_z + %2 - state.%1_v1; // %1 reflected", token.name, token.input));
+                array_add(*down_tree_statements, tprint("state.%1_z = %1_a; // %1 state update", token.name));
             case .Series;
                 child0_token := tokens[token.children[0]];
                 child1_token := tokens[token.children[1]];
-                array_add(*up_tree_statements, tprint("state.%1_b = -(state.%2_b + state.%3_b); // %1 reflected", token.name, child0_token.name, child1_token.name));
-                array_add(*down_tree_statements, tprint("state.%2_a = state.%2_b - impedances.%1_pr * (state.%1_a + state.%2_b + state.%3_b); // %2 incident", token.name, child0_token.name, child1_token.name));
-                array_add(*down_tree_statements, tprint("state.%3_a = -(state.%1_a + state.%2_a); // %3 incident", token.name, child0_token.name, child1_token.name));
+                array_add(*up_tree_statements, tprint("const auto %1_b = -(%2_b + %3_b); // %1 reflected", token.name, child0_token.name, child1_token.name));
+                array_add(*down_tree_statements, tprint("const auto %2_a = %2_b - impedances.%1_pr * (%1_a + %2_b + %3_b); // %2 incident", token.name, child0_token.name, child1_token.name));
+                array_add(*down_tree_statements, tprint("const auto %3_a = -(%1_a + %2_a); // %3 incident", token.name, child0_token.name, child1_token.name));
             case .Parallel;
                 child0_token := tokens[token.children[0]];
                 child1_token := tokens[token.children[1]];
-                array_add(*up_tree_statements, tprint("state.%1_b = state.%3_b - impedances.%1_pr * (state.%3_b - state.%2_b); // %1 reflected", token.name, child0_token.name, child1_token.name));
-                array_add(*down_tree_statements, tprint("state.%2_a = state.%1_b - state.%2_b + state.%1_a; // %2 incident", token.name, child0_token.name));
-                array_add(*down_tree_statements, tprint("state.%3_a = state.%1_b - state.%3_b + state.%1_a; // %3 incident", token.name, child0_token.name, child1_token.name));
+                array_add(*up_tree_statements, tprint("const auto %1_b = %3_b - impedances.%1_pr * (%3_b - %2_b); // %1 reflected", token.name, child0_token.name, child1_token.name));
+                array_add(*down_tree_statements, tprint("const auto %2_a = %1_b - %2_b + %1_a; // %2 incident", token.name, child0_token.name));
+                array_add(*down_tree_statements, tprint("const auto %3_a = %1_b - %3_b + %1_a; // %3 incident", token.name, child0_token.name, child1_token.name));
         }
     }
 
@@ -287,9 +287,9 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
 
         if output_info[0] == {
             case "V";
-                array_add(*code_statements, tprint("return (state.%1_a + state.%1_b) * 0.5f; // %1 voltage", output_token.name));
+                array_add(*code_statements, tprint("return (%1_a + %1_b) * 0.5f; // %1 voltage", output_token.name));
             case "I";
-                array_add(*code_statements, tprint("return (state.%1_a - state.%1_b) * (0.5f * impedances.%1_G); // %1 current", output_token.name));
+                array_add(*code_statements, tprint("return (%1_a - %1_b) * (0.5f * impedances.%1_G); // %1 current", output_token.name));
             case;
                 error_assert(false, tprint("Invalid output type: %", output_info[0]));
         }
@@ -350,14 +350,10 @@ generate_circuit :: (tokens: [] Token, inputs: [] string) -> string {
 
     root_token := *tokens[0];
     for *token : tokens {
-        array_add(*state_vars, tprint("float %_a;", token.name));
-        array_add(*state_vars, tprint("float %_b;", token.name));
-
         if token != root_token {
             array_add(*impedance_vars, tprint("float %_R;", token.name));
             array_add(*impedance_vars, tprint("float %_G;", token.name));
-            // @TODO: some components have extra "intermediate" values we might want to compute here...
-            // e.g. the Series adaptor.
+            // @TODO: we don't always need to "save" all of these values?
         }
 
         if token.type == {
