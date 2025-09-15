@@ -10,7 +10,11 @@ else
     cpp_compiler="clang"
 fi
 
-wdf_compiler="${SCRIPT_DIR}/../compiler/wdf_compiler"
+if [[ "$OSTYPE" == "win32" ]]; then
+   wdf_compiler="${SCRIPT_DIR}/../compiler/wdf_compiler.exe"
+else
+   wdf_compiler="${SCRIPT_DIR}/../compiler/wdf_compiler"
+fi
 
 cpp_test () {
    test="$1"

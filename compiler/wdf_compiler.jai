@@ -45,13 +45,57 @@ main :: () {
     outputs := String.split(sections.outputs, "\n");
     assert(outputs.count == 1); // @TODO: support multiple outputs
 
+    meta_info := parse_meta_info(sections.meta);
+    gen_code := start_gen_code(meta_info);
     circuit_tokens := parse_circuit(sections.circuit);
-    gen_code := generate_circuit(circuit_tokens, inputs);
+    gen_code = tprint("%\n%", gen_code, generate_circuit(circuit_tokens, inputs));
     gen_code = tprint("%\n%", gen_code, generate_process(circuit_tokens, inputs, outputs));
+    gen_code = tprint("%\n%", gen_code, end_gen_code(meta_info));
 
     gen_file, success := File.file_open(output_file, true);
     File.file_write(*gen_file, gen_code);
     // print(gen_code);
+}
+
+start_gen_code :: (meta_info: Meta_Info) -> string {
+    gen_code := "#pragma once\n";
+    if (meta_info.namespace.count > 0) {
+        gen_code = tprint("%\nnamespace %\n{\n", gen_code, meta_info.namespace);
+    }
+    return gen_code;
+}
+
+end_gen_code :: (meta_info: Meta_Info) -> string {
+    gen_code := "";
+    if (meta_info.namespace.count > 0) {
+        gen_code = tprint("} // namespace %\n\n", meta_info.namespace);
+    }
+    return gen_code;
+}
+
+Meta_Info :: struct {
+    namespace := "";
+}
+
+parse_meta_info :: (meta_info_str: string) -> Meta_Info {
+    meta_info : Meta_Info;
+
+    info_lines := String.split(meta_info_str, cast(u8) #char "\n");
+    for line : info_lines {
+        line_trim := String.trim(line);
+        tokens := String.split(line_trim, cast(u8) #char ":");
+        if tokens.count != 2 { continue; }
+
+        key := String.trim(tokens[0]);
+        value := String.trim(tokens[1]);
+
+        if (key == "namespace") {
+            meta_info.namespace = value;
+        }
+    }
+
+    // print("%\n", meta_info);
+    return meta_info;
 }
 
 Token_Type :: enum {
@@ -155,7 +199,7 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
     up_tree_statements : [..] string;
     root_token := *tokens[0];
     for *token : tokens {
-        print("%\n", token.*);
+        // print("%\n", token.*);
 
         if token == root_token {
             if token.type == {
@@ -496,8 +540,7 @@ generate_circuit :: (tokens: [] Token, inputs: [] string) -> string {
         array_add(*impedance_vars, var);
     }
 
-    gen_code := "#pragma once\n";
-    gen_code = tprint("%\n%", gen_code, generate_struct(params_vars, "Params"));
+    gen_code := generate_struct(params_vars, "Params");
     gen_code = tprint("%\n%", gen_code, generate_struct(impedance_vars, "Impedances"));
     gen_code = tprint("%\n%", gen_code, generate_struct(state_vars, "State"));
     gen_code = tprint("%\n%", gen_code, generate_method("calc_impedances",
@@ -592,6 +635,7 @@ File_Sections :: struct {
     circuit: string;
     inputs: string;
     outputs: string;
+    meta: string;
 }
 
 parse_file_sections :: (file_str: string) -> File_Sections {
@@ -599,6 +643,7 @@ parse_file_sections :: (file_str: string) -> File_Sections {
         Circuit;
         Inputs;
         Outputs;
+        Meta;
     }
 
     Section_Info :: struct {
@@ -622,6 +667,7 @@ parse_file_sections :: (file_str: string) -> File_Sections {
     add_section_info (file_str, *section_info, "circuit:", .Circuit);
     add_section_info (file_str, *section_info, "inputs:", .Inputs);
     add_section_info (file_str, *section_info, "outputs:", .Outputs);
+    add_section_info (file_str, *section_info, "meta:", .Meta);
 
     Sort.quick_sort (section_info, x => -x.start_in_file);
 
@@ -635,6 +681,7 @@ parse_file_sections :: (file_str: string) -> File_Sections {
             case .Circuit; sections.circuit = section_str;
             case .Inputs; sections.inputs = section_str;
             case .Outputs; sections.outputs = section_str;
+            case .Meta; sections.meta = section_str;
         }
     }
     return sections;

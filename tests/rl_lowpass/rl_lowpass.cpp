@@ -33,14 +33,14 @@ int main()
     Reference_WDF ref {};
     ref.prepare (fs);
 
-    Impedances impedances {};
-    calc_impedances (impedances, fs);
-    State state {};
+    rl_lowpass::Impedances impedances {};
+    rl_lowpass::calc_impedances (impedances, fs);
+    rl_lowpass::State state {};
 
     float max_error = 0.0f;
     for (int i = 0; i < 100; ++i)
     {
-        const auto test_output = process (state, impedances, 1.0f);
+        const auto test_output = rl_lowpass::process (state, impedances, 1.0f);
         const auto ref_output = ref.process (1.0f);
         const auto error = std::abs (test_output - ref_output);
         max_error = std::max (error, max_error);
