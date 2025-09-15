@@ -1,4 +1,6 @@
 
+JAI: beta 0.2.016
+
 RC Lowpass Example:
 ```bash
 cd tests/rc_lowpass
