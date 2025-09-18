@@ -12,7 +12,9 @@ struct Reference_WDF
     chowdsp::wdft::WDFParallelT<float, decltype (R1), decltype (S2)> P1 { R1, S2 };
     chowdsp::wdft::CapacitorT<float> C1 { 1.0e-6f };
     chowdsp::wdft::WDFSeriesT<float, decltype (C1), decltype (P1)> S1 { C1, P1 };
-    chowdsp::wdft::IdealVoltageSourceT<float, decltype (S1)> Vin { S1 };
+    chowdsp::wdft::PolarityInverterT<float, decltype (S1)> I1 { S1 };
+    // chowdsp::wdft::IdealVoltageSourceT<float, decltype (S1)> Vin { S1 };
+    chowdsp::wdft::IdealVoltageSourceT<float, decltype (I1)> Vin { I1 };
 
     void prepare (float fs)
     {
@@ -23,8 +25,10 @@ struct Reference_WDF
     float process (float V)
     {
         Vin.setVoltage (V);
-        Vin.incident (S1.reflected());
-        S1.incident (Vin.reflected());
+        // Vin.incident (S1.reflected());
+        // S1.incident (Vin.reflected());
+        Vin.incident (I1.reflected());
+        I1.incident (Vin.reflected());
         return chowdsp::wdft::voltage<float> (C2);
     }
 };

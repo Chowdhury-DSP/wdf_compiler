@@ -112,6 +112,7 @@ Token_Type :: enum {
         Inductor;
         Series;
         Parallel;
+        Inverter;
         Resistor_Capacitor_Series;
         Resistor_Capacitor_Parallel;
         Capacitive_Voltage_Source;
@@ -256,6 +257,10 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                 array_add(*up_tree_statements, tprint("const auto %1_b = %3_b - impedances.%1_pr * (%3_b - %2_b); // %1 reflected", token.name, child0_token.name, child1_token.name));
                 array_add(*down_tree_statements, tprint("const auto %2_a = %1_b - %2_b + %1_a; // %2 incident", token.name, child0_token.name));
                 array_add(*down_tree_statements, tprint("const auto %3_a = %1_b - %3_b + %1_a; // %3 incident", token.name, child0_token.name, child1_token.name));
+            case .Inverter;
+                child_token := tokens[token.children[0]];
+                array_add(*up_tree_statements, tprint("const auto %1_b = -%2_b; // %1 reflected", token.name, child_token.name));
+                array_add(*down_tree_statements, tprint("const auto %2_a = -%1_a; // %2 incident", token.name, child_token.name));
         }
     }
 
@@ -607,6 +612,11 @@ generate_updater :: (tokens: [] Token, inputs: [] string, tokens_filter: [] stri
                 array_add(*impedance_updates, tprint("impedances.%1_G = impedances.%2_G + impedances.%3_G;", token.name, child0_token.name, child1_token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_R = 1.0f / impedances.%1_G;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_pr = impedances.%2_G * impedances.%1_R;\n", token.name, child0_token.name));
+            case .Inverter;
+                child_token := tokens[impedance_todo.children[0]];
+                array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
+                array_add(*impedance_updates, tprint("impedances.%1_R = impedances.%2_R;", token.name, child_token.name));
+                array_add(*impedance_updates, tprint("impedances.%1_G = 1.0f / impedances.%1_R;", token.name));
         }
 
         // This is leaky, but I don't think we care?
@@ -700,6 +710,9 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             case "Parallel";
                 new_token.type = .Parallel;
                 num_children = 2;
+            case "Inverter";
+                new_token.type = .Inverter;
+                num_children = 1;
             case; error_assert(false, tprint("Unknown token type: %", tag));
         }
 
