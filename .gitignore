@@ -4,8 +4,11 @@ build*/
 wdf_compiler
 *.exe
 *.pdb
+*.ilk
+*.rdi
 
 /.idea
 /.vscode
 /.zed
 .focus-config
+.raddbg_project

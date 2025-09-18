@@ -1,12 +1,13 @@
 circuit:
 IVs(Vin);
-    Series(S1);
-        C(C1);
-        Parallel(P1);
-            R(R1);
-            Series(S2);
-                R(R2);
-                C(C2);
+    Inverter(I1);
+        Series(S1);
+            C(C1);
+            Parallel(P1);
+                R(R1);
+                Series(S2);
+                    R(R2);
+                    C(C2);
 
 
 inputs:
