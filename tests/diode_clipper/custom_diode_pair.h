@@ -90,7 +90,7 @@ T exp_approx (T x);
 template <>
 constexpr float exp_approx (float x)
 {
-    x = std::max (-126.0f, 1.442695040888963f * x);
+    x = fmax (-126.0f, 1.442695040888963f * x);
 
     union
     {
@@ -107,46 +107,47 @@ constexpr float exp_approx (float x)
 }
 
 /** Second-order approximation of the Wright Omega functions */
-template <typename T>
-constexpr T omega2 (T x)
+constexpr float omega2 (float x)
 {
-    constexpr auto x1 = (NumericType<T>) -3.684303659906469;
-    constexpr auto x2 = (NumericType<T>) 1.972967391708859;
-    constexpr auto a = (NumericType<T>) 9.451797158780131e-3;
-    constexpr auto b = (NumericType<T>) 1.126446405111627e-1;
-    constexpr auto c = (NumericType<T>) 4.451353886588814e-1;
-    constexpr auto d = (NumericType<T>) 5.836596684310648e-1;
+    constexpr auto x1 = -3.684303659906469f;
+    constexpr auto x2 = 1.972967391708859f;
+    constexpr auto a = 9.451797158780131e-3f;
+    constexpr auto b = 1.126446405111627e-1f;
+    constexpr auto c = 4.451353886588814e-1f;
+    constexpr auto d = 5.836596684310648e-1f;
 
-    return select (x < x1, (T) 0, select (x > x2, x, estrin<3> ({ a, b, c, d }, x)));
+    return x < x1 ? 0.0f
+                  : (x > x2 ? x
+                            : estrin<3> ({ a, b, c, d }, x));
 }
 
 /** Third-order approximation of the Wright Omega functions */
-template <typename T>
-constexpr T omega3 (T x)
+constexpr float omega3 (float x)
 {
-    constexpr auto x1 = (NumericType<T>) -3.341459552768620;
-    constexpr auto x2 = (NumericType<T>) 8.0;
-    constexpr auto a = (NumericType<T>) -1.314293149877800e-3;
-    constexpr auto b = (NumericType<T>) 4.775931364975583e-2;
-    constexpr auto c = (NumericType<T>) 3.631952663804445e-1;
-    constexpr auto d = (NumericType<T>) 6.313183464296682e-1;
+    constexpr auto x1 = -3.341459552768620f;
+    constexpr auto x2 = 8.0f;
+    constexpr auto a = -1.314293149877800e-3f;
+    constexpr auto b = 4.775931364975583e-2f;
+    constexpr auto c = 3.631952663804445e-1f;
+    constexpr auto d = 6.313183464296682e-1f;
 
-    return select (x < x1, (T) 0, select (x < x2, estrin<3> ({ a, b, c, d }, x), x - log_approx<T> (x)));
+    return x < x1 ? 0.0f
+                  : (x < x2 ? estrin<3> ({ a, b, c, d }, x)
+                            : x - log_approx<float> (x));
 }
 
 /** Fourth-order approximation of the Wright Omega functions */
-template <typename T>
-constexpr T omega4 (T x)
+constexpr float omega4 (float x)
 {
-    const auto y = omega3<T> (x);
-    return y - (y - exp_approx<T> (x - y)) / (y + (T) 1);
+    const auto y = omega3 (x);
+    return y - (y - exp_approx<float> (x - y)) / (y + 1.0f);
 }
 } // namespace Omega
 
 struct DP_Params
 {
     float Is = 1.0e-9f; // saturation current
-    float Vt = 25.8e-3f; // thermal voltage
+    float Vt = 25.85e-3f; // thermal voltage
     float nabla = 1.0f;
 };
 
@@ -172,7 +173,7 @@ static inline float root_compute (const DP_Vars& vars, float a)
 {
     // See eqn (39) from reference paper:
     // https://www.researchgate.net/publication/299514713_An_Improved_and_Generalized_Diode_Clipper_Model_for_Wave_Digital_Filters
-    const auto lamba = a >= 0.0f ? 1.0f : 0.0f;
+    const auto lambda = a >= 0.0f ? 1.0f : 0.0f;
     const auto lambda_a_over_vt = lambda * a * vars.vt_recip;
     const auto b = a - vars.vt_2 * lambda * (Omega::omega4 (vars.logR_Is_over_vt + lambda_a_over_vt)
                                            - Omega::omega4 (vars.logR_Is_over_vt - lambda_a_over_vt));

@@ -1,14 +1,16 @@
-#include "rc_lowpass.h"
+#include "diode_clipper.h"
 
 #include "../chowdsp_wdf.h"
 #include <iostream>
 
+// clang diode_clipper.cpp --std=c++20 -lstdc++ -o diode_clipper.exe && ./diode_clipper.exe
+
 struct Reference_WDF
 {
-    chowdsp::wdft::ResistorT<float> R1 { 1000.0f };
+    chowdsp::wdft::ResistiveVoltageSourceT<float> Vin { 1000.0f };
     chowdsp::wdft::CapacitorT<float> C1 { 1.0e-6f };
-    chowdsp::wdft::WDFSeriesT<float, decltype (R1), decltype (C1)> S1 { R1, C1 };
-    chowdsp::wdft::IdealVoltageSourceT<float, decltype (S1)> Vin { S1 };
+    chowdsp::wdft::WDFParallelT<float, decltype (Vin), decltype (C1)> P1 { Vin, C1 };
+    chowdsp::wdft::DiodePairT<float, decltype (P1)> DP { P1, 1.0e-9f };
 
     void prepare (float fs)
     {
@@ -18,23 +20,30 @@ struct Reference_WDF
     float process (float V)
     {
         Vin.setVoltage (V);
-        Vin.incident (S1.reflected());
-        S1.incident (Vin.reflected());
+        DP.incident (P1.reflected());
+        P1.incident (DP.reflected());
         return chowdsp::wdft::voltage<float> (C1);
     }
 };
 
 int main()
 {
-    std::cout << "RC Lowpass test\n";
+    std::cout << "Diode Clipper test\n";
 
     static constexpr float fs = 48000.0f;
 
     Reference_WDF ref {};
     ref.prepare (fs);
 
+    Params params {
+        .C1_value = 1.0e-6f,
+        .Vin_res_value = 1.0e3f,
+        .DP_params = {
+            .Is = 1.0e-9f,
+        },
+    };
     Impedances impedances {};
-    calc_impedances (impedances, fs);
+    calc_impedances (impedances, fs, params);
     State state {};
 
     float max_error = 0.0f;
