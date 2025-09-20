@@ -59,7 +59,17 @@ main :: () {
 }
 
 start_gen_code :: (meta_info: Meta_Info) -> string {
+    // print("%\n", meta_info);
     gen_code := "#pragma once\n";
+
+    if (meta_info.extra_includes.count > 0) {
+        includes_code := "";
+        for include : meta_info.extra_includes {
+            includes_code = tprint("%#include %\n", includes_code, include);
+        }
+        gen_code = tprint("%\n%", gen_code, includes_code);
+    }
+
     if (meta_info.namespace.count > 0) {
         gen_code = tprint("%\nnamespace %\n{\n", gen_code, meta_info.namespace);
     }
@@ -77,6 +87,7 @@ end_gen_code :: (meta_info: Meta_Info) -> string {
 Meta_Info :: struct {
     namespace := "";
     impedance_updaters : [..] string;
+    extra_includes : [..] string;
 }
 
 parse_meta_info :: (meta_info_str: string) -> Meta_Info {
@@ -91,10 +102,13 @@ parse_meta_info :: (meta_info_str: string) -> Meta_Info {
         key := String.trim(tokens[0]);
         value := String.trim(tokens[1]);
 
-        if (key == "namespace") {
-            meta_info.namespace = value;
-        } else if (key == "calc_impedances") {
-            array_add(*meta_info.impedance_updaters, value);
+        if key == {
+            case "namespace";
+                meta_info.namespace = value;
+            case "calc_impedances";
+                array_add(*meta_info.impedance_updaters, value);
+            case "include";
+                array_add(*meta_info.extra_includes, value);
         }
     }
 
@@ -116,6 +130,7 @@ Token_Type :: enum {
         Resistor_Capacitor_Series;
         Resistor_Capacitor_Parallel;
         Capacitive_Voltage_Source;
+        Custom;
     }
 
 Token :: struct {
@@ -713,6 +728,8 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             case "Inverter";
                 new_token.type = .Inverter;
                 num_children = 1;
+            case "Custom";
+                new_token.type = .Custom;
             case; error_assert(false, tprint("Unknown token type: %", tag));
         }
 
@@ -727,6 +744,10 @@ parse_circuit :: (circuit_str: string) -> [] Token {
         new_token.args.count = args_split.count - 1;
         for *arg : new_token.args {
             arg.* = String.trim(arg.*);
+        }
+
+        if (new_token.type == .Custom) {
+            num_children = string_to_int(new_token.args[0]);
         }
 
         if children_stack.count != 0 {
