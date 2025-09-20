@@ -1,0 +1,14 @@
+circuit:
+Custom(DP, 1, params=custom_dp::DP_Params, vars=custom_dp::DP_Vars, updater=custom_dp::update_vars, compute=custom_dp::root_compute);
+    Parallel(P1);
+        C(C1);
+        RVs(Vin, ?);
+
+inputs:
+Vin
+
+outputs:
+V:C1
+
+meta:
+include:"custom_diode_pair.h"
