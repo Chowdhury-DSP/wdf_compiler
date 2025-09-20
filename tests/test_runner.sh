@@ -33,6 +33,7 @@ cpp_test rl_lowpass_var
 cpp_test rc_bandpass_var
 cpp_test preamp_eq
 cpp_test preamp_eq_comb
+cpp_test diode_clipper
 
 if [[ "$*" = *bad_configs* ]]; then
     echo "Running bad config tests..."

@@ -59,7 +59,17 @@ main :: () {
 }
 
 start_gen_code :: (meta_info: Meta_Info) -> string {
+    // print("%\n", meta_info);
     gen_code := "#pragma once\n";
+
+    if (meta_info.extra_includes.count > 0) {
+        includes_code := "";
+        for include : meta_info.extra_includes {
+            includes_code = tprint("%#include %\n", includes_code, include);
+        }
+        gen_code = tprint("%\n%", gen_code, includes_code);
+    }
+
     if (meta_info.namespace.count > 0) {
         gen_code = tprint("%\nnamespace %\n{\n", gen_code, meta_info.namespace);
     }
@@ -77,6 +87,7 @@ end_gen_code :: (meta_info: Meta_Info) -> string {
 Meta_Info :: struct {
     namespace := "";
     impedance_updaters : [..] string;
+    extra_includes : [..] string;
 }
 
 parse_meta_info :: (meta_info_str: string) -> Meta_Info {
@@ -91,10 +102,13 @@ parse_meta_info :: (meta_info_str: string) -> Meta_Info {
         key := String.trim(tokens[0]);
         value := String.trim(tokens[1]);
 
-        if (key == "namespace") {
-            meta_info.namespace = value;
-        } else if (key == "calc_impedances") {
-            array_add(*meta_info.impedance_updaters, value);
+        if key == {
+            case "namespace";
+                meta_info.namespace = value;
+            case "calc_impedances";
+                array_add(*meta_info.impedance_updaters, value);
+            case "include";
+                array_add(*meta_info.extra_includes, value);
         }
     }
 
@@ -116,6 +130,7 @@ Token_Type :: enum {
         Resistor_Capacitor_Series;
         Resistor_Capacitor_Parallel;
         Capacitive_Voltage_Source;
+        Custom;
     }
 
 Token :: struct {
@@ -127,6 +142,17 @@ Token :: struct {
     children: [..] s64;
     input: string;
     index: s64 = 0;
+
+    Custom_Token_Info :: struct {
+        params_type: string;
+        state_type: string;
+        vars_type: string;
+        updater_name: string;
+        compute_name: string; // only if root
+        incident_name: string; // only if not root
+        reflected_name: string; // only if not root
+    }
+    custom_info: *Custom_Token_Info;
 }
 
 generate_struct :: (impedance_vars: [] string, name: string) -> string {
@@ -155,7 +181,7 @@ generate_method :: (name: string, args: [] string, lines: [] string, return_type
 
 get_value :: (val_str: string) -> float32 {
     val, success, remainder := string_to_float(val_str);
-    assert(success); // @TODO: error check here!
+    error_assert (success, tprint("Unable to parse value string: %", val_str));
     if remainder.count == 0 { return val; }
     if remainder[0] == {
         case #char "k";
@@ -218,6 +244,19 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                     array_add(*up_tree_statements, tprint("const auto %1_a = %2_b; // %1 incident", token.name, child_token.name));
                     array_add(*down_tree_statements, tprint("const auto %1_b = 2 * impedances.%3_R * %2 + %1_a; // %1 reflected (@TODO: 2 * R?)", token.name, token.input, child_token.name));
                     array_add(*down_tree_statements, tprint("const auto %2_a = %1_b; // %2 incident", token.name, child_token.name));
+                case .Custom;
+                    num_children := token.children.count;
+                    has_state := token.custom_info.state_type.count > 0;
+                    has_vars := token.custom_info.vars_type.count > 0;
+                    if num_children == 1 {
+                        child_token := tokens[token.children[0]];
+                        args := "";
+                        if has_vars { args = tprint("%1impedances.%2_vars, ", args, token.name); }
+                        if has_state { args = tprint("%1impedances.%2_state, ", args, token.name); }
+                        array_add(*down_tree_statements, tprint("const auto %2_a = %4(%3%2_b); // %2 incident", token.name, child_token.name, args, token.custom_info.compute_name));
+                    } else {
+                        error_assert (false, "NOT IMPLEMENTED (generate process for custom root node with more than 1 child)");
+                    }
             }
             continue;
         }
@@ -261,6 +300,8 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                 child_token := tokens[token.children[0]];
                 array_add(*up_tree_statements, tprint("const auto %1_b = -%2_b; // %1 reflected", token.name, child_token.name));
                 array_add(*down_tree_statements, tprint("const auto %2_a = -%1_a; // %2 incident", token.name, child_token.name));
+            case .Custom;
+                error_assert (false, "NOT IMPLEMENTED (generate process for custom non-root node)");
         }
     }
 
@@ -459,6 +500,11 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string) -> Circuit_Vars {
                     write_param(*params_vars, token, 1, "res_value");
                 }
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
+
+            case .Custom;
+                if token.children.count > 0 { continue; }
+                error_assert (false, "NOT IMPLEMENTED (generate impedance updates for custom non-root node)");
+                // @TODO: implement me!
         }
     }
 
@@ -471,13 +517,22 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string) -> Circuit_Vars {
                 array_add(*impedance_vars, tprint("float %1_pr;", token.name));
             case .Parallel;
                 array_add(*impedance_vars, tprint("float %1_pr;", token.name));
+            case .Custom;
+                if (token.custom_info.params_type.count > 0) {
+                    array_add(*params_vars, tprint("%1 %2_params {};", token.custom_info.params_type, token.name));
+                }
+                if (token.custom_info.state_type.count > 0) {
+                    array_add(*state_vars, tprint("%1 %2_state {};", token.custom_info.state_type, token.name));
+                }
+                if (token.custom_info.vars_type.count > 0) {
+                    array_add(*impedance_vars, tprint("%1 %2_vars {};", token.custom_info.vars_type, token.name));
+                }
         }
 
         // This is leaky, but I don't think we care?
         impedance_update_todos.count -= 1;
 
-        if *tokens[token.parent] != root_token {
-            // @TODO: test me!!
+        if token != root_token {
             add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token, false);
         } else {
             // print("Finished climbing impedance tree!");
@@ -590,6 +645,10 @@ generate_updater :: (tokens: [] Token, inputs: [] string, tokens_filter: [] stri
                 array_add(*impedance_updates, tprint("impedances.%1_R = params.%1_res_value;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_G = 1.0f / impedances.%1_R;\n", token.name));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
+
+            case .Custom;
+                if token.children.count > 0 { continue; }
+                error_assert (false, "NOT IMPLEMENTED (generate impedance updates for custom non-root node)");
         }
     }
 
@@ -617,13 +676,37 @@ generate_updater :: (tokens: [] Token, inputs: [] string, tokens_filter: [] stri
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_R = impedances.%2_R;", token.name, child_token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_G = 1.0f / impedances.%1_R;", token.name));
+            case .Custom;
+                has_params := token.custom_info.params_type.count > 0;
+                has_state := token.custom_info.state_type.count > 0;
+                has_vars := token.custom_info.vars_type.count > 0;
+
+                array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
+                if token == root_token {
+                    root_update := tprint("%1(", token.custom_info.updater_name);
+                    if has_vars {
+                        root_update = tprint("%1impedances.%2_vars, ", root_update, token.name);
+                    }
+                    if has_params {
+                        root_update = tprint("%1params.%2_params, ", root_update, token.name);
+                    }
+                    for child : token.children {
+                        root_update = tprint("%1impedances.%2_R, ", root_update, tokens[child].name);
+                        root_update = tprint("%1impedances.%2_G, ", root_update, tokens[child].name);
+                    }
+                    root_update.count -= 2;
+                    root_update = tprint("%1);", root_update);
+                    array_add(*impedance_updates, root_update);
+                } else {
+                    error_assert (false, "NOT IMPLEMENTED (generate impedance updates for non-root node)");
+                    // @TODO: we need to update the custom component's R and G here?
+                }
         }
 
         // This is leaky, but I don't think we care?
         impedance_update_todos.count -= 1;
 
-        if *tokens[token.parent] != root_token {
-            // @TODO: test me!!
+        if token != root_token {
             add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token, false);
         } else {
             // print("Finished climbing impedance tree!");
@@ -665,6 +748,31 @@ generate_updaters :: (tokens: [] Token, inputs: [] string, meta_info: Meta_Info)
     }
 
     return gen_code;
+}
+
+parse_custom_token_args :: (args: [] string) -> *Token.Custom_Token_Info {
+    info := New(Token.Custom_Token_Info);
+    for arg : args {
+        found_key, key, value := String.split_from_left(arg, cast(u8) #char "=");
+        if ! found_key { continue; }
+        if key == {
+            case "params";
+                info.params_type = value;
+            case "state";
+                info.params_type = value;
+            case "vars";
+                info.vars_type = value;
+            case "updater";
+                info.updater_name = value;
+            case "compute";
+                info.compute_name = value;
+            case "incident";
+                info.incident_name = value;
+            case "reflected";
+                info.reflected_name = value;
+        }
+    }
+    return info;
 }
 
 parse_circuit :: (circuit_str: string) -> [] Token {
@@ -713,6 +821,8 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             case "Inverter";
                 new_token.type = .Inverter;
                 num_children = 1;
+            case "Custom";
+                new_token.type = .Custom;
             case; error_assert(false, tprint("Unknown token type: %", tag));
         }
 
@@ -727,6 +837,14 @@ parse_circuit :: (circuit_str: string) -> [] Token {
         new_token.args.count = args_split.count - 1;
         for *arg : new_token.args {
             arg.* = String.trim(arg.*);
+        }
+
+        if (new_token.type == .Custom) {
+            num_children = string_to_int(new_token.args[0]);
+            new_token.args.data = new_token.args.data + 1;
+            new_token.args.count = new_token.args.count - 1;
+            new_token.custom_info = parse_custom_token_args(new_token.args);
+            // print("%\n", new_token.custom_info.*);
         }
 
         if children_stack.count != 0 {
