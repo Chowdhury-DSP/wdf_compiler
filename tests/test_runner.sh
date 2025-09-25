@@ -10,10 +10,19 @@ else
     cpp_compiler="clang"
 fi
 
-if [[ "$OSTYPE" == "win32" ]]; then
+if [[ "$*" = *bench* ]]; then
+    echo "Making running bench tests..."
+    bench_flags="-DRUN_BENCH=1 -O3"
+else
+    bench_flags=""
+fi
+
+if [[ "$OSTYPE" == "win32" || "$OSTYPE" == "msys" ]]; then
    wdf_compiler="${SCRIPT_DIR}/../compiler/wdf_compiler.exe"
+   libcpp_flag=""
 else
    wdf_compiler="${SCRIPT_DIR}/../compiler/wdf_compiler"
+   libcpp_flag="-lstdc++"
 fi
 
 cpp_test () {
@@ -21,19 +30,25 @@ cpp_test () {
    echo "Running CPP Test: $test"
    cd "${SCRIPT_DIR}/${test}"
    $wdf_compiler "${test}.wdf" "${test}.h"
-   $cpp_compiler "${test}.cpp" --std=c++20 -lstdc++ -o "${test}.exe"
+   $cpp_compiler "${test}.cpp" ${bench_flags} --std=c++20 ${libcpp_flag} -o "${test}.exe"
    "./${test}.exe"
 }
 
-cpp_test rc_lowpass
-cpp_test rc_bandpass
-cpp_test rl_lowpass
-cpp_test rc_lowpass_var
-cpp_test rl_lowpass_var
-cpp_test rc_bandpass_var
-cpp_test preamp_eq
-cpp_test preamp_eq_comb
-cpp_test diode_clipper
+if [[ "$*" = *bench* ]]; then
+   cpp_test preamp_eq_comb
+   cpp_test diode_clipper
+else
+   cpp_test rc_lowpass
+   cpp_test rc_bandpass
+   cpp_test rl_lowpass
+   cpp_test rc_lowpass_var
+   cpp_test rl_lowpass_var
+   cpp_test rc_bandpass_var
+   cpp_test preamp_eq
+   cpp_test preamp_eq_comb
+   cpp_test diode_clipper
+fi
+
 
 if [[ "$*" = *bad_configs* ]]; then
     echo "Running bad config tests..."
