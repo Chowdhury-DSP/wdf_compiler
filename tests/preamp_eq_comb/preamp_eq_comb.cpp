@@ -1,7 +1,9 @@
 #include "preamp_eq_comb.h"
 
 #include "../chowdsp_wdf.h"
+#include <chrono>
 #include <iostream>
+#include <random>
 
 struct Reference_WDF
 {
@@ -77,6 +79,50 @@ int main()
         std::cout << "Error is too large... failing test!\n";
         return 1;
     }
+
+#if RUN_BENCH
+    static constexpr int N = 10'000'000;
+
+    auto* data_in = (float*) malloc (N * sizeof (float));
+    auto* data_out = (float*) malloc (N * sizeof (float));
+
+    std::random_device rd {};
+    std::default_random_engine gen { rd() };
+    std::uniform_real_distribution<float> dist { -1.0f, 1.0f };
+    for (int n = 0; n < N; ++n)
+        data_in[n] = dist (gen);
+
+    double ref_time, test_time;
+    {
+        auto start = std::chrono::steady_clock::now();
+
+        for (int n = 0; n < N; ++n)
+            data_out[n] = ref.process (data_in[n]);
+
+        auto end = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::duration<double, std::milli>> (end - start);
+        std::cout << data_out[N-1] << '\n';
+        std::cout << "chowdsp_wdf: " << duration.count() << " milliseconds" << std::endl;
+        ref_time = duration.count();
+    }
+
+    {
+        auto start = std::chrono::steady_clock::now();
+
+        for (int n = 0; n < N; ++n)
+            data_out[n] = process (state, impedances, data_in[n]);
+
+        auto end = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::duration<double, std::milli>> (end - start);
+        std::cout << data_out[N-1] << '\n';
+        std::cout << "wdf_compiler: " << duration.count() << " milliseconds" << std::endl;
+        test_time = duration.count();
+    }
+    std::cout << "wdf_compiler is " << ref_time / test_time << "x faster\n";
+
+    free (data_in);
+    free (data_out);
+#endif
 
     return 0;
 }

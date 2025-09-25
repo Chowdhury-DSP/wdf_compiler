@@ -28,3 +28,6 @@ jobs:
 
     - name: Run Tests
       run: bash tests/test_runner.sh gcc bad_configs
+
+    - name: Run Bench
+      run: bash tests/test_runner.sh gcc bench
