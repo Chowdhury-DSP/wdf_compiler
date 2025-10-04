@@ -16,4 +16,4 @@ outputs:
 V:Rl
 
 meta:
-include:"dangelo_triode.h"
+include:"custom_dangelo_triode.h"
