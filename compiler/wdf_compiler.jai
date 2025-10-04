@@ -257,26 +257,31 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                     } else {
                         child_token := tokens[token.children[0]];
 
-                        outputs := "const auto [";
-                        inputs := "";
-                        comment := "";
+                        // declare inputs
+                        // @TODO: make the alignment here configurable?
+                        statement := tprint("alignas (16) const float %_ins[%] { ", token.name, num_children);
                         for child_idx : token.children {
-                            child := tokens[child_idx];
-                            outputs = tprint("%1%2_a, ", outputs, child.name);
-                            inputs = tprint("%1%2_b, ", inputs, child.name);
-                            comment = tprint("%1%2, ", comment, child.name);
+                            statement = tprint("%1%2_b, ", statement, tokens[child_idx].name);
                         }
-                        outputs.count -= 2;
-                        inputs.count -= 2;
-                        comment.count -= 2;
-                        outputs = tprint("%]", outputs);
-                        comment = tprint("% Incident", comment);
+                        statement.count -= 2;
+                        statement = tprint("%1 }; // % inputs\n", statement, token.name);
+
+                        // declare outputs
+                        statement = tprint("%    alignas (16) float %_outs[%]; // %2 outputs \n", statement, token.name, num_children);
 
                         args := "";
                         if has_vars { args = tprint("%1impedances.%2_vars, ", args, token.name); }
                         if has_state { args = tprint("%1impedances.%2_state, ", args, token.name); }
+                        args = tprint("%1%2_ins, %2_outs", args, token.name);
+                        statement = tprint("%1    %2(%3); // %4 incident\n", statement, token.custom_info.compute_name, args, token.name);
 
-                        array_add(*down_tree_statements, tprint("%1 = %4(%2%3); // %5", outputs, args, inputs, token.custom_info.compute_name, comment));
+                        // unwrap outputs
+                        for child_idx : token.children {
+                            statement = tprint("%1    const auto %2_a = %3_outs[%4];\n", statement, tokens[child_idx].name, token.name, it_index);
+                        }
+                        statement.count -= 1;
+
+                        array_add(*down_tree_statements, statement);
                     }
             }
             continue;
