@@ -1,0 +1,18 @@
+circuit:
+Custom(R, 6, params=bassman_r::R_Params, vars=bassman_r::R_Vars, updater=bassman_r::update_vars, compute=bassman_r::root_compute);
+    RVs(Vin_Res3m, ?);
+    R(Res2_Res3p, ?);
+    RCSeries(Res1p_Res1m_Cap1, ?, 250p);
+    C(Cap2, 20n);
+    R(Res4, 56k);
+    C(Cap3, 20n);
+
+
+inputs:
+Vin_Res3m
+
+outputs:
+V:Res1p_Res1m_Cap1
+
+meta:
+include:"custom_bassman_rtype.h"
