@@ -218,6 +218,8 @@ int main()
         return 1;
     }
 
+    // This performance comparison is not entirely fair since the wdf_compiler
+    // combines more circuit elements.
 #if RUN_BENCH
     static constexpr int N = 10'000'000;
 

@@ -63,7 +63,7 @@ static inline void incident (const R_Vars& vars, R_State& state, float a_up, con
     {
         if (i == up_port)
         {
-            a[i] = a_up; // TODO
+            a[i] = a_up;
         }
         else
         {

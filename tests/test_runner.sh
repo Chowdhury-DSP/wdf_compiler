@@ -38,7 +38,7 @@ if [[ "$*" = *bench* ]]; then
    cpp_test preamp_eq_comb
    cpp_test diode_clipper
    cpp_test simple_triode
-   cpp_test bassman_tone_stack
+   cpp_test baxandall_eq
 else
    cpp_test rc_lowpass
    cpp_test rc_bandpass
@@ -51,6 +51,7 @@ else
    cpp_test diode_clipper
    cpp_test simple_triode
    cpp_test bassman_tone_stack
+   cpp_test baxandall_eq
 fi
 
 

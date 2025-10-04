@@ -183,6 +183,8 @@ get_value :: (val_str: string) -> float32 {
     error_assert (success, tprint("Unable to parse value string: %", val_str));
     if remainder.count == 0 { return val; }
     if remainder[0] == {
+        case #char "M";
+            val *= 1.0e6;
         case #char "k";
             val *= 1.0e3;
         case #char "m";

@@ -8,6 +8,11 @@
 #include <xsimd/xsimd.hpp>
 #endif
 
+const auto parallel = [] (float R1, float R2)
+{
+    return R1 * R2 / (R1 + R2);
+};
+
 /**
  * Implentation based on Werner et. al:
  * https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=8371321
@@ -17,10 +22,10 @@ struct Reference_WDF
     void prepare (float fs)
     {
         Ca.prepare (fs);
-        Cb.prepare (fs);
-        Cc.prepare (fs);
-        Cd.prepare (fs);
-        Ce.prepare (fs);
+        P2.prepare (fs);
+        P3.prepare (fs);
+        S4.prepare (fs);
+        S5.prepare (fs);
     }
 
     void setParams (float bassParam, float trebleParam)
@@ -29,11 +34,11 @@ struct Reference_WDF
             using DeferImpedance = chowdsp::wdft::ScopedDeferImpedancePropagation<decltype (P1), decltype (S2), decltype (S3), decltype (S4)>;
             DeferImpedance deferImpedance { P1, S2, S3, S4 };
 
-            Pb_plus.setResistanceValue (Pb * bassParam);
-            Pb_minus.setResistanceValue (Pb * (1.0f - bassParam));
+            P2.setResistanceValue (Pb * bassParam);
+            P3.setResistanceValue (Pb * (1.0f - bassParam));
 
-            Pt_plus.setResistanceValue (Pt * trebleParam);
-            Pt_minus.setResistanceValue (Pt * (1.0f - trebleParam));
+            S4.setResistanceValue (parallel (Pt * trebleParam, 10.0e3f));
+            S5.setResistanceValue (parallel (Pt * (1.0f - trebleParam), 1.0e3f));
         }
 
         // propagate impedance change through R-type adaptor
@@ -54,18 +59,10 @@ struct Reference_WDF
     static constexpr auto Pb = 100.0e3f;
 
     // Port A
-    chowdsp::wdft::ResistorT<float> Pt_plus { Pt * 0.5f };
-    chowdsp::wdft::ResistorT<float> Resd { 10.0e3f };
-    chowdsp::wdft::WDFParallelT<float, decltype (Pt_plus), decltype (Resd)> P4 { Pt_plus, Resd };
-    chowdsp::wdft::CapacitorT<float> Cd { 6.4e-9f };
-    chowdsp::wdft::WDFSeriesT<float, decltype (Cd), decltype (P4)> S4 { Cd, P4 };
+    chowdsp::wdft::ResistorCapacitorSeriesT<float> S4 { 1.0f, 6.4e-9f };
 
     // Port B
-    chowdsp::wdft::ResistorT<float> Pt_minus { Pt * 0.5f };
-    chowdsp::wdft::ResistorT<float> Rese { 1.0e3f };
-    chowdsp::wdft::WDFParallelT<float, decltype (Pt_minus), decltype (Rese)> P5 { Pt_minus, Rese };
-    chowdsp::wdft::CapacitorT<float> Ce { 64.0e-9f };
-    chowdsp::wdft::WDFSeriesT<float, decltype (Ce), decltype (P5)> S5 { Ce, P5 };
+    chowdsp::wdft::ResistorCapacitorSeriesT<float> S5 { 1.0f, 64.0e-9f };
     chowdsp::wdft::ResistorT<float> Rl { 1.0e6f };
     chowdsp::wdft::WDFParallelT<float, decltype (Rl), decltype (S5)> P1 { Rl, S5 };
 
@@ -73,16 +70,12 @@ struct Reference_WDF
     chowdsp::wdft::ResistorT<float> Resc { 10.0e3f };
 
     // Port D
-    chowdsp::wdft::ResistorT<float> Pb_minus { Pb * 0.5f };
-    chowdsp::wdft::CapacitorT<float> Cc { 220.0e-9f };
-    chowdsp::wdft::WDFParallelT<float, decltype (Pb_minus), decltype (Cc)> P3 { Pb_minus, Cc };
+    chowdsp::wdft::ResistorCapacitorParallelT<float> P3 { 1.0f, 220.0e-9f };
     chowdsp::wdft::ResistorT<float> Resb { 1.0e3f };
     chowdsp::wdft::WDFSeriesT<float, decltype (Resb), decltype (P3)> S3 { Resb, P3 };
 
     // Port E
-    chowdsp::wdft::ResistorT<float> Pb_plus { Pb * 0.5f };
-    chowdsp::wdft::CapacitorT<float> Cb { 22.0e-9f };
-    chowdsp::wdft::WDFParallelT<float, decltype (Pb_plus), decltype (Cb)> P2 { Pb_plus, Cb };
+    chowdsp::wdft::ResistorCapacitorParallelT<float> P2 { 1.0f, 22.0e-9f };
     chowdsp::wdft::ResistorT<float> Resa { 10.0e3f };
     chowdsp::wdft::WDFSeriesT<float, decltype (Resa), decltype (P2)> S2 { Resa, P2 };
 
@@ -128,15 +121,17 @@ int main()
     static constexpr float fs = 48000.0f;
 
     Reference_WDF ref {};
-    ref.setParams (0.5f, 0.5f);
+    const auto bass_param = 0.5f;
+    const auto treble_param = 0.5f;
+    ref.setParams (bass_param, treble_param);
     ref.prepare (fs);
 
     Impedances impedances {};
     Params params {
-        .Pt_plus_value = ref.Pt_plus.wdf.R,
-        .Pt_minus_value = ref.Pt_minus.wdf.R,
-        .Pb_minus_value = ref.Pb_minus.wdf.R,
-        .Pb_plus_value = ref.Pb_plus.wdf.R,
+        .S4_res_value = parallel (Reference_WDF::Pt * treble_param, 10.0e3f),
+        .S5_res_value = parallel (Reference_WDF::Pt * (1.0f - treble_param), 1.0e3f),
+        .P3_res_value = Reference_WDF::Pb * (1.0f - bass_param),
+        .P2_res_value = Reference_WDF::Pb * bass_param,
     };
     calc_impedances (impedances, fs, params);
     State state {};
@@ -187,7 +182,7 @@ int main()
         auto start = std::chrono::steady_clock::now();
 
         for (int n = 0; n < N; ++n)
-            data_out[n] = process (impedances, state, data_in[n]);
+            data_out[n] = process (state, impedances, data_in[n]);
 
         auto end = std::chrono::steady_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::duration<double, std::milli>> (end - start);

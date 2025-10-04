@@ -3,29 +3,17 @@ IVs(Vin);
     Series(S1);
         C(Ca, 1u);
         Custom(R, 5, params=baxandall_r::R_Params, vars=baxandall_r::R_Vars, state=baxandall_r::R_State, updater=baxandall_r::update_vars, incident=baxandall_r::incident, reflected=baxandall_r::reflected);
-            Series(S4);
-                C(Cd, 6.4n);
-                Parallel(P4);
-                    R(Pt_plus, ?);
-                    R(Resd, 10k);
+            RCSeries(S4, ?, 6.4n);
             Parallel(P1);
                 R(Rl, 1M);
-                Series(S5);
-                    C(Ce, 64n);
-                    Parallel(P5);
-                        R(Pt_minus, ?);
-                        R(Rese, 1k);
+                RCSeries(S5, ?, 64n);
             R(Resc, 10k);
             Series(S3);
                 R(Resb, 1k);
-                Parallel(P3);
-                    C(Cc, 220n);
-                    R(Pb_minus, ?);
+                RCParallel(P3, ?, 220n);
             Series(S2);
                 R(Resa, 10k);
-                Parallel(P2);
-                    C(Cb, 22n);
-                    R(Pb_plus, ?);
+                RCParallel(P2, ?, 22n);
 
 inputs:
 Vin
