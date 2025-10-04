@@ -12,6 +12,7 @@ inputs:
 Vin_Res3m
 
 outputs:
+V:Vin_Res3m
 V:Res1p_Res1m_Cap1
 
 meta:

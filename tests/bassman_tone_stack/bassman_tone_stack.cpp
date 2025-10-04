@@ -98,9 +98,7 @@ struct Reference_WDF
         Vin_Res3m.setVoltage (V_in);
         R.compute();
 
-        // @TODO...
-        // return chowdsp::wdft::voltage<float> (Res1m) + chowdsp::wdft::voltage<float> (S2) + chowdsp::wdft::voltage<float> (Res3m);
-        return chowdsp::wdft::voltage<float> (S2);
+        return chowdsp::wdft::voltage<float> (S2) + (chowdsp::wdft::voltage<float> (Vin_Res3m) - V_in);
     }
 
     void setParams (float highPot, float lowPot, float midPot)
@@ -129,7 +127,6 @@ struct Reference_WDF
     chowdsp::wdft::ResistorT<float> Res1m { 1.0 };
     chowdsp::wdft::ResistorT<float> Res2 { 1.0 };
     chowdsp::wdft::ResistorT<float> Res3p { 1.0 };
-    chowdsp::wdft::ResistorT<float> Res3m { 1.0 };
     chowdsp::wdft::ResistorT<float> Res4 { 56e3 }; // Port E
 
 
@@ -199,11 +196,16 @@ int main()
     };
     calc_impedances (impedances, fs, params);
     State state {};
+    const auto process_multi = [&state, &impedances] (float v) -> float
+    {
+        const auto [v_Vin_Res3m, v_Res1p_Res1m_Cap1] = process (state, impedances, 1.0f);
+        return v_Res1p_Res1m_Cap1 + (v_Vin_Res3m - v);
+    };
 
     float max_error = 0.0f;
     for (int i = 0; i < 100; ++i)
     {
-        const auto test_output = process (state, impedances, 1.0f);
+        const auto test_output = process_multi (1.0f);
         const auto ref_output = ref.process (1.0f);
         const auto error = std::abs (test_output - ref_output);
         max_error = std::max (error, max_error);
@@ -246,7 +248,7 @@ int main()
         auto start = std::chrono::steady_clock::now();
 
         for (int n = 0; n < N; ++n)
-            data_out[n] = process (state, impedances, data_in[n]);
+            data_out[n] = process_multi (data_in[n]);
 
         auto end = std::chrono::steady_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::duration<double, std::milli>> (end - start);
