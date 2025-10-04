@@ -1,0 +1,184 @@
+#include "simple_triode.h"
+
+#include "../chowdsp_wdf.h"
+#include <iostream>
+#include <random>
+
+struct Reference_WDF
+{
+    // Reference: https://dafx.de/paper-archive/2023/DAFx23_paper_15.pdf
+
+    // Grid circuit
+    chowdsp::wdft::ResistiveVoltageSourceT<float> Vin { 25.0e3f };
+
+    // Cathode circuit
+    chowdsp::wdft::ResistorT<float> Rk { 200.0f };
+
+    // Plate circuit
+    chowdsp::wdft::ResistiveVoltageSourceT<float> Vplus { 47.0e3f };
+
+    chowdsp::wdft::ResistorT<float> Rl { 330.0e3f };
+    chowdsp::wdft::CapacitorT<float> Cp { 0.047e-6f };
+    chowdsp::wdft::WDFSeriesT<float, decltype (Rl), decltype (Cp)> Sp { Rl, Cp };
+
+    chowdsp::wdft::WDFParallelT<float, decltype (Vplus), decltype (Sp)> Pp { Vplus, Sp };
+
+    void prepare (float fs)
+    {
+        Vplus.setVoltage (200.0f);
+        Cp.prepare (fs);
+        Cp.incident (-118.959396f);
+    }
+
+    static inline auto triode (float ag, float ak, float ap, float R0k, float R0p)
+    {
+        static constexpr float kp = 1.014e-5f;
+        static constexpr float kpg = 1.076e-5f;
+        static constexpr float kp2 = 5.498e-8f;
+
+        const auto bk_bp = R0k / R0p;
+        const auto k_eta = 1.0f / (bk_bp * (0.5f * kpg + kp2) + kp2);
+        const auto k_delta = kp2 * k_eta * k_eta / (R0p + R0p);
+        const auto k_bp_s = k_eta * std::sqrt ((kp2 + kp2) / R0p);
+        const auto bp_k = 1.0f / (R0p + R0k);
+        const auto bp_ap_0 = bp_k * (R0k - R0p);
+        const auto bp_ak_0 = bp_k * (R0p + R0p);
+
+        // everything before this can be pre-computed
+        const auto v1 = 0.5f * ap;
+        const auto v2 = ak + v1 * bk_bp;
+        const auto alpha = kpg * (ag - v2) + kp;
+        const auto beta = kp2 * (v1 - v2);
+        const auto eta = k_eta * (beta + beta + alpha);
+        const auto v3 = eta + k_delta;
+        const auto delta = ap + v3;
+
+        float bg, bk, bp, Vpk;
+        if (delta >= 0.0f)
+        {
+            bp = k_bp_s * std::sqrt (delta) - v3 - k_delta;
+            const auto d = bk_bp * (ap - bp);
+            bk = ak + d;
+            const auto Vpk2 = ap + bp - ak - bk;
+
+            if (kpg * (ag - ak - 0.5f * d) + kp2 * Vpk2 + kp < 0.0f)
+            {
+                bp = ap;
+                bk = ak;
+                Vpk = ap - ak;
+            }
+            else
+            {
+                Vpk = 0.5f * Vpk2;
+            }
+        }
+        else
+        {
+            bp = ap;
+            bk = ak;
+            Vpk = ap - ak;
+        }
+
+        if (Vpk < 0.0f)
+            bp = bp_ap_0 * ap + bp_ak_0 * ak;
+
+        bg = ag;
+
+        return std::make_tuple (bg, bk, bp);
+    }
+
+    float process (float V)
+    {
+        Vin.setVoltage (V);
+
+        const auto wT_ag = Vin.reflected();
+        const auto wT_ak = Rk.reflected();
+        const auto wT_ap = Pp.reflected();
+
+        const auto [wT_bg, wT_bk, wT_bp] = triode (wT_ag, wT_ak, wT_ap, Rk.wdf.R, Pp.wdf.R);
+
+        Vin.incident (wT_bg);
+        Rk.incident (wT_bk);
+        Pp.incident (wT_bp);
+
+        return chowdsp::wdft::voltage<float> (Rl);
+    }
+};
+
+int main()
+{
+    std::cout << "Simple Triode test\n";
+
+    static constexpr float fs = 48000.0f;
+
+    Reference_WDF ref {};
+    ref.prepare (fs);
+
+    Impedances impedances {};
+    calc_impedances (impedances, fs);
+    State state {
+        .Cp_z = -118.959396f,
+    };
+
+    float max_error = 0.0f;
+    for (int i = 0; i < 100; ++i)
+    {
+        const auto test_output = process (state, impedances, 1.0f);
+        const auto ref_output = ref.process (1.0f);
+        const auto error = std::abs (test_output - ref_output);
+        max_error = std::max (error, max_error);
+    }
+    std::cout << "Max Error: " << max_error << '\n';
+
+    if (max_error > 1.0e-3f)
+    {
+        std::cout << "Error is too large... failing test!\n";
+        return 1;
+    }
+
+#if RUN_BENCH
+    static constexpr int N = 10'000'000;
+
+    auto* data_in = (float*) malloc (N * sizeof (float));
+    auto* data_out = (float*) malloc (N * sizeof (float));
+
+    std::random_device rd {};
+    std::default_random_engine gen { rd() };
+    std::uniform_real_distribution<float> dist { -1.0f, 1.0f };
+    for (int n = 0; n < N; ++n)
+        data_in[n] = dist (gen);
+
+    double ref_time, test_time;
+    {
+        auto start = std::chrono::steady_clock::now();
+
+        for (int n = 0; n < N; ++n)
+            data_out[n] = ref.process (data_in[n]);
+
+        auto end = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::duration<double, std::milli>> (end - start);
+        std::cout << data_out[N-1] << '\n';
+        std::cout << "chowdsp_wdf: " << duration.count() << " milliseconds" << std::endl;
+        ref_time = duration.count();
+    }
+
+    {
+        auto start = std::chrono::steady_clock::now();
+
+        for (int n = 0; n < N; ++n)
+            data_out[n] = process (state, impedances, data_in[n]);
+
+        auto end = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::duration<double, std::milli>> (end - start);
+        std::cout << data_out[N-1] << '\n';
+        std::cout << "wdf_compiler: " << duration.count() << " milliseconds" << std::endl;
+        test_time = duration.count();
+    }
+    std::cout << "wdf_compiler is " << ref_time / test_time << "x faster\n";
+
+    free (data_in);
+    free (data_out);
+#endif
+
+    return 0;
+}

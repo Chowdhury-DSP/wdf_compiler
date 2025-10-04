@@ -255,7 +255,28 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                         if has_state { args = tprint("%1impedances.%2_state, ", args, token.name); }
                         array_add(*down_tree_statements, tprint("const auto %2_a = %4(%3%2_b); // %2 incident", token.name, child_token.name, args, token.custom_info.compute_name));
                     } else {
-                        error_assert (false, "NOT IMPLEMENTED (generate process for custom root node with more than 1 child)");
+                        child_token := tokens[token.children[0]];
+
+                        outputs := "const auto [";
+                        inputs := "";
+                        comment := "";
+                        for child_idx : token.children {
+                            child := tokens[child_idx];
+                            outputs = tprint("%1%2_a, ", outputs, child.name);
+                            inputs = tprint("%1%2_b, ", inputs, child.name);
+                            comment = tprint("%1%2, ", comment, child.name);
+                        }
+                        outputs.count -= 2;
+                        inputs.count -= 2;
+                        comment.count -= 2;
+                        outputs = tprint("%]", outputs);
+                        comment = tprint("% Incident", comment);
+
+                        args := "";
+                        if has_vars { args = tprint("%1impedances.%2_vars, ", args, token.name); }
+                        if has_state { args = tprint("%1impedances.%2_state, ", args, token.name); }
+
+                        array_add(*down_tree_statements, tprint("%1 = %4(%2%3); // %5", outputs, args, inputs, token.custom_info.compute_name, comment));
                     }
             }
             continue;

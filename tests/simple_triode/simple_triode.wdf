@@ -1,0 +1,19 @@
+circuit:
+Custom(Triode, 3, params=dangelo_triode::Triode_Params, vars=dangelo_triode::Triode_Vars, updater=dangelo_triode::update_vars, compute=dangelo_triode::root_compute);
+    RVs(Vin, 25k);
+    R(Rk, 200);
+    Parallel(Pp);
+        RVs(Vplus, 200, 47k);
+        Series(Sp);
+            R(Rl, 330k);
+            C(Cp, 47n);
+
+
+inputs:
+Vin
+
+outputs:
+V:Rl
+
+meta:
+include:"custom_dangelo_triode.h"

@@ -12,3 +12,5 @@ wdf_compiler
 /.zed
 .focus-config
 .raddbg_project
+
+.DS_Store
