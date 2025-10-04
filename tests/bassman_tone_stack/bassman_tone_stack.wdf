@@ -17,3 +17,4 @@ V:Res1p_Res1m_Cap1
 
 meta:
 include:"custom_bassman_rtype.h"
+include:<tuple>
