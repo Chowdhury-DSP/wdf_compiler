@@ -98,7 +98,6 @@ struct Reference_WDF
         Vin_Res3m.setVoltage (V_in);
         R.compute();
 
-        // @TODO...
         return chowdsp::wdft::voltage<float> (S2) + (chowdsp::wdft::voltage<float> (Vin_Res3m) - V_in);
     }
 
