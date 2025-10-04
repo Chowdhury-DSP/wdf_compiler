@@ -1,7 +1,5 @@
 #pragma once
 
-#include <array>
-
 namespace bassman_r
 {
 static constexpr int num_ports = 6;
