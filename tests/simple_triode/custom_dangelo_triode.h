@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cmath>
-#include <tuple>
 
 namespace dangelo_triode
 {
@@ -48,8 +47,12 @@ static inline void update_vars (Triode_Vars& vars,
     vars.k_delta = vars.kp2 * vars.k_eta * vars.k_eta / (R0p + R0p);
 }
 
-static inline auto root_compute (const Triode_Vars& vars, float ag, float ak, float ap)
+static inline void root_compute (const Triode_Vars& vars, const float* a, float* b)
 {
+    const auto ag = a[0];
+    const auto ak = a[1];
+    const auto ap = a[2];
+
     const auto v1 = 0.5f * ap;
     const auto v2 = ak + v1 * vars.bk_bp;
     const auto alpha = vars.kpg * (ag - v2) + vars.kp;
@@ -89,6 +92,8 @@ static inline auto root_compute (const Triode_Vars& vars, float ag, float ak, fl
 
     bg = ag;
 
-    return std::make_tuple (bg, bk, bp);
+    b[0] = bg;
+    b[1] = bk;
+    b[2] = bp;
 }
 }

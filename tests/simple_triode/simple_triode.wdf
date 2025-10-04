@@ -8,7 +8,6 @@ Custom(Triode, 3, params=dangelo_triode::Triode_Params, vars=dangelo_triode::Tri
             R(Rl, 330k);
             C(Cp, 47n);
 
-
 inputs:
 Vin
 
