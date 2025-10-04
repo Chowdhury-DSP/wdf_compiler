@@ -43,7 +43,6 @@ main :: () {
     inputs := String.split(sections.inputs, "\n");
     assert(inputs.count == 1); // @TODO: support multiple inputs
     outputs := String.split(sections.outputs, "\n");
-    assert(outputs.count == 1); // @TODO: support multiple outputs
 
     meta_info := parse_meta_info(sections.meta);
     gen_code := start_gen_code(meta_info);
@@ -348,6 +347,7 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
     // print("%\n", code_statements);
     array_add(*code_statements, "");
 
+    return_vars : [..] string;
     for output : outputs {
         output_info := String.split(output, ":");
         // print("%\n", output_info);
@@ -363,18 +363,33 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
 
         if output_info[0] == {
             case "V";
-                array_add(*code_statements, tprint("return (%1_a + %1_b) * 0.5f; // %1 voltage", output_token.name));
+                return_var := tprint("v_%", output_token.name);
+                array_add(*code_statements, tprint("const auto %2 = (%1_a + %1_b) * 0.5f; // %1 voltage", output_token.name, return_var));
+                array_add(*return_vars, return_var);
             case "I";
-                array_add(*code_statements, tprint("return (%1_a - %1_b) * (0.5f * impedances.%1_G); // %1 current", output_token.name));
+                return_var := tprint("i_%", output_token.name);
+                array_add(*code_statements, tprint("const auto %2 = (%1_a - %1_b) * (0.5f * impedances.%1_G); // %1 current", output_token.name, return_var));
+                array_add(*return_vars, return_var);
             case;
                 error_assert(false, tprint("Invalid output type: %", output_info[0]));
         }
+    }
+    if return_vars.count == 1 {
+        array_add(*code_statements, tprint("return %;", return_vars[0]));
+    } else {
+        return_statement := "return std::make_tuple(";
+        for var : return_vars {
+            return_statement = tprint("%1%2, ", return_statement, var);
+        }
+        return_statement.count -= 2;
+        return_statement = tprint("%);", return_statement);
+        array_add(*code_statements, return_statement);
     }
 
     return generate_method("process",
                            input_args,
                            code_statements,
-                           "float");
+                           "auto");
 }
 
 add_impedance_update_todo :: (todos: *[..] *Token, token: *Token, new_child: *Token, append := true) {
