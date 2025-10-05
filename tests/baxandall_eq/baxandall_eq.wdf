@@ -1,0 +1,25 @@
+circuit:
+IVs(Vin);
+    Series(S1);
+        C(Ca, 1u);
+        Custom(R, 5, params=baxandall_r::R_Params, vars=baxandall_r::R_Vars, state=baxandall_r::R_State, updater=baxandall_r::update_vars, incident=baxandall_r::incident, reflected=baxandall_r::reflected);
+            RCSeries(S4, ?, 6.4n);
+            Parallel(P1);
+                R(Rl, 1M);
+                RCSeries(S5, ?, 64n);
+            R(Resc, 10k);
+            Series(S3);
+                R(Resb, 1k);
+                RCParallel(P3, ?, 220n);
+            Series(S2);
+                R(Resa, 10k);
+                RCParallel(P2, ?, 22n);
+
+inputs:
+Vin
+
+outputs:
+V:Rl
+
+meta:
+include:"custom_baxandall_rtype.h"

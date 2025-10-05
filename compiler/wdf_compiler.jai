@@ -183,6 +183,8 @@ get_value :: (val_str: string) -> float32 {
     error_assert (success, tprint("Unable to parse value string: %", val_str));
     if remainder.count == 0 { return val; }
     if remainder[0] == {
+        case #char "M";
+            val *= 1.0e6;
         case #char "k";
             val *= 1.0e3;
         case #char "m";
@@ -195,6 +197,89 @@ get_value :: (val_str: string) -> float32 {
             val *= 1.0e-12;
     }
     return val;
+}
+
+generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_statements : *[..] string) {
+    num_children := token.children.count;
+    has_state := token.custom_info.state_type.count > 0;
+    has_vars := token.custom_info.vars_type.count > 0;
+    if num_children == 1 {
+        child_token := tokens[token.children[0]];
+        args := "";
+        if has_vars { args = tprint("%1impedances.%2_vars, ", args, token.name); }
+        if has_state { args = tprint("%1impedances.%2_state, ", args, token.name); }
+        array_add(down_tree_statements, tprint("const auto %2_a = %4(%3%2_b); // %2 incident", token.name, child_token.name, args, token.custom_info.compute_name));
+    } else {
+        // declare inputs
+        // @TODO: make the alignment here configurable?
+        statement := tprint("alignas (16) const float %_ins[%] { ", token.name, num_children);
+        for child_idx : token.children {
+            statement = tprint("%1%2_b, ", statement, tokens[child_idx].name);
+        }
+        statement.count -= 2;
+        statement = tprint("%1 }; // % inputs\n", statement, token.name);
+
+        // declare outputs
+        statement = tprint("%    alignas (16) float %_outs[%]; // %2 outputs \n", statement, token.name, num_children);
+
+        args := "";
+        if has_vars { args = tprint("%1impedances.%2_vars, ", args, token.name); }
+        if has_state { args = tprint("%1impedances.%2_state, ", args, token.name); }
+        args = tprint("%1%2_ins, %2_outs", args, token.name);
+        statement = tprint("%1    %2(%3); // %4 compute\n", statement, token.custom_info.compute_name, args, token.name);
+
+        // unwrap outputs
+        for child_idx : token.children {
+            statement = tprint("%1    const auto %2_a = %3_outs[%4];\n", statement, tokens[child_idx].name, token.name, it_index);
+        }
+        statement.count -= 1;
+
+        array_add(down_tree_statements, statement);
+    }
+}
+
+generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements : *[..] string, up_tree_statements : *[..] string) {
+    num_children := token.children.count;
+    has_state := token.custom_info.state_type.count > 0;
+    has_vars := token.custom_info.vars_type.count > 0;
+
+    if num_children == 1 {
+        array_add(up_tree_statements, tprint("// %1 reflected", token.name));
+        array_add(down_tree_statements, tprint("// %1 incident", token.name));
+        error_assert (false, "NOT IMPLEMENTED (generate process for custom non-root node with exactly 1 child");
+    } else {
+        // declare inputs
+        up_statement := tprint("alignas (16) const float %_ins[%] { ", token.name, num_children);
+        for child_idx : token.children {
+            up_statement = tprint("%1%2_b, ", up_statement, tokens[child_idx].name);
+        }
+        up_statement.count -= 2;
+        up_statement = tprint("%1 }; // % inputs\n", up_statement, token.name);
+
+        // finish up statement
+        up_args := "";
+        if has_vars { up_args = tprint("%1impedances.%2_vars, ", up_args, token.name); }
+        if has_state { up_args = tprint("%state.%2_state, ", up_args, token.name); }
+        up_args = tprint("%1%2_ins", up_args, token.name);
+        up_statement = tprint("%1    const auto %4_b = %2(%3); // %4 reflected", up_statement, token.custom_info.reflected_name, up_args, token.name);
+        array_add(up_tree_statements, up_statement);
+
+        // declare outputs
+        down_statement := tprint("alignas (16) float %_outs[%]; // %2 outputs \n", token.name, num_children);
+
+        down_args := "";
+        if has_vars { down_args = tprint("%1impedances.%2_vars, ", down_args, token.name); }
+        if has_state { down_args = tprint("%state.%2_state, ", down_args, token.name); }
+        down_args = tprint("%1%2_a, %2_ins, %2_outs", down_args, token.name);
+        down_statement = tprint("%1    %2(%3); // %4 compute\n", down_statement, token.custom_info.incident_name, down_args, token.name);
+
+        // unwrap outputs
+        for child_idx : token.children {
+            down_statement = tprint("%1    const auto %2_a = %3_outs[%4];\n", down_statement, tokens[child_idx].name, token.name, it_index);
+        }
+        down_statement.count -= 1;
+        array_add(down_tree_statements, down_statement);
+    }
 }
 
 generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) -> string {
@@ -244,44 +329,7 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                     array_add(*down_tree_statements, tprint("const auto %1_b = 2 * impedances.%3_R * %2 + %1_a; // %1 reflected (@TODO: 2 * R?)", token.name, token.input, child_token.name));
                     array_add(*down_tree_statements, tprint("const auto %2_a = %1_b; // %2 incident", token.name, child_token.name));
                 case .Custom;
-                    num_children := token.children.count;
-                    has_state := token.custom_info.state_type.count > 0;
-                    has_vars := token.custom_info.vars_type.count > 0;
-                    if num_children == 1 {
-                        child_token := tokens[token.children[0]];
-                        args := "";
-                        if has_vars { args = tprint("%1impedances.%2_vars, ", args, token.name); }
-                        if has_state { args = tprint("%1impedances.%2_state, ", args, token.name); }
-                        array_add(*down_tree_statements, tprint("const auto %2_a = %4(%3%2_b); // %2 incident", token.name, child_token.name, args, token.custom_info.compute_name));
-                    } else {
-                        child_token := tokens[token.children[0]];
-
-                        // declare inputs
-                        // @TODO: make the alignment here configurable?
-                        statement := tprint("alignas (16) const float %_ins[%] { ", token.name, num_children);
-                        for child_idx : token.children {
-                            statement = tprint("%1%2_b, ", statement, tokens[child_idx].name);
-                        }
-                        statement.count -= 2;
-                        statement = tprint("%1 }; // % inputs\n", statement, token.name);
-
-                        // declare outputs
-                        statement = tprint("%    alignas (16) float %_outs[%]; // %2 outputs \n", statement, token.name, num_children);
-
-                        args := "";
-                        if has_vars { args = tprint("%1impedances.%2_vars, ", args, token.name); }
-                        if has_state { args = tprint("%1impedances.%2_state, ", args, token.name); }
-                        args = tprint("%1%2_ins, %2_outs", args, token.name);
-                        statement = tprint("%1    %2(%3); // %4 incident\n", statement, token.custom_info.compute_name, args, token.name);
-
-                        // unwrap outputs
-                        for child_idx : token.children {
-                            statement = tprint("%1    const auto %2_a = %3_outs[%4];\n", statement, tokens[child_idx].name, token.name, it_index);
-                        }
-                        statement.count -= 1;
-
-                        array_add(*down_tree_statements, statement);
-                    }
+                    generate_custom_process_root(token, tokens, *down_tree_statements);
             }
             continue;
         }
@@ -326,7 +374,7 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                 array_add(*up_tree_statements, tprint("const auto %1_b = -%2_b; // %1 reflected", token.name, child_token.name));
                 array_add(*down_tree_statements, tprint("const auto %2_a = -%1_a; // %2 incident", token.name, child_token.name));
             case .Custom;
-                error_assert (false, "NOT IMPLEMENTED (generate process for custom non-root node)");
+                generate_custom_process(token, tokens, *down_tree_statements, *up_tree_statements);
         }
     }
 
@@ -544,8 +592,7 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string) -> Circuit_Vars {
 
             case .Custom;
                 if token.children.count > 0 { continue; }
-                error_assert (false, "NOT IMPLEMENTED (generate impedance updates for custom non-root node)");
-                // @TODO: implement me!
+                error_assert (false, "NOT IMPLEMENTED (generate circuit vars for custom leaf node)");
         }
     }
 
@@ -689,7 +736,7 @@ generate_updater :: (tokens: [] Token, inputs: [] string, tokens_filter: [] stri
 
             case .Custom;
                 if token.children.count > 0 { continue; }
-                error_assert (false, "NOT IMPLEMENTED (generate impedance updates for custom non-root node)");
+                error_assert (false, "NOT IMPLEMENTED (generate impedance updates for custom leaf node)");
         }
     }
 
@@ -716,31 +763,35 @@ generate_updater :: (tokens: [] Token, inputs: [] string, tokens_filter: [] stri
                 child_token := tokens[impedance_todo.children[0]];
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_R = impedances.%2_R;", token.name, child_token.name));
-                array_add(*impedance_updates, tprint("impedances.%1_G = 1.0f / impedances.%1_R;", token.name));
+                array_add(*impedance_updates, tprint("impedances.%1_G = 1.0f / impedances.%1_R;\n", token.name));
             case .Custom;
                 has_params := token.custom_info.params_type.count > 0;
                 has_state := token.custom_info.state_type.count > 0;
                 has_vars := token.custom_info.vars_type.count > 0;
 
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                if token == root_token {
-                    root_update := tprint("%1(", token.custom_info.updater_name);
-                    if has_vars {
-                        root_update = tprint("%1impedances.%2_vars, ", root_update, token.name);
-                    }
-                    if has_params {
-                        root_update = tprint("%1params.%2_params, ", root_update, token.name);
-                    }
-                    for child : token.children {
-                        root_update = tprint("%1impedances.%2_R, ", root_update, tokens[child].name);
-                        root_update = tprint("%1impedances.%2_G, ", root_update, tokens[child].name);
-                    }
-                    root_update.count -= 2;
-                    root_update = tprint("%1);", root_update);
-                    array_add(*impedance_updates, root_update);
-                } else {
-                    error_assert (false, "NOT IMPLEMENTED (generate impedance updates for non-root node)");
-                    // @TODO: we need to update the custom component's R and G here?
+                custom_update := "";
+                if token != root_token {
+                    custom_update = tprint("impedances.%1_R = ", token.name);
+                }
+
+                custom_update = tprint("%1%2(", custom_update, token.custom_info.updater_name);
+                if has_vars {
+                    custom_update = tprint("%1impedances.%2_vars, ", custom_update, token.name);
+                }
+                if has_params {
+                    custom_update = tprint("%1params.%2_params, ", custom_update, token.name);
+                }
+                for child : token.children {
+                    custom_update = tprint("%1impedances.%2_R, ", custom_update, tokens[child].name);
+                    custom_update = tprint("%1impedances.%2_G, ", custom_update, tokens[child].name);
+                }
+                custom_update.count -= 2;
+                custom_update = tprint("%1);", custom_update);
+                array_add(*impedance_updates, custom_update);
+
+                if token != root_token {
+                    array_add(*impedance_updates, tprint("impedances.%1_G = 1.0f / impedances.%1_R;\n", token.name));
                 }
         }
 
@@ -800,7 +851,7 @@ parse_custom_token_args :: (args: [] string) -> *Token.Custom_Token_Info {
             case "params";
                 info.params_type = value;
             case "state";
-                info.params_type = value;
+                info.state_type = value;
             case "vars";
                 info.vars_type = value;
             case "updater";
