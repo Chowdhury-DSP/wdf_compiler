@@ -41,7 +41,6 @@ main :: () {
     error_assert(sections.outputs.count > 0, "Missing \"output\" section");
 
     inputs := String.split(sections.inputs, "\n");
-    assert(inputs.count == 1); // @TODO: support multiple inputs
     outputs := String.split(sections.outputs, "\n");
 
     meta_info := parse_meta_info(sections.meta);
