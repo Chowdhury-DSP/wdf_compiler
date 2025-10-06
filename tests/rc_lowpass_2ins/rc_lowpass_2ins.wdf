@@ -1,0 +1,12 @@
+circuit:
+IVs(Vin);
+    Series(S1);
+        RVs(R1, 1k);
+        C(C1, 1u);
+
+inputs:
+Vin
+R1
+
+outputs:
+V:C1

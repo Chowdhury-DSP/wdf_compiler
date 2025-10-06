@@ -46,6 +46,7 @@ else
    cpp_test rc_lowpass_var
    cpp_test rl_lowpass_var
    cpp_test rc_bandpass_var
+   cpp_test rc_lowpass_2ins
    cpp_test preamp_eq
    cpp_test preamp_eq_comb
    cpp_test diode_clipper
