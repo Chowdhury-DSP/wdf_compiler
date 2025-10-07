@@ -41,7 +41,9 @@ main :: () {
     error_assert(sections.outputs.count > 0, "Missing \"output\" section");
 
     inputs := String.split(sections.inputs, "\n");
+    for *input : inputs { input.* = String.trim(input.*); }
     outputs := String.split(sections.outputs, "\n");
+    for *output : outputs { output.* = String.trim(output.*); }
 
     meta_info := parse_meta_info(sections.meta);
     gen_code := start_gen_code(meta_info);
@@ -843,6 +845,7 @@ generate_updaters :: (tokens: [] Token, inputs: [] string, meta_info: Meta_Info)
 
 parse_custom_token_args :: (args: [] string) -> *Token.Custom_Token_Info {
     info := New(Token.Custom_Token_Info);
+    name_prefix := "";
     for arg : args {
         found_key, key, value := String.split_from_left(arg, cast(u8) #char "=");
         if ! found_key { continue; }
@@ -861,8 +864,25 @@ parse_custom_token_args :: (args: [] string) -> *Token.Custom_Token_Info {
                 info.incident_name = value;
             case "reflected";
                 info.reflected_name = value;
+            case "prefix";
+                name_prefix = value;
         }
     }
+
+    if name_prefix.count > 0 {
+        add_prefix :: (name: string, prefix: string) -> string {
+            if name.count == 0 { return name; }
+            return tprint("%1%2", prefix, name);
+        }
+        info.params_type = add_prefix (info.params_type, name_prefix);
+        info.state_type = add_prefix (info.state_type, name_prefix);
+        info.vars_type = add_prefix (info.vars_type, name_prefix);
+        info.updater_name = add_prefix (info.updater_name, name_prefix);
+        info.compute_name = add_prefix (info.compute_name, name_prefix);
+        info.incident_name = add_prefix (info.incident_name, name_prefix);
+        info.reflected_name = add_prefix (info.reflected_name, name_prefix);
+    }
+
     return info;
 }
 
