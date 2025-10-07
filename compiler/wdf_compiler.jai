@@ -60,7 +60,14 @@ main :: () {
 
 start_gen_code :: (meta_info: Meta_Info) -> string {
     // print("%\n", meta_info);
-    gen_code := "#pragma once\n";
+
+    cli_args := get_command_line_arguments();
+    gen_code := "// Auto-generated with command: wdf compiler";
+    for i : 1..cli_args.count - 1 {
+        gen_code = tprint("%1 %2", gen_code, cli_args[i]);
+    }
+
+    gen_code = tprint("%1\n\n#pragma once\n", gen_code);
 
     if (meta_info.extra_includes.count > 0) {
         includes_code := "";
