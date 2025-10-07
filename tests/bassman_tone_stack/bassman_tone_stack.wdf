@@ -1,5 +1,5 @@
 circuit:
-Custom(R, 6, params=bassman_r::R_Params, vars=bassman_r::R_Vars, updater=bassman_r::update_vars, compute=bassman_r::root_compute);
+Custom(R, 6, prefix=bassman_r::, params=R_Params, vars=R_Vars, updater=update_vars, compute=root_compute);
     RVs(Vin_Res3m, ?);
     R(Res2_Res3p, ?);
     RCSeries(Res1p_Res1m_Cap1, ?, 250p);

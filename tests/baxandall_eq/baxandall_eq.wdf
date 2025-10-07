@@ -2,7 +2,7 @@ circuit:
 IVs(Vin);
     Series(S1);
         C(Ca, 1u);
-        Custom(R, 5, params=baxandall_r::R_Params, vars=baxandall_r::R_Vars, state=baxandall_r::R_State, updater=baxandall_r::update_vars, incident=baxandall_r::incident, reflected=baxandall_r::reflected);
+        Custom(R, 5, prefix=baxandall_r::, params=R_Params, vars=R_Vars, state=R_State, updater=update_vars, incident=incident, reflected=reflected);
             RCSeries(S4, ?, 6.4n);
             Parallel(P1);
                 R(Rl, 1M);
