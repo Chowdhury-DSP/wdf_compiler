@@ -96,11 +96,11 @@ parse_meta_info :: (meta_info_str: string) -> Meta_Info {
     info_lines := String.split(meta_info_str, cast(u8) #char "\n");
     for line : info_lines {
         line_trim := String.trim(line);
-        tokens := String.split(line_trim, cast(u8) #char ":");
-        if tokens.count != 2 { continue; }
+        was_split, key, value := String.split_from_left(line_trim, cast(u8) #char ":");
+        if was_split == false { continue; }
 
-        key := String.trim(tokens[0]);
-        value := String.trim(tokens[1]);
+        key = String.trim(key);
+        value = String.trim(value);
 
         if key == {
             case "namespace";

@@ -11,4 +11,4 @@ outputs:
 I:R1
 
 meta:
-namespace:rl_lowpass
+namespace:test::rl_lowpass
