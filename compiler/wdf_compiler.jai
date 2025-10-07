@@ -165,7 +165,7 @@ generate_struct :: (impedance_vars: [] string, name: string) -> string {
 }
 
 generate_method :: (name: string, args: [] string, lines: [] string, return_type := "void") -> string {
-    method_code := tprint("%1 %2(", return_type, name);
+    method_code := tprint("inline %1 %2(", return_type, name); // @TODO: do we always want these methods to be marked inline?
     for arg, idx : args {
         if idx != 0 { method_code = tprint("%1, ", method_code); }
         method_code = tprint("%1%2", method_code, arg);
