@@ -12,8 +12,11 @@ fi
 
 if [[ "$*" = *bench* ]]; then
     echo "Running bench tests..."
-    git clone https://github.com/xtensor-stack/xsimd
+    if [ ! -d "${SCRIPT_DIR}/xsimd" ]; then
+        git clone https://github.com/xtensor-stack/xsimd "${SCRIPT_DIR}/xsimd"
+    fi
     bench_flags="-DRUN_BENCH=1 -O3 -I${SCRIPT_DIR}/xsimd/include"
+    echo "$bench_flags"
 else
     bench_flags=""
 fi

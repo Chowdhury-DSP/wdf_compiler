@@ -14,3 +14,5 @@ wdf_compiler
 .raddbg_project
 
 .DS_Store
+
+xsimd/
