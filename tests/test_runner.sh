@@ -11,8 +11,12 @@ else
 fi
 
 if [[ "$*" = *bench* ]]; then
-    echo "Making running bench tests..."
-    bench_flags="-DRUN_BENCH=1 -O3"
+    echo "Running bench tests..."
+    if [ ! -d "${SCRIPT_DIR}/xsimd" ]; then
+        git clone https://github.com/xtensor-stack/xsimd "${SCRIPT_DIR}/xsimd"
+    fi
+    bench_flags="-DRUN_BENCH=1 -O3 -I${SCRIPT_DIR}/xsimd/include"
+    echo "$bench_flags"
 else
     bench_flags=""
 fi
@@ -30,7 +34,7 @@ cpp_test () {
    echo "Running CPP Test: $test"
    cd "${SCRIPT_DIR}/${test}"
    $wdf_compiler "${test}.wdf" "${test}.h"
-   $cpp_compiler "${test}.cpp" ${bench_flags} --std=c++20 ${libcpp_flag} -o "${test}.exe"
+   $cpp_compiler "${test}.cpp" ${bench_flags} -I../../lib --std=c++20 ${libcpp_flag} -o "${test}.exe"
    "./${test}.exe"
 }
 
@@ -50,6 +54,7 @@ else
    cpp_test preamp_eq
    cpp_test preamp_eq_comb
    cpp_test diode_clipper
+   cpp_test diode_circuit
    cpp_test simple_triode
    cpp_test bassman_tone_stack
    cpp_test baxandall_eq

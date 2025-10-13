@@ -1,5 +1,9 @@
 #include "baxandall_eq.h"
 
+#if RUN_BENCH
+#include <xsimd/xsimd.hpp>
+#endif
+
 #include "../chowdsp_wdf.h"
 #include <iostream>
 #include <random>
