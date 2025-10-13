@@ -1,8 +1,11 @@
 #pragma once
 
+#include <wdf_lib_rtype_helpers.h>
+
 namespace baxandall_r
 {
 static constexpr int num_ports = 6;
+static constexpr int num_ports_padded = wdf_lib::pad_to_multiple (6, 4);
 static constexpr int up_port = 5;
 
 struct R_Params
@@ -11,7 +14,7 @@ struct R_Params
 
 struct R_Vars
 {
-    float S[num_ports][num_ports] {};
+    alignas (16) float S[num_ports * num_ports_padded] {};
 };
 
 struct R_State
@@ -42,7 +45,7 @@ static inline float update_vars (R_Vars& vars,
     for (int c = 0; c < num_ports; ++c)
     {
         for (int r = 0; r < num_ports; ++r)
-            vars.S[r][c] = S_transpose[c][r];
+            vars.S[r * num_ports_padded + c] = S_transpose[c][r];
     }
 
     const auto Rf = ((Ra * Rb + (Ra + Rb) * Rc) * Rd + (Ra * Rb + (Ra + Rb) * Rc + (Ra + Rb) * Rd) * Re) / (Ra * Rb + (Ra + Rb) * Rc + (Ra + Rc) * Rd + (Rb + Rc + Rd) * Re);
@@ -57,7 +60,7 @@ static inline float reflected (const R_Vars& vars, const R_State& state, const f
 static inline void incident (const R_Vars& vars, R_State& state, float a_up, const float* a_in, float* b_out)
 {
     alignas (16) float a[num_ports];
-    alignas (16) float b[num_ports];
+    alignas (16) float b[num_ports_padded];
 
     for (int i = 0, j = 0; i < num_ports; ++i)
     {
@@ -72,12 +75,7 @@ static inline void incident (const R_Vars& vars, R_State& state, float a_up, con
         }
     }
 
-    for (int c = 0; c < num_ports; ++c)
-    {
-        b[c] = vars.S[0][c] * a[0];
-        for (int r = 1; r < num_ports; ++r)
-            b[c] += vars.S[r][c] * a[r];
-    }
+    wdf_lib::aligned_matmul<num_ports, num_ports_padded> (vars.S, a, b);
 
     for (int i = 0, j = 0; i < num_ports; ++i)
     {

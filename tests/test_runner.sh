@@ -11,8 +11,9 @@ else
 fi
 
 if [[ "$*" = *bench* ]]; then
-    echo "Making running bench tests..."
-    bench_flags="-DRUN_BENCH=1 -O3"
+    echo "Running bench tests..."
+    git clone https://github.com/xtensor-stack/xsimd
+    bench_flags="-DRUN_BENCH=1 -O3 -I${SCRIPT_DIR}/xsimd/include"
 else
     bench_flags=""
 fi
@@ -50,6 +51,7 @@ else
    cpp_test preamp_eq
    cpp_test preamp_eq_comb
    cpp_test diode_clipper
+   cpp_test diode_circuit
    cpp_test simple_triode
    cpp_test bassman_tone_stack
    cpp_test baxandall_eq
