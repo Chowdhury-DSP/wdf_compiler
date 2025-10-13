@@ -30,7 +30,7 @@ cpp_test () {
    echo "Running CPP Test: $test"
    cd "${SCRIPT_DIR}/${test}"
    $wdf_compiler "${test}.wdf" "${test}.h"
-   $cpp_compiler "${test}.cpp" ${bench_flags} --std=c++20 ${libcpp_flag} -o "${test}.exe"
+   $cpp_compiler "${test}.cpp" ${bench_flags} -I../../lib --std=c++20 ${libcpp_flag} -o "${test}.exe"
    "./${test}.exe"
 }
 

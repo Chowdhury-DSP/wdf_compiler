@@ -1,5 +1,5 @@
 circuit:
-Custom(DP, 1, prefix=custom_dp::, params=DP_Params, vars=DP_Vars, updater=update_vars, compute=root_compute);
+Custom(DP, 1, prefix=wdf_lib::diode_pair::, params=Diode_Pair_Params, vars=Diode_Pair_Vars, updater=update_vars, compute=root_compute);
     Parallel(P1);
         C(C1);
         RVs(Vin, ?);
@@ -11,4 +11,4 @@ outputs:
 V:C1
 
 meta:
-include:"custom_diode_pair.h"
+include:<wdf_lib_diode_pair.h>
