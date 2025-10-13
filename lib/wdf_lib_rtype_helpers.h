@@ -27,6 +27,19 @@ constexpr T1 pad_to_multiple (T1 value, T2 multiple)
 
 #define WDF_LIB_RESTRICT __restrict__
 
+template <int num_ports, int num_ports_padded>
+inline static void unaligned_matmul (const float* WDF_LIB_RESTRICT S,
+                                     const float* WDF_LIB_RESTRICT a,
+                                     float* WDF_LIB_RESTRICT b)
+{
+    for (int c = 0; c < num_ports; ++c)
+    {
+        b[c] = S[c] * a[0];
+        for (int r = 1; r < num_ports; ++r)
+            b[c] += S[r * num_ports_padded + c] * a[r];
+    }
+}
+
 // S: array of size (num_ports * num_ports_padded)
 // a: array of size (num_ports)
 // b: array of size (num_ports_padded)
@@ -75,12 +88,7 @@ for (int c = 0; c < num_ports_padded; c += simd_size)
         vst1q_f32 (b + c, b_c);
     }
 #else // No SIMD
-    for (int c = 0; c < num_ports; ++c)
-    {
-        b[c] = S[c] * a[0];
-        for (int r = 1; r < num_ports; ++r)
-            b[c] += S[r * num_ports_padded + c] * a[r];
-    }
+    unaligned_matmul (S, a, b);
 #endif
 }
 }
