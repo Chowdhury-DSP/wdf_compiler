@@ -1,5 +1,7 @@
 #pragma once
 
+#include <wdf_lib_rtype_helpers.h>
+
 namespace bassman_r
 {
 static constexpr int num_ports = 6;
@@ -10,7 +12,7 @@ struct R_Params
 
 struct R_Vars
 {
-    float S[num_ports][num_ports] {};
+    float S[num_ports * num_ports] {};
 };
 
 static inline void update_vars (R_Vars& vars,
@@ -38,18 +40,12 @@ static inline void update_vars (R_Vars& vars,
     for (int c = 0; c < num_ports; ++c)
     {
         for (int r = 0; r < num_ports; ++r)
-            vars.S[r][c] = S_transpose[c][r];
+            vars.S[r * num_ports + c] = S_transpose[c][r];
     }
 }
 
 static inline void root_compute (const R_Vars& vars, const float* a, float* b)
 {
-    for (int c = 0; c < num_ports; ++c)
-    {
-        b[c] = vars.S[0][c] * a[0];
-        for (int r = 1; r < num_ports; ++r)
-            b[c] += vars.S[r][c] * a[r];
-    }
-    // @TODO: SIMD here...
+    wdf_lib::unaligned_matmul<num_ports, num_ports> (vars.S, a, b);
 }
 }
