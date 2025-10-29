@@ -3,9 +3,11 @@ CLI :: #import "Command_Line";
 File :: #import "File";
 String :: #import "String";
 Sort :: #import "Sort";
+Process :: #import "Process";
 
 Args :: struct {
     verbose : bool = false; @"?Verbose"
+    version : bool = false; @"?Version"
 }
 
 error_assert :: (cond: bool, message: string) #expand {
@@ -15,6 +17,13 @@ error_assert :: (cond: bool, message: string) #expand {
     }
 }
 
+get_compiler_version :: () -> string {
+    result, output, err, timed_out := Process.run_command("git", "rev-parse", "--short", "HEAD", capture_and_return_output=true);
+    return tprint("0.1.0.%", String.trim(output));
+}
+
+COMPILER_VERSION :: #run get_compiler_version();
+
 main :: () {
     // context setup...
     context.allocator = temp;
@@ -22,10 +31,15 @@ main :: () {
 
     args_success, args, is_set, free_args := CLI.parse_arguments (Args);
 
+    if args.version {
+        print("wdf_compiler version: %\n", COMPILER_VERSION);
+        exit(0);
+    }
+
     if !args_success || free_args.count < 2 {
         print("Incorrect arguments! Usage: wdf_compiler <input_file> <output_file>\n");
         // CLI.show_help (Args, CLI.Default_Argument_Flags, .[]);
-        exit (1);
+        exit(1);
     }
 
     input_file := free_args[0];
@@ -62,7 +76,7 @@ start_gen_code :: (meta_info: Meta_Info) -> string {
     // print("%\n", meta_info);
 
     cli_args := get_command_line_arguments();
-    gen_code := "// Auto-generated with command: wdf compiler";
+    gen_code := tprint("// Auto-generated with wdf_compiler version %.\n// Command: wdf_compiler", COMPILER_VERSION);
     for i : 1..cli_args.count - 1 {
         gen_code = tprint("%1 %2", gen_code, cli_args[i]);
     }
