@@ -6,14 +6,23 @@ Sort :: #import "Sort";
 Process :: #import "Process";
 
 Args :: struct {
-    verbose : bool = false; @"?Verbose"
-    version : bool = false; @"?Version"
+    verbose : bool = false;   @"?Verbose"
+    version : bool = false;   @"?Version"
+    lang    : string = "cpp"; @"?Language of generated code. Currently supports cpp (default) and jai."
 }
+argument_flags :: CLI.Default_Argument_Flags; // |.DOUBLE_DASH_REQUIRED;
+global_args: Args;
 
 error_assert :: (cond: bool, message: string) #expand {
     if ! cond {
         print("Compilation error: %\n", message);
         exit(1);
+    }
+}
+
+verbose_print :: (format_string: string, args: .. Any) {
+    if (global_args.verbose) {
+        print(format_string, args);
     }
 }
 
@@ -28,19 +37,28 @@ main :: () {
     // context setup...
     context.allocator = temp;
     context.print_style.default_format_float.mode = .SCIENTIFIC;
+    context.print_style.default_format_float.zero_removal = .ONE_ZERO_AFTER_DECIMAL;
 
-    args_success, args, is_set, free_args := CLI.parse_arguments (Args);
+    args_success, args, is_set, free_args := CLI.parse_arguments (Args, argument_flags);
 
     if args.version {
         print("wdf_compiler version: %\n", COMPILER_VERSION);
         exit(0);
     }
 
-    if !args_success || free_args.count < 2 {
-        print("Incorrect arguments! Usage: wdf_compiler <input_file> <output_file>\n");
-        // CLI.show_help (Args, CLI.Default_Argument_Flags, .[]);
+    if args.lang != "cpp" && args.lang != "jai" {
+        print("Unknown language! Supported languages are: cpp, jai\n");
+        CLI.show_help (Args, argument_flags, .[]);
         exit(1);
     }
+
+    if !args_success || free_args.count < 2 {
+        print("Incorrect arguments! Usage: wdf_compiler <input_file> <output_file>\n");
+        CLI.show_help (Args, argument_flags, .[]);
+        exit(1);
+    }
+    global_args = args;
+    verbose_print("Args: %\n", args);
 
     input_file := free_args[0];
     output_file := free_args[1];
@@ -78,17 +96,17 @@ main :: () {
 }
 
 start_gen_code :: (meta_info: Meta_Info) -> string {
-    // print("%\n", meta_info);
-
     cli_args := get_command_line_arguments();
     gen_code := tprint("// Auto-generated with wdf_compiler version %.\n// Command: wdf_compiler", COMPILER_VERSION);
     for i : 1..cli_args.count - 1 {
         gen_code = tprint("%1 %2", gen_code, cli_args[i]);
     }
 
-    gen_code = tprint("%1\n\n#pragma once\n", gen_code);
+    gen_code = tprint("%1\n", gen_code);
+    if global_args.lang == "cpp" { gen_code = tprint("%1\n#pragma once\n", gen_code); }
 
     if (meta_info.extra_includes.count > 0) {
+        // @TODO: do something similar with JAI's #load
         includes_code := "";
         for include : meta_info.extra_includes {
             includes_code = tprint("%#include %\n", includes_code, include);
@@ -96,16 +114,20 @@ start_gen_code :: (meta_info: Meta_Info) -> string {
         gen_code = tprint("%\n%", gen_code, includes_code);
     }
 
-    if (meta_info.namespace.count > 0) {
-        gen_code = tprint("%\nnamespace %\n{\n", gen_code, meta_info.namespace);
+    if global_args.lang == "cpp" {
+        if (meta_info.namespace.count > 0) {
+            gen_code = tprint("%\nnamespace %\n{\n", gen_code, meta_info.namespace);
+        }
     }
     return gen_code;
 }
 
 end_gen_code :: (meta_info: Meta_Info) -> string {
     gen_code := "";
-    if (meta_info.namespace.count > 0) {
-        gen_code = tprint("} // namespace %\n\n", meta_info.namespace);
+    if global_args.lang == "cpp" {
+        if (meta_info.namespace.count > 0) {
+            gen_code = tprint("} // namespace %\n\n", meta_info.namespace);
+        }
     }
     return gen_code;
 }
@@ -138,7 +160,7 @@ parse_meta_info :: (meta_info_str: string) -> Meta_Info {
         }
     }
 
-    // print("%\n", meta_info);
+    verbose_print("Meta info: %\n", meta_info);
     return meta_info;
 }
 
@@ -182,21 +204,39 @@ Token :: struct {
 }
 
 generate_struct :: (impedance_vars: [] string, name: string) -> string {
-    struct_code := tprint("struct % {\n", name);
+    struct_code := "";
+    if global_args.lang == "jai" {
+        struct_code = tprint("%1%2 :: struct {\n", struct_code, name);
+    } else {
+        struct_code = tprint("%1struct %2 {\n", struct_code, name);
+    }
     for var : impedance_vars {
         struct_code = tprint("%    %\n", struct_code, var);
     }
-    struct_code = tprint("%};\n", struct_code);
+    if global_args.lang == "jai" {
+        struct_code = tprint("%}\n", struct_code);
+    } else {
+        struct_code = tprint("%};\n", struct_code);
+    }
     return struct_code;
 }
 
 generate_method :: (name: string, args: [] string, lines: [] string, return_type := "void") -> string {
-    method_code := tprint("inline %1 %2(", return_type, name); // @TODO: do we always want these methods to be marked inline?
+    method_code := "";
+    if global_args.lang == "jai" {
+        method_code = tprint("%1%2 :: (", method_code, name);
+    } else {
+        method_code = tprint("%1inline %2 %3(", method_code, return_type, name); // @TODO: do we always want these methods to be marked inline?
+    }
     for arg, idx : args {
         if idx != 0 { method_code = tprint("%1, ", method_code); }
         method_code = tprint("%1%2", method_code, arg);
     }
-    method_code = tprint("%1) {\n", method_code);
+    if global_args.lang == "jai" {
+        method_code = tprint("%1) -> %2 {\n", method_code, return_type);
+    } else {
+        method_code = tprint("%1) {\n", method_code);
+    }
     for line : lines {
         method_code = tprint("%1    %2\n", method_code, line);
     }
@@ -500,12 +540,35 @@ is_param_defined :: (token: *Token, idx := 0) -> bool {
     return is_defined_arg;
 }
 
+// @TODO: variable types here...
+write_constexpr_var :: (name: string, value: string) -> string {
+    if global_args.lang == {
+        case "cpp";
+            return tprint("static constexpr float %1 = %2;", name, value);
+        case "jai";
+            return tprint("%1 : float32 : %2;", name, value);
+    }
+    return .{};
+}
+
+write_struct_field :: (name: string) -> string {
+    if global_args.lang == {
+        case "cpp";
+            return tprint("float %1;", name);
+        case "jai";
+            return tprint("%1 : float32;", name);
+    }
+    return .{};
+}
+
 write_param :: (params_vars : *[..] string, token: *Token, idx := 0, suffix := "value") -> bool {
     is_defined_arg := is_param_defined(token, idx);
     if is_defined_arg {
-        array_add(params_vars, tprint("static constexpr float %1_%3 = %2;", token.name, get_value(token.args[idx]), suffix));
+        array_add(params_vars,
+                  write_constexpr_var(tprint("%1_%2", token.name, suffix),
+                                      tprint("%", get_value(token.args[idx]))));
     } else {
-        array_add(params_vars, tprint("float %1_%2;", token.name, suffix));
+        array_add(params_vars, write_struct_field(tprint("%1_%2;", token.name, suffix)));
     }
 
     return is_defined_arg;
@@ -527,10 +590,10 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
     for *token : tokens {
         if token != root_token {
             r_found, r_idx := array_find(required_impedances, tprint("%_R", token.name));
-            if r_found { array_add(*impedance_vars, tprint("float %_R;", token.name)); }
+            if r_found { array_add(*impedance_vars, write_struct_field(tprint("%_R", token.name))); }
 
             g_found, g_idx := array_find(required_impedances, tprint("%_G", token.name));
-            if g_found { array_add(*impedance_vars, tprint("float %_G;", token.name)); }
+            if g_found { array_add(*impedance_vars, write_struct_field(tprint("%_G", token.name))); }
         }
 
         if token.type == {
@@ -540,35 +603,35 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
 
             case .Capacitor;
                 write_param(*params_vars, token);
-                array_add(*state_vars, tprint("float %_z;", token.name));
+                array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Inductor;
                 write_param(*params_vars, token);
-                array_add(*state_vars, tprint("float %_z;", token.name));
+                array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistor_Capacitor_Series;
                 write_param(*params_vars, token, 0, "res_value");
                 write_param(*params_vars, token, 1, "cap_value");
-                array_add(*state_vars, tprint("float %_z;", token.name));
-                array_add(*impedance_vars, tprint("float %1_T_over_T_plus_2RC;", token.name));
+                array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
+                array_add(*impedance_vars, write_struct_field(tprint("%1_T_over_T_plus_2RC", token.name)));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistor_Capacitor_Parallel;
                 write_param(*params_vars, token, 0, "res_value");
                 write_param(*params_vars, token, 1, "cap_value");
-                array_add(*state_vars, tprint("float %_z;", token.name));
-                array_add(*impedance_vars, tprint("float %1_twoRC_over_twoRC_plus_T;", token.name));
+                array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
+                array_add(*impedance_vars, write_struct_field(tprint("%1_twoRC_over_twoRC_plus_T", token.name)));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Ideal_Voltage_Source;
                 if ! is_input(token, inputs) {
                     is_known := write_param(*params_vars, token, 0, "v_value");
                     if is_known {
-                        array_add(*impedance_vars, tprint("static constexpr float %_V = Params::%1_v_value;", token.name));
+                        array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name), tprint("Params::%1_v_value;", token.name)));
                     } else {
-                        array_add(*impedance_vars, tprint("float %_V;", token.name));
+                        array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
                 }
 
@@ -576,9 +639,9 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 if ! is_input(token, inputs) {
                     is_known := write_param(*params_vars, token, 0, "i_value");
                     if is_known {
-                        array_add(*impedance_vars, tprint("static constexpr float %_I = Params::%1_i_value;", token.name));
+                        array_add(*impedance_vars, write_constexpr_var(tprint("%_I", token.name), tprint("Params::%1_i_value;", token.name)));
                     } else {
-                        array_add(*impedance_vars, tprint("float %_I;", token.name));
+                        array_add(*impedance_vars, write_struct_field(tprint("%_I", token.name)));
                     }
                 }
 
@@ -588,9 +651,9 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 if ! is_input_source {
                     is_known := write_param(*params_vars, token, 0, "v_value");
                     if is_known {
-                        array_add(*impedance_vars, tprint("static constexpr float %_V = Params::%1_v_value;", token.name));
+                        array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name), tprint("Params::%1_v_value;", token.name)));
                     } else {
-                        array_add(*impedance_vars, tprint("float %_V;", token.name));
+                        array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
                 }
 
@@ -606,8 +669,8 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 is_input_source := is_input(token, inputs);
                 error_assert(is_input_source, tprint("Capacitive Voltage Source % is required to be an input source!", token.name));
 
-                array_add(*state_vars, tprint("float %_z;", token.name));
-                array_add(*state_vars, tprint("float %_v1;", token.name));
+                array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
+                array_add(*state_vars, write_struct_field(tprint("%_v1", token.name)));
                 write_param(*params_vars, token, 0, "cap_value");
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
@@ -616,9 +679,9 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 if ! is_input(token, inputs) {
                     is_known := write_param(*params_vars, token, 0, "i_value");
                     if is_known {
-                        array_add(*impedance_vars, tprint("static constexpr float %_I = Params::%1_i_value;", token.name));
+                        array_add(*impedance_vars, write_constexpr_var(tprint("%_I", token.name), tprint("Params::%1_i_value;", token.name)));
                     } else {
-                        array_add(*impedance_vars, tprint("float %_I;", token.name));
+                        array_add(*impedance_vars, write_struct_field(tprint("%_I", token.name)));
                     }
                 }
 
@@ -641,10 +704,13 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
         token := impedance_todo;
         if token.type == {
             case .Series;
-                array_add(*impedance_vars, tprint("float %1_pr;", token.name));
+                array_add(*impedance_vars, write_struct_field(tprint("%1_pr", token.name)));
             case .Parallel;
-                array_add(*impedance_vars, tprint("float %1_pr;", token.name));
+                array_add(*impedance_vars, write_struct_field(tprint("%1_pr", token.name)));
             case .Custom;
+                if global_args.lang == "jai" {
+                    error_assert(false, "Custom elements are only supported in C++ (for now)"); // @TODO
+                }
                 if (token.custom_info.params_type.count > 0) {
                     array_add(*params_vars, tprint("%1 %2_params {};", token.custom_info.params_type, token.name));
                 }
@@ -662,7 +728,7 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
         if token != root_token {
             add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token, false);
         } else {
-            // print("Finished climbing impedance tree!");
+            // verbose_print("Finished climbing impedance tree!");
         }
     }
 
@@ -870,7 +936,7 @@ generate_updater :: (tokens: [] Token,
         if token != root_token {
             add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token, false);
         } else {
-            // print("Finished climbing impedance tree!");
+            // verbose_print("Finished climbing impedance tree!");
         }
     }
 
@@ -1032,7 +1098,7 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             new_token.args.data = new_token.args.data + 1;
             new_token.args.count = new_token.args.count - 1;
             new_token.custom_info = parse_custom_token_args(new_token.args);
-            // print("%\n", new_token.custom_info.*);
+            verbose_print("Custom token: %\n", new_token.custom_info.*);
         }
 
         if children_stack.count != 0 {
@@ -1054,7 +1120,7 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             array_add(*children_stack, .{peek_pointer(tokens).index, num_children, num_children});
         }
     }
-    // print("%\n", tokens);
+    verbose_print("Tokens: %\n", tokens);
     return tokens;
 }
 
