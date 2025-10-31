@@ -1,5 +1,6 @@
 */*.h
 */*.jai
+*/*.bin
 !*/custom_*.h
 
 

@@ -221,7 +221,15 @@ generate_struct :: (impedance_vars: [] string, name: string) -> string {
     return struct_code;
 }
 
-generate_method :: (name: string, args: [] string, lines: [] string, return_type := "void") -> string {
+Method_Arg :: struct {
+    name: string;
+    type: string; // @TODO: should this be enum?
+    default_value: string;
+    is_reference: bool;
+    is_const: bool;
+}
+
+generate_method :: (name: string, args: [] Method_Arg, lines: [] string, return_type := "void") -> string {
     method_code := "";
     if global_args.lang == "jai" {
         method_code = tprint("%1%2 :: (", method_code, name);
@@ -230,10 +238,29 @@ generate_method :: (name: string, args: [] string, lines: [] string, return_type
     }
     for arg, idx : args {
         if idx != 0 { method_code = tprint("%1, ", method_code); }
-        method_code = tprint("%1%2", method_code, arg);
+        if global_args.lang == "jai" {
+            method_code = tprint("%1%2: ", method_code, arg.name);
+            if arg.is_reference { method_code = tprint("%1*", method_code); }
+            method_code = tprint("%1%2", method_code, arg.type);
+            if arg.default_value.count > 0 { method_code = tprint("%1 = %2", method_code, arg.default_value); }
+        } else {
+            if arg.is_const { method_code = tprint("%1const ", method_code); }
+            method_code = tprint("%1%2", method_code, arg.type);
+            if arg.is_reference { method_code = tprint("%1&", method_code); }
+            method_code = tprint("%1 %2", method_code, arg.name);
+            if arg.default_value.count > 0 { method_code = tprint("%1= %2", method_code, arg.default_value); }
+        }
     }
     if global_args.lang == "jai" {
-        method_code = tprint("%1) -> %2 {\n", method_code, return_type);
+        if return_type == "void" {
+            method_code = tprint("%1) {\n", method_code);
+        } else if return_type == "auto" {
+            // @TODO
+            method_code = tprint("%1) -> float32 {\n", method_code);
+            // method_code = tprint("%1) -> $T {\n", method_code);
+        } else {
+            method_code = tprint("%1) -> %2 {\n", method_code, return_type);
+        }
     } else {
         method_code = tprint("%1) {\n", method_code);
     }
@@ -350,9 +377,9 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
 }
 
 generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) -> string, [..] string {
-    input_args : [..] string;
-    array_add (*input_args, "State& state");
-    array_add (*input_args, "const Impedances& impedances");
+    input_args : [..] Method_Arg;
+    array_add (*input_args, Method_Arg.{name="state", type="State", is_reference=true});
+    array_add (*input_args, Method_Arg.{name="impedances", type="Impedances", is_reference=true, is_const=true});
     required_impedances : [..] string;
 
     for input : inputs {
@@ -364,7 +391,7 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
             }
         }
         error_assert(input_token != null, tprint("Unable to find input circuit element: %", input));
-        array_add(*input_args, tprint("float %", input));
+        array_add(*input_args, Method_Arg.{name=input, type="float"});
 
         if input_token.type == {
             case .Ideal_Voltage_Source; #through;
@@ -378,6 +405,19 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
         }
     }
 
+    write_define :: (name: string, value: string, comment := "") -> string {
+        str := "";
+        if global_args.lang == "jai" {
+            str = tprint("%1 := %2;", name, value);
+        } else {
+            str = tprint("const auto %1 = %2;", name, value);
+        }
+
+        if comment.count > 0 { str = tprint("%1 // %2", str, comment); }
+
+        return str;
+    }
+
     down_tree_statements : [..] string;
     up_tree_statements : [..] string;
     root_token := *tokens[0];
@@ -389,15 +429,27 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                 case .Ideal_Voltage_Source;
                     if ! is_input(token, inputs) { token.input = tprint("impedances.%1_V", token.name); }
                     child_token := tokens[token.children[0]];
-                    array_add(*up_tree_statements, tprint("const auto %1_a = %2_b; // %1 incident", token.name, child_token.name));
-                    array_add(*down_tree_statements, tprint("const auto %1_b = -%1_a + 2 * %2; // %1 reflected", token.name, token.input));
-                    array_add(*down_tree_statements, tprint("const auto %2_a = %1_b; // %2 incident", token.name, child_token.name));
+                    array_add(*up_tree_statements, write_define(tprint("%_a", token.name),
+                                                                tprint("%_b", child_token.name),
+                                                                tprint("% incident", token.name)));
+                    array_add(*down_tree_statements, write_define(tprint("%_b", token.name),
+                                                                  tprint("-%1_a + 2 * %2", token.name, token.input),
+                                                                  tprint("%1 reflected", token.name)));
+                    array_add(*down_tree_statements, write_define(tprint("%_a", child_token.name),
+                                                                  tprint("%_b", token.name),
+                                                                  tprint("% incident", child_token.name)));
                 case .Ideal_Current_Source;
                     if ! is_input(token, inputs) { token.input = tprint("impedances.%1_I", token.name); }
                     child_token := tokens[token.children[0]];
-                    array_add(*up_tree_statements, tprint("const auto %1_a = %2_b; // %1 incident", token.name, child_token.name));
-                    array_add(*down_tree_statements, tprint("const auto %1_b = 2 * impedances.%3_R * %2 + %1_a; // %1 reflected (@TODO: 2 * R?)", token.name, token.input, child_token.name));
-                    array_add(*down_tree_statements, tprint("const auto %2_a = %1_b; // %2 incident", token.name, child_token.name));
+                    array_add(*up_tree_statements, write_define(tprint("%_a", token.name),
+                                                                tprint("%_b", child_token.name),
+                                                                tprint("% incident", token.name)));
+                    array_add(*down_tree_statements, write_define(tprint("%_b", token.name),
+                                                                  tprint("2 * impedances.%3_R * %2 + %1_a", token.name, token.input, child_token.name),
+                                                                  tprint("%1 reflected (@TODO: 2 * R?)", token.name)));
+                    array_add(*down_tree_statements, write_define(tprint("%_a", child_token.name),
+                                                                  tprint("%_b", token.name),
+                                                                  tprint("% incident", child_token.name)));
                     array_add(*required_impedances, tprint("%_R", child_token.name));
                 case .Custom;
                     generate_custom_process_root(token, tokens, *down_tree_statements);
@@ -407,50 +459,82 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
 
         if token.type == {
             case .Resistor;
-                array_add(*up_tree_statements, tprint("const auto %1_b = 0; // %1 reflected", token.name));
+                array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
+                                                            "0",
+                                                            tprint("% reflected", token.name)));
             case .Capacitor;
-                array_add(*up_tree_statements, tprint("const auto %1_b = state.%1_z; // %1 reflected", token.name));
+                array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
+                                                            tprint("state.%_z", token.name),
+                                                            tprint("% reflected", token.name)));
                 array_add(*down_tree_statements, tprint("state.%1_z = %1_a; // %1 state update", token.name));
             case .Inductor;
-                array_add(*up_tree_statements, tprint("const auto %1_b = -state.%1_z; // %1 reflected", token.name));
+                array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
+                                                            tprint("-state.%_z", token.name),
+                                                            tprint("% reflected", token.name)));
                 array_add(*down_tree_statements, tprint("state.%1_z = %1_a; // %1 state update", token.name));
             case .Resistor_Capacitor_Series;
-                array_add(*up_tree_statements, tprint("const auto %1_b = -state.%1_z; // %1 reflected", token.name));
+                array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
+                                                            tprint("-state.%_z", token.name),
+                                                            tprint("% reflected", token.name)));
                 array_add(*down_tree_statements, tprint("state.%1_z -= impedances.%1_T_over_T_plus_2RC * (%1_a + state.%1_z); // %1 state update", token.name));
                 array_add(*required_impedances, tprint("%_T_over_T_plus_2RC", token.name));
             case .Resistor_Capacitor_Parallel;
-                array_add(*up_tree_statements, tprint("const auto %1_b = impedances.%1_twoRC_over_twoRC_plus_T * state.%1_z; // %1 reflected", token.name));
+                array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
+                                                            tprint("impedances.%1_twoRC_over_twoRC_plus_T * state.%1_z", token.name),
+                                                            tprint("% reflected", token.name)));
                 array_add(*down_tree_statements, tprint("state.%1_z = %1_b + %1_a - state.%1_z; // %1 state update", token.name));
                 array_add(*required_impedances, tprint("%_twoRC_over_twoRC_plus_T", token.name));
             case .Resistive_Voltage_Source;
                 if ! is_input(token, inputs) { token.input = tprint("impedances.%1_V", token.name); }
-                array_add(*up_tree_statements, tprint("const auto %1_b = %2; // %1 reflected", token.name, token.input));
+                array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
+                                                            token.input,
+                                                            tprint("% reflected", token.name)));
             case .Resistive_Current_Source;
                 if ! is_input(token, inputs) { token.input = tprint("impedances.%1_I", token.name); }
-                array_add(*up_tree_statements, tprint("const auto %1_b = impedances.%1_R * %2; // %1 reflected", token.name, token.input));
+                array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
+                                                            tprint("impedances.%1_R * %2", token.name, token.input),
+                                                            tprint("% reflected", token.name)));
                 array_add(*required_impedances, tprint("%_R", token.name));
             case .Capacitive_Voltage_Source;
                 array_add(*up_tree_statements, tprint("state.%1_v1 = %2; // %1 state update", token.name, token.input));
-                array_add(*up_tree_statements, tprint("const auto %1_b = state.%1_z + %2 - state.%1_v1; // %1 reflected", token.name, token.input));
+                array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
+                                                            tprint("state.%1_z + %2 - state.%1_v1", token.name, token.input),
+                                                            tprint("% reflected", token.name)));
                 array_add(*down_tree_statements, tprint("state.%1_z = %1_a; // %1 state update", token.name));
             case .Series;
                 child0_token := tokens[token.children[0]];
                 child1_token := tokens[token.children[1]];
-                array_add(*up_tree_statements, tprint("const auto %1_b = -(%2_b + %3_b); // %1 reflected", token.name, child0_token.name, child1_token.name));
-                array_add(*down_tree_statements, tprint("const auto %2_a = %2_b - impedances.%1_pr * (%1_a + %2_b + %3_b); // %2 incident", token.name, child0_token.name, child1_token.name));
-                array_add(*down_tree_statements, tprint("const auto %3_a = -(%1_a + %2_a); // %3 incident", token.name, child0_token.name, child1_token.name));
+                array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
+                                                            tprint("-(%1_b + %2_b)", child0_token.name, child1_token.name),
+                                                            tprint("% reflected", token.name)));
+                array_add(*down_tree_statements, write_define(tprint("%_a", child0_token.name),
+                                                              tprint("%2_b - impedances.%1_pr * (%1_a + %2_b + %3_b)", token.name, child0_token.name, child1_token.name),
+                                                              tprint("% incident", child0_token.name)));
+                array_add(*down_tree_statements, write_define(tprint("%_a", child1_token.name),
+                                                              tprint("-(%1_a + %2_a)", token.name, child0_token.name),
+                                                              tprint("% incident", child1_token.name)));
                 array_add(*required_impedances, tprint("%_pr", token.name));
             case .Parallel;
                 child0_token := tokens[token.children[0]];
                 child1_token := tokens[token.children[1]];
-                array_add(*up_tree_statements, tprint("const auto %1_b = %3_b - impedances.%1_pr * (%3_b - %2_b); // %1 reflected", token.name, child0_token.name, child1_token.name));
-                array_add(*down_tree_statements, tprint("const auto %2_a = %1_b - %2_b + %1_a; // %2 incident", token.name, child0_token.name));
-                array_add(*down_tree_statements, tprint("const auto %3_a = %1_b - %3_b + %1_a; // %3 incident", token.name, child0_token.name, child1_token.name));
+                array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
+                                                            tprint("%3_b - impedances.%1_pr * (%3_b - %2_b)", token.name, child0_token.name, child1_token.name),
+                                                            tprint("% reflected", token.name)));
+                array_add(*down_tree_statements, write_define(tprint("%_a", child0_token.name),
+                                                              tprint("%1_b - %2_b + %1_a", token.name, child0_token.name),
+                                                              tprint("% incident", child0_token.name)));
+                array_add(*down_tree_statements, write_define(tprint("%_a", child1_token.name),
+                                                              tprint("%1_b - %2_b + %1_a", token.name, child1_token.name),
+                                                              tprint("% incident", child1_token.name)));
                 array_add(*required_impedances, tprint("%_pr", token.name));
             case .Inverter;
                 child_token := tokens[token.children[0]];
-                array_add(*up_tree_statements, tprint("const auto %1_b = -%2_b; // %1 reflected", token.name, child_token.name));
-                array_add(*down_tree_statements, tprint("const auto %2_a = -%1_a; // %2 incident", token.name, child_token.name));
+                array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
+                                                            tprint("-%_b", child_token.name),
+                                                            tprint("% reflected", token.name)));
+                array_add(*down_tree_statements, write_define(tprint("%_a", child_token.name),
+                                                              tprint("-%_a", token.name),
+                                                              tprint("% incident", child_token.name)));
             case .Custom;
                 generate_custom_process(token, tokens, *down_tree_statements, *up_tree_statements);
         }
@@ -487,14 +571,19 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
         }
         error_assert(output_token != null, tprint("Unable to find output circuit element: %", output_info[1]));
 
+        half_literal := ifx global_args.lang == "jai" then "0.5" else "0.5f";
         if output_info[0] == {
             case "V";
                 return_var := tprint("v_%", output_token.name);
-                array_add(*code_statements, tprint("const auto %2 = (%1_a + %1_b) * 0.5f; // %1 voltage", output_token.name, return_var));
+                array_add(*code_statements, write_define(return_var,
+                                                         tprint("(%1_a + %1_b) * %2", output_token.name, half_literal),
+                                                         tprint("% voltage", output_token.name)));
                 array_add(*return_vars, return_var);
             case "I";
                 return_var := tprint("i_%", output_token.name);
-                array_add(*code_statements, tprint("const auto %2 = (%1_a - %1_b) * (0.5f * impedances.%1_G); // %1 current", output_token.name, return_var));
+                array_add(*code_statements, write_define(return_var,
+                                                         tprint("(%1_a - %1_b) * (%2 * impedances.%1_G)", output_token.name, half_literal),
+                                                         tprint("% current", output_token.name)));
                 array_add(*return_vars, return_var);
                 array_add(*required_impedances, tprint("%_G", output_token.name));
             case;
@@ -504,6 +593,7 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
     if return_vars.count == 1 {
         array_add(*code_statements, tprint("return %;", return_vars[0]));
     } else {
+        // @TODO: jai multiple return values
         return_statement := "return std::make_tuple(";
         for var : return_vars {
             return_statement = tprint("%1%2, ", return_statement, var);
@@ -739,8 +829,16 @@ generate_updater :: (tokens: [] Token,
                      inputs: [] string,
                      required_impedances: *[..] string,
                      tokens_filter: [] string = .[]) -> [..] string {
+    write_define :: (name: string, value: string) -> string {
+        if global_args.lang == "jai" {
+            return tprint("%1 := %2;", name, value);
+        } else {
+            return tprint("[[maybe_unused]] const auto %1 = %2;", name, value);
+        }
+    }
+
     add_impedance :: (updates: *[..] string, name: string, value: string, required: [] string, available_values: *[..] string) {
-        array_add(updates, tprint("[[maybe_unused]] const auto %1 = %2;", name, value));
+        array_add(updates, write_define(name, value));
         found, idx := array_find(required, name);
         if found {
             array_add(updates, tprint("impedances.%1 = %1;", name));
@@ -759,7 +857,8 @@ generate_updater :: (tokens: [] Token,
     available_values : [..] string;
     impedance_updates : [..] string;
     impedance_update_todos : [..] *Token;
-    array_add(*impedance_updates, "[[maybe_unused]] const auto T = 1.0f / fs;\n");
+    array_add(*impedance_updates, write_define("T", "1 / fs"));
+    array_add(*impedance_updates, "\n");
 
     root_token := *tokens[0];
     for *token : tokens {
@@ -778,33 +877,33 @@ generate_updater :: (tokens: [] Token,
             case .Resistor;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
                 add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("params.%1_value", token.name), required_impedances.*, *available_values);
-                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1.0f / %1_R", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Capacitor;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("2.0f * params.%1_value * fs", token.name), required_impedances.*, *available_values);
-                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("1.0f / %1_G", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("2 * params.%1_value * fs", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("1 / %1_G", token.name), required_impedances.*, *available_values);
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Inductor;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("2.0f * params.%1_value * fs", token.name), required_impedances.*, *available_values);
-                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1.0f / %1_R", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("2 * params.%1_value * fs", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistor_Capacitor_Series;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("(T / (2.0f * params.%1_cap_value)) + params.%1_res_value", token.name), required_impedances.*, *available_values);
-                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1.0f / %1_R", token.name), required_impedances.*, *available_values);
-                array_add(*impedance_updates, tprint("impedances.%1_T_over_T_plus_2RC = T / (2.0f * params.%1_cap_value * params.%1_res_value + T);\n", token.name));
+                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("(T / (2 * params.%1_cap_value)) + params.%1_res_value", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
+                array_add(*impedance_updates, tprint("impedances.%1_T_over_T_plus_2RC = T / (2 * params.%1_cap_value * params.%1_res_value + T);\n", token.name));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistor_Capacitor_Parallel;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                array_add(*impedance_updates, tprint("const auto %1_2RC = 2.0f * params.%1_cap_value * params.%1_res_value;", token.name));
+                array_add(*impedance_updates, tprint("const auto %1_2RC = 2 * params.%1_cap_value * params.%1_res_value;", token.name));
                 add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("params.%1_res_value * T / (%1_2RC + T)", token.name), required_impedances.*, *available_values);
-                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1.0f / %1_R", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
                 array_add(*impedance_updates, tprint("impedances.%1_twoRC_over_twoRC_plus_T = %1_2RC / (%1_2RC + T);\n", token.name));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
@@ -837,13 +936,13 @@ generate_updater :: (tokens: [] Token,
 
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
                 add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("params.%1_res_value", token.name), required_impedances.*, *available_values);
-                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1.0f / %1_R", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Capacitive_Voltage_Source;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("2.0f * params.%1_cap_value * fs", token.name), required_impedances.*, *available_values);
-                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("1.0f / %1_G", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("2 * params.%1_cap_value * fs", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("1 / %1_G", token.name), required_impedances.*, *available_values);
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistive_Current_Source;
@@ -857,7 +956,7 @@ generate_updater :: (tokens: [] Token,
 
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
                 add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("params.%1_res_value", token.name), required_impedances.*, *available_values);
-                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1.0f / %1_R", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Custom;
@@ -878,7 +977,7 @@ generate_updater :: (tokens: [] Token,
                 needs_value(*impedance_updates, tprint("%1_R", child1_token.name), available_values, required_impedances);
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
                 add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("%1_R + %2_R", child0_token.name, child1_token.name), required_impedances.*, *available_values);
-                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1.0f / %1_R", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
                 array_add(*impedance_updates, tprint("impedances.%1_pr = %2_R * %1_G;\n", token.name, child0_token.name));
             case .Parallel;
                 child0_token := tokens[impedance_todo.children[0]];
@@ -887,14 +986,14 @@ generate_updater :: (tokens: [] Token,
                 needs_value(*impedance_updates, tprint("%1_G", child1_token.name), available_values, required_impedances);
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
                 add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("%1_G + %2_G", child0_token.name, child1_token.name), required_impedances.*, *available_values);
-                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("1.0f / %1_G", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("1 / %1_G", token.name), required_impedances.*, *available_values);
                 array_add(*impedance_updates, tprint("impedances.%1_pr = %2_G * %1_R;\n", token.name, child0_token.name));
             case .Inverter;
                 child_token := tokens[impedance_todo.children[0]];
                 needs_value(*impedance_updates, tprint("%1_R", child_token.name), available_values, required_impedances);
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
                 add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("%1_R", child_token.name), required_impedances.*, *available_values);
-                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1.0f / %1_R", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
             case .Custom;
                 has_params := token.custom_info.params_type.count > 0;
                 has_state := token.custom_info.state_type.count > 0;
@@ -926,7 +1025,7 @@ generate_updater :: (tokens: [] Token,
 
                 if token != root_token {
                     add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("%1_R_calc", token.name), required_impedances.*, *available_values);
-                    add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1.0f / %1_R", token.name), required_impedances.*, *available_values);
+                    add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
                 }
         }
 
@@ -958,6 +1057,12 @@ generate_updaters :: (tokens: [] Token,
                       inputs: [] string,
                       meta_info: Meta_Info,
                       required_impedances: *[..] string) -> string {
+    updater_args := Method_Arg.[
+        .{name="impedances", type="Impedances", is_reference=true},
+        .{name="fs", type="float"},
+        .{name="params", type="Params"},
+    ];
+
     // updaters from meta
     meta_updaters: [..] string;
     for updater : meta_info.impedance_updaters {
@@ -967,7 +1072,7 @@ generate_updaters :: (tokens: [] Token,
         for *t : param_tokens { t.* = String.trim(t.*); }
         updates := generate_updater(tokens, inputs, required_impedances, param_tokens);
         array_add(*meta_updaters, generate_method(updater_name,
-                                                  .["Impedances& impedances", "float fs", "Params params"],
+                                                  updater_args,
                                                   updates));
     }
 
@@ -975,9 +1080,14 @@ generate_updaters :: (tokens: [] Token,
     // we don't want this one to affect the required impedances!
     save_impedances := required_impedances.*;
     defer required_impedances.* = save_impedances;
+    if global_args.lang == "jai" {
+        updater_args[2].default_value = ".{}";
+    } else {
+        updater_args[2].default_value = "{}";
+    }
     impedance_updates := generate_updater(tokens, inputs, required_impedances);
     gen_code := generate_method("calc_impedances",
-                                .["Impedances& impedances", "float fs", "Params params = {}"],
+                                updater_args,
                                 impedance_updates);
     for updater_method : meta_updaters {
         gen_code = tprint("%\n%", gen_code, updater_method);
