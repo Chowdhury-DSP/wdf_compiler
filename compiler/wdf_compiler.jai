@@ -331,17 +331,17 @@ generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_state
                                                args,
                                                token.custom_info.compute_name));
     } else {
-        // declare inputs
         if global_args.lang == "jai" {
+            // declare inputs
             statement := tprint("%_ins := float32.[", token.name);
             for child_idx : token.children {
                 statement = tprint("%1%2_b, ", statement, tokens[child_idx].name);
             }
             statement.count -= 2;
-            statement = tprint("%1]; // % inputs\n", statement, token.name);
+            statement = tprint("%1] #align 16; // % inputs\n", statement, token.name);
 
             // declare outputs
-            statement = tprint("%1    %2_outs: [%3] float32; // %2 outputs \n", statement, token.name, num_children);
+            statement = tprint("%1    %2_outs: [%3] float32 = --- #align 16; // %2 outputs \n", statement, token.name, num_children);
 
             args := "";
             if has_vars { args = tprint("%1*impedances.%2_vars, ", args, token.name); }
@@ -356,6 +356,7 @@ generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_state
             statement.count -= 1;
             array_add(down_tree_statements, statement);
         } else {
+            // declare inputs
             // @TODO: make the alignment here configurable?
             statement := tprint("alignas (16) const float %_ins[%] { ", token.name, num_children);
             for child_idx : token.children {
@@ -393,37 +394,71 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
         array_add(down_tree_statements, tprint("// %1 incident", token.name));
         error_assert (false, "NOT IMPLEMENTED (generate process for custom non-root node with exactly 1 child");
     } else {
-        // declare inputs
-        up_statement := tprint("alignas (16) const float %_ins[%] { ", token.name, num_children);
-        for child_idx : token.children {
-            up_statement = tprint("%1%2_b, ", up_statement, tokens[child_idx].name);
+        if global_args.lang == "jai" {
+            // declare inputs
+            up_statement := tprint("%_ins := float32.[", token.name);
+            for child_idx : token.children {
+                up_statement = tprint("%1%2_b, ", up_statement, tokens[child_idx].name);
+            }
+            up_statement.count -= 2;
+            up_statement = tprint("%1] #align 16; // % inputs\n", up_statement, token.name);
+
+            // finish up statement
+            up_args := "";
+            if has_vars { up_args = tprint("%1*impedances.%2_vars, ", up_args, token.name); }
+            if has_state { up_args = tprint("%*state.%2_state, ", up_args, token.name); }
+            up_args = tprint("%1%2_ins.data", up_args, token.name);
+            up_statement = tprint("%1    %4_b := %2(%3); // %4 reflected", up_statement, token.custom_info.reflected_name, up_args, token.name);
+            array_add(up_tree_statements, up_statement);
+
+            // declare outputs
+            down_statement := tprint("%_outs: [%] float32 = --- #align 16; // %2 outputs \n", token.name, num_children);
+
+            down_args := "";
+            if has_vars { down_args = tprint("%1*impedances.%2_vars, ", down_args, token.name); }
+            if has_state { down_args = tprint("%*state.%2_state, ", down_args, token.name); }
+            down_args = tprint("%1%2_a, %2_ins.data, %2_outs.data", down_args, token.name);
+            down_statement = tprint("%1    %2(%3); // %4 compute\n", down_statement, token.custom_info.incident_name, down_args, token.name);
+
+            // unwrap outputs
+            for child_idx : token.children {
+                down_statement = tprint("%1    %2_a := %3_outs[%4];\n", down_statement, tokens[child_idx].name, token.name, it_index);
+            }
+            down_statement.count -= 1;
+            array_add(down_tree_statements, down_statement);
+        } else {
+            // declare inputs
+            up_statement := tprint("alignas (16) const float %_ins[%] { ", token.name, num_children);
+            for child_idx : token.children {
+                up_statement = tprint("%1%2_b, ", up_statement, tokens[child_idx].name);
+            }
+            up_statement.count -= 2;
+            up_statement = tprint("%1 }; // % inputs\n", up_statement, token.name);
+
+            // finish up statement
+            up_args := "";
+            if has_vars { up_args = tprint("%1impedances.%2_vars, ", up_args, token.name); }
+            if has_state { up_args = tprint("%state.%2_state, ", up_args, token.name); }
+            up_args = tprint("%1%2_ins", up_args, token.name);
+            up_statement = tprint("%1    const auto %4_b = %2(%3); // %4 reflected", up_statement, token.custom_info.reflected_name, up_args, token.name);
+            array_add(up_tree_statements, up_statement);
+
+            // declare outputs
+            down_statement := tprint("alignas (16) float %_outs[%]; // %2 outputs \n", token.name, num_children);
+
+            down_args := "";
+            if has_vars { down_args = tprint("%1impedances.%2_vars, ", down_args, token.name); }
+            if has_state { down_args = tprint("%state.%2_state, ", down_args, token.name); }
+            down_args = tprint("%1%2_a, %2_ins, %2_outs", down_args, token.name);
+            down_statement = tprint("%1    %2(%3); // %4 compute\n", down_statement, token.custom_info.incident_name, down_args, token.name);
+
+            // unwrap outputs
+            for child_idx : token.children {
+                down_statement = tprint("%1    const auto %2_a = %3_outs[%4];\n", down_statement, tokens[child_idx].name, token.name, it_index);
+            }
+            down_statement.count -= 1;
+            array_add(down_tree_statements, down_statement);
         }
-        up_statement.count -= 2;
-        up_statement = tprint("%1 }; // % inputs\n", up_statement, token.name);
-
-        // finish up statement
-        up_args := "";
-        if has_vars { up_args = tprint("%1impedances.%2_vars, ", up_args, token.name); }
-        if has_state { up_args = tprint("%state.%2_state, ", up_args, token.name); }
-        up_args = tprint("%1%2_ins", up_args, token.name);
-        up_statement = tprint("%1    const auto %4_b = %2(%3); // %4 reflected", up_statement, token.custom_info.reflected_name, up_args, token.name);
-        array_add(up_tree_statements, up_statement);
-
-        // declare outputs
-        down_statement := tprint("alignas (16) float %_outs[%]; // %2 outputs \n", token.name, num_children);
-
-        down_args := "";
-        if has_vars { down_args = tprint("%1impedances.%2_vars, ", down_args, token.name); }
-        if has_state { down_args = tprint("%state.%2_state, ", down_args, token.name); }
-        down_args = tprint("%1%2_a, %2_ins, %2_outs", down_args, token.name);
-        down_statement = tprint("%1    %2(%3); // %4 compute\n", down_statement, token.custom_info.incident_name, down_args, token.name);
-
-        // unwrap outputs
-        for child_idx : token.children {
-            down_statement = tprint("%1    const auto %2_a = %3_outs[%4];\n", down_statement, tokens[child_idx].name, token.name, it_index);
-        }
-        down_statement.count -= 1;
-        array_add(down_tree_statements, down_statement);
     }
 }
 
@@ -1075,7 +1110,11 @@ generate_updater :: (tokens: [] Token,
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
                 custom_update := "";
                 if token != root_token {
-                    custom_update = tprint("[[maybe_unused]] const auto %1_R_calc = ", token.name);
+                    if global_args.lang == "jai" {
+                        custom_update = tprint("%1_R_calc := ", token.name);
+                    } else {
+                        custom_update = tprint("[[maybe_unused]] const auto %1_R_calc = ", token.name);
+                    }
                 }
 
                 custom_update = tprint("%1%2(", custom_update, token.custom_info.updater_name);

@@ -76,7 +76,7 @@ else
    test diode_circuit cpp
    test simple_triode cpp jai
    test bassman_tone_stack cpp
-   test baxandall_eq cpp
+   test baxandall_eq cpp jai
 fi
 
 
