@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+source ~/.bashrc
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
@@ -38,26 +39,43 @@ cpp_test () {
    "./${test}.exe"
 }
 
+jai_test () {
+   test="$1"
+   echo "Running JAI Test: $test"
+   cd "${SCRIPT_DIR}/${test}"
+   $wdf_compiler -lang jai "${test}.wdf" "${test}.jai"
+   jai -quiet "${test}_test.jai"
+   "./${test}_test.exe"
+}
+
+test () {
+   test="$1"
+   # The C++ test needs to run first,
+   # since it generates the reference data.
+   if [[ "$*" = *cpp* ]]; then cpp_test $test; fi
+   if [[ "$*" = *jai* ]]; then jai_test $test; fi
+}
+
 if [[ "$*" = *bench* ]]; then
    cpp_test preamp_eq_comb
    cpp_test diode_clipper
    cpp_test simple_triode
    cpp_test baxandall_eq
 else
-   cpp_test rc_lowpass
-   cpp_test rc_bandpass
-   cpp_test rl_lowpass
-   cpp_test rc_lowpass_var
-   cpp_test rl_lowpass_var
-   cpp_test rc_bandpass_var
-   cpp_test rc_lowpass_2ins
-   cpp_test preamp_eq
-   cpp_test preamp_eq_comb
-   cpp_test diode_clipper
-   cpp_test diode_circuit
-   cpp_test simple_triode
-   cpp_test bassman_tone_stack
-   cpp_test baxandall_eq
+   test rc_lowpass cpp jai
+   test rc_bandpass cpp jai
+   test rl_lowpass cpp jai
+   test rc_lowpass_var cpp jai
+   test rl_lowpass_var cpp jai
+   test rc_bandpass_var cpp jai
+   test rc_lowpass_2ins cpp jai
+   test preamp_eq cpp jai
+   test preamp_eq_comb cpp jai
+   test diode_clipper cpp
+   test diode_circuit cpp
+   test simple_triode cpp
+   test bassman_tone_stack cpp
+   test baxandall_eq cpp
 fi
 
 

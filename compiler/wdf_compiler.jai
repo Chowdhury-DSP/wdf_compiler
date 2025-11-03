@@ -658,10 +658,20 @@ write_param :: (params_vars : *[..] string, token: *Token, idx := 0, suffix := "
                   write_constexpr_var(tprint("%1_%2", token.name, suffix),
                                       tprint("%", get_value(token.args[idx]))));
     } else {
-        array_add(params_vars, write_struct_field(tprint("%1_%2;", token.name, suffix)));
+        array_add(params_vars, write_struct_field(tprint("%1_%2", token.name, suffix)));
     }
 
     return is_defined_arg;
+}
+
+get_constexpr_var :: (prefix: string, name: string) -> string {
+    if global_args.lang == {
+        case "cpp";
+            return tprint("%1::%2", prefix, name);
+        case "jai";
+            return tprint("%1.%2", prefix, name);
+    }
+    return "";
 }
 
 Circuit_Vars :: struct {
@@ -719,7 +729,8 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 if ! is_input(token, inputs) {
                     is_known := write_param(*params_vars, token, 0, "v_value");
                     if is_known {
-                        array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name), tprint("Params::%1_v_value;", token.name)));
+                        array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
+                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
@@ -729,7 +740,8 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 if ! is_input(token, inputs) {
                     is_known := write_param(*params_vars, token, 0, "i_value");
                     if is_known {
-                        array_add(*impedance_vars, write_constexpr_var(tprint("%_I", token.name), tprint("Params::%1_i_value;", token.name)));
+                        array_add(*impedance_vars, write_constexpr_var(tprint("%_I", token.name),
+                                                                       get_constexpr_var("Params", tprint("%1_i_value", token.name))));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_I", token.name)));
                     }
@@ -741,7 +753,8 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 if ! is_input_source {
                     is_known := write_param(*params_vars, token, 0, "v_value");
                     if is_known {
-                        array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name), tprint("Params::%1_v_value;", token.name)));
+                        array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
+                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
@@ -769,7 +782,8 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 if ! is_input(token, inputs) {
                     is_known := write_param(*params_vars, token, 0, "i_value");
                     if is_known {
-                        array_add(*impedance_vars, write_constexpr_var(tprint("%_I", token.name), tprint("Params::%1_i_value;", token.name)));
+                        array_add(*impedance_vars, write_constexpr_var(tprint("%_I", token.name),
+                                                                       get_constexpr_var("Params", tprint("%1_i_value", token.name))));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_I", token.name)));
                     }
@@ -830,11 +844,13 @@ generate_updater :: (tokens: [] Token,
                      required_impedances: *[..] string,
                      tokens_filter: [] string = .[]) -> [..] string {
     write_define :: (name: string, value: string) -> string {
-        if global_args.lang == "jai" {
-            return tprint("%1 := %2;", name, value);
-        } else {
-            return tprint("[[maybe_unused]] const auto %1 = %2;", name, value);
+        if global_args.lang == {
+            case "jai";
+                return tprint("%1 := %2;", name, value);
+            case "cpp";
+                return tprint("[[maybe_unused]] const auto %1 = %2;", name, value);
         }
+        return "";
     }
 
     add_impedance :: (updates: *[..] string, name: string, value: string, required: [] string, available_values: *[..] string) {
@@ -850,7 +866,7 @@ generate_updater :: (tokens: [] Token,
         found, idx := array_find(available, name);
         if ! found {
             array_add(required, name);
-            array_add(updates, tprint("const auto %1 = impedances.%1;", name));
+            array_add(updates, write_define(name, tprint("impedances.%1;", name)));
         }
     }
 
@@ -858,7 +874,7 @@ generate_updater :: (tokens: [] Token,
     impedance_updates : [..] string;
     impedance_update_todos : [..] *Token;
     array_add(*impedance_updates, write_define("T", "1 / fs"));
-    array_add(*impedance_updates, "\n");
+    array_add(*impedance_updates, ""); // line break
 
     root_token := *tokens[0];
     for *token : tokens {
@@ -901,7 +917,7 @@ generate_updater :: (tokens: [] Token,
 
             case .Resistor_Capacitor_Parallel;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                array_add(*impedance_updates, tprint("const auto %1_2RC = 2 * params.%1_cap_value * params.%1_res_value;", token.name));
+                array_add(*impedance_updates, write_define(tprint("%1_2RC", token.name), tprint("2 * params.%1_cap_value * params.%1_res_value;", token.name)));
                 add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("params.%1_res_value * T / (%1_2RC + T)", token.name), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
                 array_add(*impedance_updates, tprint("impedances.%1_twoRC_over_twoRC_plus_T = %1_2RC / (%1_2RC + T);\n", token.name));
