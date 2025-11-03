@@ -241,7 +241,29 @@ Method_Arg :: struct {
     is_const: bool;
 }
 
-generate_method :: (name: string, args: [] Method_Arg, lines: [] string, return_type := "void") -> string {
+get_return_type :: (return_types : [] string) -> string {
+    return_type := "void";
+    for type, it : return_types {
+        if it == 0 {
+            return_type = type;
+            continue;
+        }
+        return_type = tprint("%1, %2", return_type, type);
+    }
+
+    if global_args.lang == "cpp" && return_types.count > 1 {
+        return_type = tprint("std::tuple<%>", return_type);
+    }
+
+    return return_type;
+}
+
+generate_method :: (name: string,
+                    args: [] Method_Arg,
+                    lines: [] string,
+                    return_types : [] string = .[]) -> string {
+    return_type := get_return_type(return_types);
+
     method_code := "";
     if global_args.lang == "jai" {
         method_code = tprint("%1%2 :: (", method_code, name);
@@ -263,19 +285,17 @@ generate_method :: (name: string, args: [] Method_Arg, lines: [] string, return_
             if arg.default_value.count > 0 { method_code = tprint("%1= %2", method_code, arg.default_value); }
         }
     }
+
     if global_args.lang == "jai" {
         if return_type == "void" {
             method_code = tprint("%1) {\n", method_code);
-        } else if return_type == "auto" {
-            // @TODO
-            method_code = tprint("%1) -> float32 {\n", method_code);
-            // method_code = tprint("%1) -> $T {\n", method_code);
         } else {
             method_code = tprint("%1) -> %2 {\n", method_code, return_type);
         }
     } else {
         method_code = tprint("%1) {\n", method_code);
     }
+
     for line : lines {
         method_code = tprint("%1    %2\n", method_code, line);
     }
@@ -676,23 +696,28 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                 error_assert(false, tprint("Invalid output type: %", output_info[0]));
         }
     }
+
+    return_types : [..] string;
     if return_vars.count == 1 {
         array_add(*code_statements, tprint("return %;", return_vars[0]));
+        array_add(*return_types, "float");
     } else {
-        // @TODO: jai multiple return values
-        return_statement := "return std::make_tuple(";
+        return_statement := ifx global_args.lang == "jai" then "return "
+                                                          else "return std::make_tuple(";
         for var : return_vars {
             return_statement = tprint("%1%2, ", return_statement, var);
+            array_add(*return_types, "float");
         }
         return_statement.count -= 2;
-        return_statement = tprint("%);", return_statement);
+        return_statement = tprint(ifx global_args.lang == "jai" then "%;" else "%);",
+                                  return_statement);
         array_add(*code_statements, return_statement);
     }
 
     return generate_method("process",
                            input_args,
                            code_statements,
-                           "auto"),
+                           return_types),
             required_impedances;
 }
 

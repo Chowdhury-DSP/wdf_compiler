@@ -2,6 +2,7 @@
 
 #include "../chowdsp_wdf.h"
 #include <iostream>
+#include <fstream>
 #include <random>
 
 #if CHOWDSP_WDF_TEST_WITH_XSIMD
@@ -194,6 +195,9 @@ int main()
         .Res2_Res3p_value = ref.Res2.wdf.R + ref.Res3p.wdf.R,
         .Res1p_Res1m_Cap1_res_value = ref.Res1p.wdf.R + ref.Res1m.wdf.R,
     };
+    // printf ("%f\n", params.Vin_Res3m_res_value);
+    // printf ("%f\n", params.Res2_Res3p_value);
+    // printf ("%f\n", params.Res1p_Res1m_Cap1_res_value);
     calc_impedances (impedances, fs, params);
     State state {};
     const auto process_multi = [&state, &impedances] (float v) -> float
@@ -202,12 +206,14 @@ int main()
         return v_Res1p_Res1m_Cap1 + (v_Vin_Res3m - v);
     };
 
+    static constexpr int N = 100;
+    std::array<float, N> ref_output {};
     float max_error = 0.0f;
-    for (int i = 0; i < 100; ++i)
+    for (int i = 0; i < N; ++i)
     {
         const auto test_output = process_multi (1.0f);
-        const auto ref_output = ref.process (1.0f);
-        const auto error = std::abs (test_output - ref_output);
+        ref_output[i] = ref.process (1.0f);
+        const auto error = std::abs (test_output - ref_output[i]);
         max_error = std::max (error, max_error);
     }
     std::cout << "Max Error: " << max_error << '\n';
@@ -217,6 +223,10 @@ int main()
         std::cout << "Error is too large... failing test!\n";
         return 1;
     }
+
+    std::ofstream ofp { "data.bin", std::ios::out | std::ios::binary };
+    ofp.write(reinterpret_cast<const char*>(ref_output.data()), N * sizeof (float));
+    ofp.close();
 
     // This performance comparison is not entirely fair since the wdf_compiler
     // combines more circuit elements.

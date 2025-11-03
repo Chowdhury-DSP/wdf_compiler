@@ -75,10 +75,9 @@ else
    test diode_clipper cpp
    test diode_circuit cpp
    test simple_triode cpp jai
-   test bassman_tone_stack cpp
+   test bassman_tone_stack cpp jai
    test baxandall_eq cpp jai
 fi
-
 
 if [[ "$*" = *bad_configs* ]]; then
     echo "Running bad config tests..."
