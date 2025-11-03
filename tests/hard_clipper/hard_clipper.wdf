@@ -1,0 +1,15 @@
+circuit:
+Custom(HC, 1, params=HC_Params, vars=HC_Vars, updater=update_vars, compute=root_compute);
+    Parallel(P1);
+        C(C1);
+        RVs(Vin, ?);
+
+inputs:
+Vin
+
+outputs:
+V:C1
+
+meta:
+include:"custom_hard_clipper.h"
+load:"custom_hard_clipper.jai"

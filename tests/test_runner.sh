@@ -71,9 +71,10 @@ else
    test rc_lowpass_2ins cpp jai
    test preamp_eq cpp jai
    test preamp_eq_comb cpp jai
+   test hard_clipper cpp jai
    test diode_clipper cpp
    test diode_circuit cpp
-   test simple_triode cpp
+   test simple_triode cpp jai
    test bassman_tone_stack cpp
    test baxandall_eq cpp
 fi
