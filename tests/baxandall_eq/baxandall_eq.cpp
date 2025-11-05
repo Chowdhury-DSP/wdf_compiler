@@ -168,27 +168,27 @@ int main()
     ofp.close();
 
 #if RUN_BENCH
-    static constexpr int N = 10'000'000;
+    static constexpr int M = 10'000'000;
 
-    auto* data_in = (float*) malloc (N * sizeof (float));
-    auto* data_out = (float*) malloc (N * sizeof (float));
+    auto* data_in = (float*) malloc (M * sizeof (float));
+    auto* data_out = (float*) malloc (M * sizeof (float));
 
     std::random_device rd {};
     std::default_random_engine gen { rd() };
     std::uniform_real_distribution<float> dist { -1.0f, 1.0f };
-    for (int n = 0; n < N; ++n)
+    for (int n = 0; n < M; ++n)
         data_in[n] = dist (gen);
 
     double ref_time, test_time;
     {
         auto start = std::chrono::steady_clock::now();
 
-        for (int n = 0; n < N; ++n)
+        for (int n = 0; n < M; ++n)
             data_out[n] = ref.process (data_in[n]);
 
         auto end = std::chrono::steady_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::duration<double, std::milli>> (end - start);
-        std::cout << data_out[N-1] << '\n';
+        std::cout << data_out[M-1] << '\n';
         std::cout << "chowdsp_wdf: " << duration.count() << " milliseconds" << std::endl;
         ref_time = duration.count();
     }
@@ -196,12 +196,12 @@ int main()
     {
         auto start = std::chrono::steady_clock::now();
 
-        for (int n = 0; n < N; ++n)
+        for (int n = 0; n < M; ++n)
             data_out[n] = process (state, impedances, data_in[n]);
 
         auto end = std::chrono::steady_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::duration<double, std::milli>> (end - start);
-        std::cout << data_out[N-1] << '\n';
+        std::cout << data_out[M-1] << '\n';
         std::cout << "wdf_compiler: " << duration.count() << " milliseconds" << std::endl;
         test_time = duration.count();
     }
