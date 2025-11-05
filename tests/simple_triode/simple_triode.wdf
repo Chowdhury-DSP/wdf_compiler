@@ -1,5 +1,5 @@
 circuit:
-Custom(Triode, 3, params=dangelo_triode::Triode_Params, vars=dangelo_triode::Triode_Vars, updater=dangelo_triode::update_vars, compute=dangelo_triode::root_compute);
+Custom(Triode, 3, prefix=dangelo_triode::, jai_prefix=, params=Triode_Params, vars=Triode_Vars, updater=update_vars, compute=root_compute);
     RVs(Vin, 25k);
     R(Rk, 200);
     Parallel(Pp);
@@ -16,3 +16,4 @@ V:Rl
 
 meta:
 include:"custom_dangelo_triode.h"
+load:"custom_dangelo_triode.jai"

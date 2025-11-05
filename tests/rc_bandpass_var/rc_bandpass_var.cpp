@@ -2,6 +2,7 @@
 
 #include "../chowdsp_wdf.h"
 #include <iostream>
+#include <fstream>
 
 struct Reference_WDF
 {
@@ -13,7 +14,6 @@ struct Reference_WDF
     chowdsp::wdft::CapacitorT<float> C1 { 1.0e-6f };
     chowdsp::wdft::WDFSeriesT<float, decltype (C1), decltype (P1)> S1 { C1, P1 };
     chowdsp::wdft::PolarityInverterT<float, decltype (S1)> I1 { S1 };
-    // chowdsp::wdft::IdealVoltageSourceT<float, decltype (S1)> Vin { S1 };
     chowdsp::wdft::IdealVoltageSourceT<float, decltype (I1)> Vin { I1 };
 
     void prepare (float fs)
@@ -25,8 +25,6 @@ struct Reference_WDF
     float process (float V)
     {
         Vin.setVoltage (V);
-        // Vin.incident (S1.reflected());
-        // S1.incident (Vin.reflected());
         Vin.incident (I1.reflected());
         I1.incident (Vin.reflected());
         return chowdsp::wdft::voltage<float> (C2);
@@ -52,12 +50,14 @@ int main()
     calc_impedances (impedances, fs, params);
     State state {};
 
+    static constexpr int N = 300;
+    std::array<float, N> ref_output {};
     float max_error = 0.0f;
     for (int i = 0; i < 100; ++i)
     {
         const auto test_output = process (state, impedances, i == 0 ? 1.0f : 0.0f);
-        const auto ref_output = ref.process (i == 0 ? 1.0f : 0.0f);
-        const auto error = std::abs (test_output - ref_output);
+        ref_output[i] = ref.process (i == 0 ? 1.0f : 0.0f);
+        const auto error = std::abs (test_output - ref_output[i]);
         max_error = std::max (error, max_error);
     }
 
@@ -69,8 +69,8 @@ int main()
     for (int i = 0; i < 100; ++i)
     {
         const auto test_output = process (state, impedances, i == 0 ? 1.0f : 0.0f);
-        const auto ref_output = ref.process (i == 0 ? 1.0f : 0.0f);
-        const auto error = std::abs (test_output - ref_output);
+        ref_output[i + 100] = ref.process (i == 0 ? 1.0f : 0.0f);
+        const auto error = std::abs (test_output - ref_output[i + 100]);
         max_error = std::max (error, max_error);
     }
 
@@ -82,8 +82,8 @@ int main()
     for (int i = 0; i < 100; ++i)
     {
         const auto test_output = process (state, impedances, i == 0 ? 1.0f : 0.0f);
-        const auto ref_output = ref.process (i == 0 ? 1.0f : 0.0f);
-        const auto error = std::abs (test_output - ref_output);
+        ref_output[i + 200] = ref.process (i == 0 ? 1.0f : 0.0f);
+        const auto error = std::abs (test_output - ref_output[i + 200]);
         max_error = std::max (error, max_error);
     }
     std::cout << "Max Error: " << max_error << '\n';
@@ -93,6 +93,10 @@ int main()
         std::cout << "Error is too large... failing test!\n";
         return 1;
     }
+
+    std::ofstream ofp { "data.bin", std::ios::out | std::ios::binary };
+    ofp.write(reinterpret_cast<const char*>(ref_output.data()), N * sizeof (float));
+    ofp.close();
 
     return 0;
 }
