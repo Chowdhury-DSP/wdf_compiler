@@ -1,5 +1,5 @@
 circuit:
-Custom(R, 6, prefix=bassman_r::, params=R_Params, vars=R_Vars, updater=update_vars, compute=root_compute);
+Custom(R, 6, prefix=bassman_r::, jai_prefix=Bassman_, params=R_Params, vars=R_Vars, updater=update_vars, compute=root_compute);
     RVs(Vin_Res3m, ?);
     R(Res2_Res3p, ?);
     RCSeries(Res1p_Res1m_Cap1, ?, 250p);
@@ -18,3 +18,4 @@ V:Res1p_Res1m_Cap1
 meta:
 include:"custom_bassman_rtype.h"
 include:<tuple>
+load:"custom_bassman_rtype.jai"
