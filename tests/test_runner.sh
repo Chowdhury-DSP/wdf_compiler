@@ -45,7 +45,7 @@ jai_test () {
    echo "Running JAI Test: $test"
    cd "${SCRIPT_DIR}/${test}"
    $wdf_compiler -lang jai "${test}.wdf" "${test}.jai"
-   jai -quiet "${test}_test.jai"
+   jai "${test}_test.jai"
    "./${test}_test.exe"
 }
 
