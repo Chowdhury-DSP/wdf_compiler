@@ -45,8 +45,12 @@ jai_test () {
    echo "Running JAI Test: $test"
    cd "${SCRIPT_DIR}/${test}"
    $wdf_compiler -lang jai "${test}.wdf" "${test}.jai"
-   jai "${test}_test.jai"
-   "./${test}_test.exe"
+   jai -quiet "${test}_test.jai"
+   if [[ "$OSTYPE" == "win32" || "$OSTYPE" == "msys" ]]; then
+      "./${test}_test.exe"
+   else
+      "./${test}_test"
+   fi
 }
 
 test () {
