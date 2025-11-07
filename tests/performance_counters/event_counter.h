@@ -17,7 +17,7 @@
 #include <libgen.h>
 #endif
 
-#if __APPLE__ &&  __aarch64__
+#if __APPLE__
 #include "apple_arm_events.h"
 #endif
 
@@ -101,7 +101,7 @@ struct event_collector {
   bool has_events() {
     return linux_events.is_working();
   }
-#elif __APPLE__ &&  __aarch64__
+#elif __APPLE__
   AppleEvents apple_events;
   performance_counters diff;
   event_collector() : diff(0) {
@@ -120,7 +120,7 @@ struct event_collector {
   inline void start() {
 #if defined(__linux)
     linux_events.start();
-#elif __APPLE__ &&  __aarch64__
+#elif __APPLE__
     if(has_events()) { diff = apple_events.get_counters(); }
 #endif
     start_clock = std::chrono::steady_clock::now();
@@ -129,7 +129,7 @@ struct event_collector {
     const auto end_clock = std::chrono::steady_clock::now();
 #if defined(__linux)
     linux_events.end(count.event_counts);
-#elif __APPLE__ &&  __aarch64__
+#elif __APPLE__ // &&  __aarch64__
     if(has_events()) {
       performance_counters end = apple_events.get_counters();
       diff = end - diff;
