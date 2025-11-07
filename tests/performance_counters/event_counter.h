@@ -4,7 +4,6 @@
 #include <cctype>
 #ifndef _MSC_VER
 #include <dirent.h>
-#include <intrin.h>
 #endif
 #include <cinttypes>
 
@@ -20,6 +19,10 @@
 
 #if __APPLE__
 #include "apple_arm_events.h"
+#endif
+
+#if defined(_WIN32)
+#include <intrin.h>
 #endif
 
 struct event_count {
