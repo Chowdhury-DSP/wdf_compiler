@@ -7,6 +7,66 @@
 
 #include "../performance_counters/event_counter.h"
 
+// C1 reflected:
+//   - 1 load (C1 state)
+// R1 reflected: (no-op)
+// S1 reflected:
+//   - 1 add
+// Vin incident: (no-op)?
+// Vin reflected:
+//   - 1 fmsub
+// S1 incident:
+//   - 1 load
+//   - 1 fmsub
+//   - 2 add
+// C1 incident:
+//   - 1 add
+//   - 1 negate
+// C1 state update:
+//   - 1 store
+// Voltage:
+//   - 1 mult
+//   - 1 add
+//
+// TOTAL (Apple M1): Reference: https://dougallj.github.io/applecpu/firestorm.html
+//   - FMSUB    -> (4/0.25  cycles/instruction)
+//   - FADD     -> (2/0.25  cycles/instruction)
+//   - FNEG     -> (2/0.25  cycles/instruction)
+//   - LDR      -> (~2.5/0.333 cycles/instruction)
+//   - STR      -> (0.5/1   cycles/instruction)
+// Compiler output (ARM):
+// process(State&, Impedances const&, float):
+//   cycle (~2.5):
+//     movi    d1, #0000000000000000
+//     ldr     s2, [x0]
+//     fmov    s4, #2.00000000
+//   cycle (2):
+//     fadd    s3, s2, s1
+//   cycle (4):
+//     fmadd   s0, s0, s4, s3
+//   cycle (~2.5):
+//     ldr     s4, [x1]
+//     fadd    s3, s0, s1
+//   cycle (2):
+//     fadd    s3, s2, s3
+//   cycle (2):
+//     fmsub   s1, s4, s3, s1
+//   cycle (2):
+//     fadd    s1, s0, s1
+//   cycle (2):
+//     fsub    s0, s2, s1
+//     fmov    s2, #0.50000000
+//   cycle (2):
+//     fneg    s1, s1
+//     fmul    s0, s0, s2
+//   cycle (1):
+//     str     s1, [x0]
+//     ret
+// TOTAL: 22 cycles/sample
+// Measured:
+//   - chowdsp_wdf:  ~23.50 cycles/sample
+//   - wdf_compiler: ~22.34 cycles/sample
+
 struct Reference_WDF
 {
     chowdsp::wdft::ResistorT<float> R1 { 1000.0f };
