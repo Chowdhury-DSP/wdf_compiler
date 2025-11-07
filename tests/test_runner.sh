@@ -4,6 +4,8 @@ set -e
 shopt -s expand_aliases
 source ~/.bashrc
 
+sudo_pass=$(more ~/spass)
+
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 if [[ -n "$1" ]]; then
@@ -37,7 +39,7 @@ cpp_test () {
    cd "${SCRIPT_DIR}/${test}"
    $wdf_compiler "${test}.wdf" "${test}.h"
    $cpp_compiler "${test}.cpp" ${bench_flags} -I../../lib --std=c++20 ${libcpp_flag} -o "${test}.exe"
-   "./${test}.exe"
+   echo ${sudo_pass} | sudo -S "./${test}.exe"
 }
 
 jai_test () {
@@ -62,10 +64,11 @@ test () {
 }
 
 if [[ "$*" = *bench* ]]; then
-   cpp_test preamp_eq_comb
-   cpp_test diode_clipper
-   cpp_test simple_triode
-   cpp_test baxandall_eq
+   cpp_test rc_lowpass
+   # cpp_test preamp_eq_comb
+   # cpp_test diode_clipper
+   # cpp_test simple_triode
+   # cpp_test baxandall_eq
 else
    test rc_lowpass cpp jai
    test rc_bandpass cpp jai

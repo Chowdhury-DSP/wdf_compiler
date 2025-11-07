@@ -5,3 +5,4 @@
 !*/custom_*.h
 !*/custom_*.jai
 !*/*_test.jai
+!performance_counters/*
