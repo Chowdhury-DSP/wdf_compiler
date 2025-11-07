@@ -4,6 +4,7 @@
 #include <cctype>
 #ifndef _MSC_VER
 #include <dirent.h>
+#include <intrin.h>
 #endif
 #include <cinttypes>
 
@@ -110,6 +111,8 @@ struct event_collector {
   bool has_events() {
     return apple_events.setup_performance_counters();
   }
+#elif defined(_WIN32)
+  uint64_t cycles_at_start {};
 #else
   event_collector() {}
   bool has_events() {
@@ -122,6 +125,8 @@ struct event_collector {
     linux_events.start();
 #elif __APPLE__
     if(has_events()) { diff = apple_events.get_counters(); }
+#elif defined(_WIN32)
+    cycles_at_start = __rdtsc();
 #endif
     start_clock = std::chrono::steady_clock::now();
   }
@@ -139,6 +144,14 @@ struct event_collector {
     count.event_counts[2] = diff.missed_branches;
     count.event_counts[3] = 0;
     count.event_counts[4] = diff.branches;
+#elif defined(_WIN32)
+    // @TODO: figure out how to count instructions, etc
+    const auto cycles_diff = __rdtsc() - cycles_at_start;
+    count.event_counts[0] = cycles_diff; // cycles
+    count.event_counts[1] = 0; // instructions
+    count.event_counts[2] = 0; // missed branches
+    count.event_counts[3] = 0; //
+    count.event_counts[4] = 0; // branches
 #endif
     count.elapsed = end_clock - start_clock;
     return count;
