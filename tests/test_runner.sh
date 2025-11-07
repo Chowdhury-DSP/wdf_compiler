@@ -4,8 +4,9 @@ set -e
 shopt -s expand_aliases
 source ~/.bashrc
 
-sudo_pass=$(more ~/spass)
-
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    sudo_pass=$(more ~/spass)
+fi
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 if [[ -n "$1" ]]; then
@@ -39,7 +40,11 @@ cpp_test () {
    cd "${SCRIPT_DIR}/${test}"
    $wdf_compiler "${test}.wdf" "${test}.h"
    $cpp_compiler "${test}.cpp" ${bench_flags} -I../../lib --std=c++20 ${libcpp_flag} -o "${test}.exe"
-   echo ${sudo_pass} | sudo -S "./${test}.exe"
+   if [[ "$OSTYPE" == "darwin"* ]]; then
+      echo ${sudo_pass} | sudo -S "./${test}.exe"
+   else
+      "./${test}.exe"
+   fi
 }
 
 jai_test () {
