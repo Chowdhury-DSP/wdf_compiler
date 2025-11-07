@@ -70,10 +70,10 @@ test () {
 
 if [[ "$*" = *bench* ]]; then
    cpp_test rc_lowpass
-   # cpp_test preamp_eq_comb
-   # cpp_test diode_clipper
-   # cpp_test simple_triode
-   # cpp_test baxandall_eq
+   cpp_test preamp_eq_comb
+   cpp_test diode_clipper
+   cpp_test simple_triode
+   cpp_test baxandall_eq
 else
    test rc_lowpass cpp jai
    test rc_bandpass cpp jai

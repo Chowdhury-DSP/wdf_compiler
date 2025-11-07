@@ -64,8 +64,8 @@
 //     ret
 // TOTAL: 22 cycles/sample
 // Measured:
-//   - chowdsp_wdf:  ~23.50 cycles/sample
-//   - wdf_compiler: ~22.34 cycles/sample
+//   - chowdsp_wdf:  ~22.06 cycles/sample
+//   - wdf_compiler: ~22.04 cycles/sample
 
 struct Reference_WDF
 {
@@ -125,6 +125,7 @@ int main()
 
 #if RUN_BENCH
     static constexpr int M = 100'000'000;
+    static constexpr int n_iter = 4;
 
     auto* data_in = (float*) malloc (M * sizeof (float));
     auto* data_out = (float*) malloc (M * sizeof (float));
@@ -132,34 +133,46 @@ int main()
     std::random_device rd {};
     std::default_random_engine gen { rd() };
     std::uniform_real_distribution<float> dist { -1.0f, 1.0f };
-    for (int n = 0; n < M; ++n)
-        data_in[n] = dist (gen);
+    event_collector collector {};
 
     double ref_time, test_time;
     {
-        event_aggregate aggregate {}; // @TODO: we should probably aggregate more runs
-        event_collector collector {};
-        collector.start();
+        event_aggregate aggregate {};
+        float save_out = 0.0f;
+        for (int iter = 0; iter < n_iter; ++iter)
+        {
+            for (int n = 0; n < M; ++n)
+                data_in[n] = dist (gen);
 
-        for (int n = 0; n < M; ++n)
-            data_out[n] = ref.process (data_in[n]);
+            collector.start();
+            for (int n = 0; n < M; ++n)
+                data_out[n] = ref.process (data_in[n]);
 
-        aggregate << collector.end();
-        std::cout << data_out[M-1] << '\n';
+            aggregate << collector.end();
+            save_out += data_out[M-1];
+        }
+        std::cout << save_out << '\n';
         pretty_print (aggregate, M, "chowdsp_wdf");
         ref_time = aggregate.elapsed_ns();
     }
 
     {
-        event_aggregate aggregate {}; // @TODO: we should probably aggregate more runs
-        event_collector collector {};
-        collector.start();
+        event_aggregate aggregate {};
+        float save_out = 0.0f;
+        for (int iter = 0; iter < n_iter; ++iter)
+        {
+            for (int n = 0; n < M; ++n)
+                data_in[n] = dist (gen);
 
-        for (int n = 0; n < M; ++n)
-            data_out[n] = process (state, impedances, data_in[n]);
+            collector.start();
 
-        aggregate << collector.end();
-        std::cout << data_out[M-1] << '\n';
+            for (int n = 0; n < M; ++n)
+                data_out[n] = process (state, impedances, data_in[n]);
+
+            aggregate << collector.end();
+            save_out += data_out[M-1];
+        }
+        std::cout << save_out << '\n';
         pretty_print (aggregate, M, "wdf_compiler");
         test_time = aggregate.elapsed_ns();
     }
