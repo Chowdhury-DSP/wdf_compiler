@@ -5,6 +5,8 @@
 #include <fstream>
 #include <random>
 
+#include "../performance_counters/event_counter.h"
+
 struct Reference_WDF
 {
     // Reference: https://dafx.de/paper-archive/2023/DAFx23_paper_15.pdf
@@ -145,6 +147,7 @@ int main()
 
 #if RUN_BENCH
     static constexpr int M = 10'000'000;
+    static constexpr int n_iter = 10;
 
     auto* data_in = (float*) malloc (M * sizeof (float));
     auto* data_out = (float*) malloc (M * sizeof (float));
@@ -152,34 +155,47 @@ int main()
     std::random_device rd {};
     std::default_random_engine gen { rd() };
     std::uniform_real_distribution<float> dist { -1.0f, 1.0f };
-    for (int n = 0; n < M; ++n)
-        data_in[n] = dist (gen);
+    event_collector collector {};
 
     double ref_time, test_time;
     {
-        auto start = std::chrono::steady_clock::now();
+        event_aggregate aggregate {};
+        float save_out = 0.0f;
+        for (int iter = 0; iter < n_iter; ++iter)
+        {
+            for (int n = 0; n < M; ++n)
+                data_in[n] = dist (gen);
 
-        for (int n = 0; n < M; ++n)
-            data_out[n] = ref.process (data_in[n]);
+            collector.start();
+            for (int n = 0; n < M; ++n)
+                data_out[n] = ref.process (data_in[n]);
 
-        auto end = std::chrono::steady_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::duration<double, std::milli>> (end - start);
-        std::cout << data_out[M-1] << '\n';
-        std::cout << "chowdsp_wdf: " << duration.count() << " milliseconds" << std::endl;
-        ref_time = duration.count();
+            aggregate << collector.end();
+            save_out += data_out[M-1];
+        }
+        std::cout << save_out << '\n';
+        pretty_print (aggregate, M, "chowdsp_wdf");
+        ref_time = aggregate.elapsed_ns();
     }
 
     {
-        auto start = std::chrono::steady_clock::now();
+        event_aggregate aggregate {};
+        float save_out = 0.0f;
+        for (int iter = 0; iter < n_iter; ++iter)
+        {
+            for (int n = 0; n < M; ++n)
+                data_in[n] = dist (gen);
 
-        for (int n = 0; n < M; ++n)
-            data_out[n] = process (state, impedances, data_in[n]);
+            collector.start();
+            for (int n = 0; n < M; ++n)
+                data_out[n] = process (state, impedances, data_in[n]);
 
-        auto end = std::chrono::steady_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::duration<double, std::milli>> (end - start);
-        std::cout << data_out[M-1] << '\n';
-        std::cout << "wdf_compiler: " << duration.count() << " milliseconds" << std::endl;
-        test_time = duration.count();
+            aggregate << collector.end();
+            save_out += data_out[M-1];
+        }
+        std::cout << save_out << '\n';
+        pretty_print (aggregate, M, "wdf_compiler");
+        test_time = aggregate.elapsed_ns();
     }
     std::cout << "wdf_compiler is " << ref_time / test_time << "x faster\n";
 
