@@ -15,7 +15,7 @@ main :: () {
 
     data_str, _ := read_entire_file("data.bin");
     ref_output : [] float32 = .{data=cast(*float32)data_str.data,
-                                count=data_str.count/4};
+                                count=data_str.count/size_of(float32)};
 
     max_error : float32 = 0.0;
     for 0..(ref_output.count-1)
