@@ -38,4 +38,6 @@ cpp_test diode_clipper_chowdsp_poly
 cpp_test simple_triode_chowdsp_poly
 cpp_test baxandall_eq_chowdsp_poly
 cpp_test rc_lowpass_rt_wdf
-
+cpp_test preamp_eq_rt_wdf
+cpp_test simple_triode_rt_wdf
+cpp_test baxandall_eq_rt_wdf

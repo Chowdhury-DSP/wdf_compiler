@@ -15,13 +15,12 @@ struct Reference_WDF : public wdfTree
 
     Reference_WDF(double sampleRate)
     {
-        subtreeCount = 1;
-
         R1 = std::make_unique<wdfTerminatedRes> (1.0e3);
         C1 = std::make_unique<wdfTerminatedCap> (1.0e-6, sampleRate);
         S1 = std::make_unique<wdfTerminatedSeries> (C1.get(), R1.get());
         Vin = std::make_unique<wdfIdealVSource> (0.0);
 
+        subtreeCount = 1;
         subtreeEntryNodes    = new wdfTreeNode*[subtreeCount];
         Rp                   = new double[subtreeCount];
         subtreeEntryNodes[0] = S1.get();
