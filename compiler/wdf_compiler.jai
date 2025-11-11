@@ -9,6 +9,8 @@ Args :: struct {
     verbose : bool = false;   @"?Verbose"
     version : bool = false;   @"?Version"
     lang    : string = "cpp"; @"?Language of generated code. Currently supports cpp (default) and jai."
+    dtype   : string = "float"; @"?Data type to use for generated code. (Default: float)"
+    align   : int = 16; @"?Default data alignment to use for generated code. (Default: 16)"
 }
 argument_flags :: CLI.Default_Argument_Flags; // |.DOUBLE_DASH_REQUIRED;
 global_args: Args;
@@ -353,15 +355,20 @@ generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_state
     } else {
         if global_args.lang == "jai" {
             // declare inputs
-            statement := tprint("%_ins := float32.[", token.name);
+            statement := tprint("%1_ins := %2.[", token.name, global_args.dtype);
             for child_idx : token.children {
                 statement = tprint("%1%2_b, ", statement, tokens[child_idx].name);
             }
             statement.count -= 2;
-            statement = tprint("%1] #align 16; // % inputs\n", statement, token.name);
+            statement = tprint("%1] #align %3; // %2 inputs\n", statement, token.name, global_args.align);
 
             // declare outputs
-            statement = tprint("%1    %2_outs: [%3] float32 = --- #align 16; // %2 outputs \n", statement, token.name, num_children);
+            statement = tprint("%1    %2_outs: [%3] %4 = --- #align %5; // %2 outputs \n",
+                               statement,
+                               token.name,
+                               num_children,
+                               global_args.dtype,
+                               global_args.align);
 
             args := "";
             if has_vars { args = tprint("%1*impedances.%2_vars, ", args, token.name); }
@@ -378,7 +385,11 @@ generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_state
         } else {
             // declare inputs
             // @TODO: make the alignment here configurable?
-            statement := tprint("alignas (16) const float %_ins[%] { ", token.name, num_children);
+            statement := tprint("alignas (%4) const %3 %1_ins[%2] { ",
+                                token.name,
+                                num_children,
+                                global_args.dtype,
+                                global_args.align);
             for child_idx : token.children {
                 statement = tprint("%1%2_b, ", statement, tokens[child_idx].name);
             }
@@ -386,7 +397,12 @@ generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_state
             statement = tprint("%1 }; // % inputs\n", statement, token.name);
 
             // declare outputs
-            statement = tprint("%    alignas (16) float %_outs[%]; // %2 outputs \n", statement, token.name, num_children);
+            statement = tprint("%    alignas (%5) %4 %2_outs[%3]; // %2 outputs \n",
+                               statement,
+                               token.name,
+                               num_children,
+                               global_args.dtype,
+                               global_args.align);
 
             args := "";
             if has_vars { args = tprint("%1impedances.%2_vars, ", args, token.name); }
@@ -416,12 +432,12 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
     } else {
         if global_args.lang == "jai" {
             // declare inputs
-            up_statement := tprint("%_ins := float32.[", token.name);
+            up_statement := tprint("%1_ins := %2.[", token.name, global_args.dtype);
             for child_idx : token.children {
                 up_statement = tprint("%1%2_b, ", up_statement, tokens[child_idx].name);
             }
             up_statement.count -= 2;
-            up_statement = tprint("%1] #align 16; // % inputs\n", up_statement, token.name);
+            up_statement = tprint("%1] #align %3; // %2 inputs\n", up_statement, token.name, global_args.align);
 
             // finish up statement
             up_args := "";
@@ -432,7 +448,11 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
             array_add(up_tree_statements, up_statement);
 
             // declare outputs
-            down_statement := tprint("%_outs: [%] float32 = --- #align 16; // %2 outputs \n", token.name, num_children);
+            down_statement := tprint("%1_outs: [%2] %3 = --- #align %4; // %2 outputs \n",
+                                     token.name,
+                                     num_children,
+                                     global_args.dtype,
+                                     global_args.align);
 
             down_args := "";
             if has_vars { down_args = tprint("%1*impedances.%2_vars, ", down_args, token.name); }
@@ -448,7 +468,11 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
             array_add(down_tree_statements, down_statement);
         } else {
             // declare inputs
-            up_statement := tprint("alignas (16) const float %_ins[%] { ", token.name, num_children);
+            up_statement := tprint("alignas (%4) const %3 %1_ins[%2] { ",
+                                   token.name,
+                                   num_children,
+                                   global_args.dtype,
+                                   global_args.align);
             for child_idx : token.children {
                 up_statement = tprint("%1%2_b, ", up_statement, tokens[child_idx].name);
             }
@@ -464,7 +488,11 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
             array_add(up_tree_statements, up_statement);
 
             // declare outputs
-            down_statement := tprint("alignas (16) float %_outs[%]; // %2 outputs \n", token.name, num_children);
+            down_statement := tprint("alignas (%4) %3 %1_outs[%2]; // %2 outputs \n",
+                                     token.name,
+                                     num_children,
+                                     global_args.dtype,
+                                     global_args.align);
 
             down_args := "";
             if has_vars { down_args = tprint("%1impedances.%2_vars, ", down_args, token.name); }
@@ -497,7 +525,7 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
             }
         }
         error_assert(input_token != null, tprint("Unable to find input circuit element: %", input));
-        array_add(*input_args, Method_Arg.{name=input, type="float"});
+        array_add(*input_args, Method_Arg.{name=input, type=global_args.dtype});
 
         if input_token.type == {
             case .Ideal_Voltage_Source; #through;
@@ -566,7 +594,7 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
         if token.type == {
             case .Resistor;
                 array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
-                                                            ifx global_args.lang == "jai" then "cast(float32) 0" else "0",
+                                                            ifx global_args.lang == "jai" then tprint("cast(%) 0", global_args.dtype) else "0",
                                                             tprint("% reflected", token.name)));
             case .Capacitor;
                 array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
@@ -677,7 +705,7 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
         }
         error_assert(output_token != null, tprint("Unable to find output circuit element: %", output_info[1]));
 
-        half_literal := ifx global_args.lang == "jai" then "0.5" else "0.5f";
+        half_literal := ifx global_args.lang == "jai" then "0.5" else "0.5";
         if output_info[0] == {
             case "V";
                 return_var := tprint("v_%", output_token.name);
@@ -700,13 +728,13 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
     return_types : [..] string;
     if return_vars.count == 1 {
         array_add(*code_statements, tprint("return %;", return_vars[0]));
-        array_add(*return_types, "float");
+        array_add(*return_types, global_args.dtype);
     } else {
         return_statement := ifx global_args.lang == "jai" then "return "
                                                           else "return std::make_tuple(";
         for var : return_vars {
             return_statement = tprint("%1%2, ", return_statement, var);
-            array_add(*return_types, "float");
+            array_add(*return_types, global_args.dtype);
         }
         return_statement.count -= 2;
         return_statement = tprint(ifx global_args.lang == "jai" then "%;" else "%);",
@@ -745,9 +773,9 @@ is_param_defined :: (token: *Token, idx := 0) -> bool {
 write_constexpr_var :: (name: string, value: string) -> string {
     if global_args.lang == {
         case "cpp";
-            return tprint("static constexpr float %1 = %2;", name, value);
+            return tprint("static constexpr %3 %1 = %2;", name, value, global_args.dtype);
         case "jai";
-            return tprint("%1 : float32 : %2;", name, value);
+            return tprint("%1 : %3 : %2;", name, value, global_args.dtype);
     }
     return .{};
 }
@@ -755,9 +783,9 @@ write_constexpr_var :: (name: string, value: string) -> string {
 write_struct_field :: (name: string) -> string {
     if global_args.lang == {
         case "cpp";
-            return tprint("float %1;", name);
+            return tprint("%2 %1;", name, global_args.dtype);
         case "jai";
-            return tprint("%1 : float32;", name);
+            return tprint("%1 : %2;", name, global_args.dtype);
     }
     return .{};
 }
@@ -1198,7 +1226,7 @@ generate_updaters :: (tokens: [] Token,
                       required_impedances: *[..] string) -> string {
     updater_args := Method_Arg.[
         .{name="impedances", type="Impedances", is_reference=true},
-        .{name="fs", type="float"},
+        .{name="fs", type=global_args.dtype},
         .{name="params", type="Params"},
     ];
 
