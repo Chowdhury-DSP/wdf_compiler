@@ -11,8 +11,11 @@ wdf_compiler
 /.vscode
 /.zed
 .focus-config
-.raddbg_project
+*.raddbg_project
 
 .DS_Store
 
 xsimd/
+armadillo/
+rt-wdf/
+

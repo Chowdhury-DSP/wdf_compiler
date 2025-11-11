@@ -10,10 +10,6 @@
 #include <fstream>
 #include <random>
 
-#if CHOWDSP_WDF_TEST_WITH_XSIMD
-#include <xsimd/xsimd.hpp>
-#endif
-
 const auto parallel = [] (float R1, float R2)
 {
     return R1 * R2 / (R1 + R2);
