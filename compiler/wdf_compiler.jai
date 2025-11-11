@@ -614,7 +614,7 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                                                             tprint("-(%1_b + %2_b)", child0_token.name, child1_token.name),
                                                             tprint("% reflected", token.name)));
                 array_add(*down_tree_statements, write_define(tprint("%_a", child0_token.name),
-                                                              tprint("%2_b - impedances.%1_pr * (%1_a + %2_b + %3_b)", token.name, child0_token.name, child1_token.name),
+                                                              tprint("%2_b - impedances.%1_pr * (%1_a - %1_b)", token.name, child0_token.name),
                                                               tprint("% incident", child0_token.name)));
                 array_add(*down_tree_statements, write_define(tprint("%_a", child1_token.name),
                                                               tprint("-(%1_a + %2_a)", token.name, child0_token.name),
