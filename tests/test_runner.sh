@@ -7,7 +7,7 @@ source ~/.bashrc
 if [[ "$OSTYPE" == "darwin"* ]]; then
     sudo_pass=$(more ~/spass)
 fi
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 
 if [[ -n "$1" ]]; then
     cpp_compiler="$1"

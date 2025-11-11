@@ -704,7 +704,7 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
         }
         error_assert(output_token != null, tprint("Unable to find output circuit element: %", output_info[1]));
 
-        half_literal := ifx global_args.lang == "jai" then "0.5" else "0.5";
+        half_literal := tprint(ifx global_args.lang == "jai" then "cast(%) 0.5" else "(%) 0.5", global_args.dtype);
         if output_info[0] == {
             case "V";
                 return_var := tprint("v_%", output_token.name);
