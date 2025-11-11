@@ -4,7 +4,7 @@
 #load "rc_lowpass_double.jai";
 
 main :: () {
-    print("RC Lowpass test\n");
+    print("RC Lowpass test (double-precision)\n");
     context.print_style.default_format_float.mode = .SCIENTIFIC;
 
     fs : float64 : 48000.0;

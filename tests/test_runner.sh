@@ -15,11 +15,11 @@ else
     cpp_compiler="clang"
 fi
 
+if [ ! -d "${SCRIPT_DIR}/xsimd" ]; then
+    git clone https://github.com/xtensor-stack/xsimd "${SCRIPT_DIR}/xsimd"
+fi
 if [[ "$*" = *bench* ]]; then
     echo "Running bench tests..."
-    if [ ! -d "${SCRIPT_DIR}/xsimd" ]; then
-        git clone https://github.com/xtensor-stack/xsimd "${SCRIPT_DIR}/xsimd"
-    fi
     bench_flags="-DRUN_BENCH=1 -O3 -I${SCRIPT_DIR}/xsimd/include"
     echo "Extra flags: $bench_flags"
 else
@@ -40,12 +40,16 @@ cpp_test () {
    cd "${SCRIPT_DIR}/${test}"
 
    wdf_compiler_flags=""
+   cpp_compiler_flags=${libcpp_flag}
    if [[ "$test" == *"double"* ]]; then
        wdf_compiler_flags="-dtype double"
+   elif [[ "$test" == *"simd"* ]]; then
+       wdf_compiler_flags="-dtype WDF_Float"
+       cpp_compiler_flags="${cpp_compiler_flags} -I${SCRIPT_DIR}/xsimd/include"
    fi
 
    $wdf_compiler "${test}.wdf" "${test}.h" ${wdf_compiler_flags}
-   $cpp_compiler "${test}.cpp" ${bench_flags} -I../../lib --std=c++20 ${libcpp_flag} -o "${test}.exe"
+   $cpp_compiler "${test}.cpp" ${bench_flags} -I../../lib --std=c++20 ${cpp_compiler_flags} -o "${test}.exe"
    if [[ "$OSTYPE" == "darwin"* ]]; then
       echo ${sudo_pass} | sudo -S "./${test}.exe"
    else
@@ -83,6 +87,7 @@ test () {
 if [[ "$*" = *bench* ]]; then
    cpp_test rc_lowpass
    cpp_test rc_lowpass_double
+   cpp_test rc_lowpass_simd
    cpp_test preamp_eq_comb
    cpp_test diode_clipper
    cpp_test simple_triode
@@ -90,6 +95,7 @@ if [[ "$*" = *bench* ]]; then
 else
    test rc_lowpass cpp jai
    test rc_lowpass_double cpp jai
+   test rc_lowpass_simd cpp
    test rc_bandpass cpp jai
    test rl_lowpass cpp jai
    test rc_lowpass_var cpp jai

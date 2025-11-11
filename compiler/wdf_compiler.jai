@@ -384,7 +384,6 @@ generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_state
             array_add(down_tree_statements, statement);
         } else {
             // declare inputs
-            // @TODO: make the alignment here configurable?
             statement := tprint("alignas (%4) const %3 %1_ins[%2] { ",
                                 token.name,
                                 num_children,
@@ -769,11 +768,15 @@ is_param_defined :: (token: *Token, idx := 0) -> bool {
     return is_defined_arg;
 }
 
-// @TODO: variable types here...
 write_constexpr_var :: (name: string, value: string) -> string {
     if global_args.lang == {
         case "cpp";
-            return tprint("static constexpr %3 %1 = %2;", name, value, global_args.dtype);
+            dtype := global_args.dtype;
+            if dtype == "float" || dtype == "double" {
+                return tprint("static constexpr %3 %1 = %2;", name, value, global_args.dtype);
+            } else {
+                return tprint("const %3 %1 = %2;", name, value, global_args.dtype);
+            }
         case "jai";
             return tprint("%1 : %3 : %2;", name, value, global_args.dtype);
     }
