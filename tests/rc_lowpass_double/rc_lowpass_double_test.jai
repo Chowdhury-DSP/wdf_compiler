@@ -1,25 +1,23 @@
 #import "Basic";
 #import "File";
 #import "Math";
-#load "simple_triode.jai";
+#load "rc_lowpass_double.jai";
 
 main :: () {
-    print("Simple Triode test\n");
+    print("RC Lowpass test (double-precision)\n");
     context.print_style.default_format_float.mode = .SCIENTIFIC;
 
-    fs : float32 : 48000.0;
+    fs : float64 : 48000.0;
 
     impedances: Impedances;
     calc_impedances(*impedances, fs);
-    state := State.{
-        Cp_z = xx -118.959396,
-    };
+    state: State;
 
     data_str, _ := read_entire_file("data.bin");
-    ref_output : [] float32 = .{data=cast(*float32)data_str.data,
-                                count=data_str.count/size_of(float32)};
+    ref_output : [] float64 = .{data=cast(*float64)data_str.data,
+                                count=data_str.count/size_of(float64)};
 
-    max_error : float32 = 0.0;
+    max_error : float64 = 0.0;
     for 0..(ref_output.count-1)
     {
         test_output := process(*state, *impedances, 1.0);
@@ -28,7 +26,7 @@ main :: () {
     }
     print("Max error: %\n", max_error);
 
-    if (max_error > 1.0e-4)
+    if (max_error > 1.0e-6)
     {
         print("Error is too large... failing test!\n");
         exit(1);
