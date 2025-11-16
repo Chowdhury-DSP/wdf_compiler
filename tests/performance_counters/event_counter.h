@@ -22,7 +22,10 @@
 #endif
 
 #if defined(_WIN32)
-#include <intrin.h>
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include "pmctrace.h"
+#include "pmctrace.cpp"
 #endif
 
 struct event_count {
@@ -115,7 +118,23 @@ struct event_collector {
     return apple_events.setup_performance_counters();
   }
 #elif defined(_WIN32)
-  uint64_t cycles_at_start {};
+  pmc_tracer tracer {};
+  pmc_source_mapping pmc_mapping {};
+  pmc_traced_region region {};
+  event_collector() {
+    pmc_name_array amd_name_array =
+    {
+        L"TotalCycles",
+        L"TotalIssues",
+        L"BranchInstructions",
+        L"BranchMispredictions",
+    };
+    pmc_mapping = MapPMCNames(&amd_name_array);
+    StartTracing(&tracer, &pmc_mapping);
+  }
+  bool has_events() {
+    return IsValid(&pmc_mapping);
+  }
 #else
   event_collector() {}
   bool has_events() {
@@ -129,7 +148,8 @@ struct event_collector {
 #elif __APPLE__
     if(has_events()) { diff = apple_events.get_counters(); }
 #elif defined(_WIN32)
-    cycles_at_start = __rdtsc();
+    // cycles_at_start = __rdtsc();
+    StartCountingPMCs(&tracer, &region);
 #endif
     start_clock = std::chrono::steady_clock::now();
   }
@@ -148,13 +168,14 @@ struct event_collector {
     count.event_counts[3] = 0;
     count.event_counts[4] = diff.branches;
 #elif defined(_WIN32)
-    // @TODO: figure out how to count instructions, etc
-    const auto cycles_diff = __rdtsc() - cycles_at_start;
-    count.event_counts[0] = cycles_diff; // cycles
-    count.event_counts[1] = 0; // instructions
-    count.event_counts[2] = 0; // missed branches
+    // const auto cycles_diff = __rdtsc() - cycles_at_start;
+    StopCountingPMCs(&tracer, &region);
+    pmc_trace_result result = GetOrWaitForResult(&tracer, &region);
+    count.event_counts[0] = result.Counters[0]; // cycles
+    count.event_counts[1] = result.Counters[1]; // instructions
+    count.event_counts[2] = result.Counters[3]; // missed branches
     count.event_counts[3] = 0; //
-    count.event_counts[4] = 0; // branches
+    count.event_counts[4] = result.Counters[2]; // branches
 #endif
     count.elapsed = end_clock - start_clock;
     return count;
