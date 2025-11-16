@@ -1,4 +1,4 @@
-The code in this directory is adapted from Daniel Lemire's code (https://github.com/lemire/Code-used-on-Daniel-Lemire-s-blog/blob/master/2023/03/21/performancecounters/event_counter.h). The license text below is copied from his repo:
+Most of the code in this directory is adapted from Daniel Lemire's code (https://github.com/lemire/Code-used-on-Daniel-Lemire-s-blog/blob/master/2023/03/21/performancecounters/event_counter.h). The license text below is copied from his repo:
 
 ## Licensing
 
@@ -7,3 +7,11 @@ on this code: you may consider it to be in the public
 domain.
 
 Don't bother forking this code: just steal it.
+
+# pmctrace
+
+`pmctrace.h` and `pmctrace.cpp` are from Casey Muratori's [pmctrace](https://github.com/MisterZeus/pmctrace). Also see: https://www.computerenhance.com/p/real-time-pmcs-on-windows-with-etw.
+
+The license for that code lives here: https://github.com/MisterZeus/pmctrace/blob/main/LICENSE
+
+I don't think I am allowed to redistribute that code, so I'll probably need to make some changes to it before this repo goes public...
