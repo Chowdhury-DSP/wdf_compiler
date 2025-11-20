@@ -1,9 +1,8 @@
 #import "Basic";
 CLI :: #import "Command_Line";
 File :: #import "File";
-String :: #import "String";
-Sort :: #import "Sort";
 Process :: #import "Process";
+#load "wdf_parser.jai";
 
 Args :: struct {
     verbose : bool = false;   @"?Verbose"
@@ -14,19 +13,6 @@ Args :: struct {
 }
 argument_flags :: CLI.Default_Argument_Flags; // |.DOUBLE_DASH_REQUIRED;
 global_args: Args;
-
-error_assert :: (cond: bool, message: string) #expand {
-    if ! cond {
-        print("Compilation error: %\n", message);
-        exit(1);
-    }
-}
-
-verbose_print :: (format_string: string, args: .. Any) {
-    if (global_args.verbose) {
-        print(format_string, args);
-    }
-}
 
 get_compiler_version :: () -> string {
     result, output, err, timed_out := Process.run_command("git", "rev-parse", "--short", "HEAD", capture_and_return_output=true);
@@ -176,45 +162,6 @@ parse_meta_info :: (meta_info_str: string) -> Meta_Info {
 
     verbose_print("Meta info: %\n", meta_info);
     return meta_info;
-}
-
-Token_Type :: enum {
-        Ideal_Voltage_Source;
-        Ideal_Current_Source;
-        Resistive_Voltage_Source;
-        Resistive_Current_Source;
-        Resistor;
-        Capacitor;
-        Inductor;
-        Series;
-        Parallel;
-        Inverter;
-        Resistor_Capacitor_Series;
-        Resistor_Capacitor_Parallel;
-        Capacitive_Voltage_Source;
-        Custom;
-    }
-
-Token :: struct {
-    name: string;
-    type: Token_Type;
-    args: [] string;
-    parent: s64;
-    tree_depth: s64 = 0;
-    children: [..] s64;
-    input: string;
-    index: s64 = 0;
-
-    Custom_Token_Info :: struct {
-        params_type: string;
-        state_type: string;
-        vars_type: string;
-        updater_name: string;
-        compute_name: string; // only if root
-        incident_name: string; // only if not root
-        reflected_name: string; // only if not root
-    }
-    custom_info: *Custom_Token_Info;
 }
 
 generate_struct :: (impedance_vars: [] string, name: string) -> string {
@@ -1264,202 +1211,4 @@ generate_updaters :: (tokens: [] Token,
     }
 
     return gen_code;
-}
-
-parse_custom_token_args :: (args: [] string) -> *Token.Custom_Token_Info {
-    info := New(Token.Custom_Token_Info);
-    name_prefix := "";
-    for arg : args {
-        found_key, key, value := String.split_from_left(arg, cast(u8) #char "=");
-        if ! found_key { continue; }
-        if key == {
-            case "params";
-                info.params_type = value;
-            case "state";
-                info.state_type = value;
-            case "vars";
-                info.vars_type = value;
-            case "updater";
-                info.updater_name = value;
-            case "compute";
-                info.compute_name = value;
-            case "incident";
-                info.incident_name = value;
-            case "reflected";
-                info.reflected_name = value;
-            case "prefix";
-                name_prefix = value;
-            case "cpp_prefix";
-                if global_args.lang == "cpp" { name_prefix = value; }
-            case "jai_prefix";
-                if global_args.lang == "jai" { name_prefix = value; }
-        }
-    }
-
-    if name_prefix.count > 0 {
-        add_prefix :: (name: string, prefix: string) -> string {
-            if name.count == 0 { return name; }
-            return tprint("%1%2", prefix, name);
-        }
-        info.params_type = add_prefix (info.params_type, name_prefix);
-        info.state_type = add_prefix (info.state_type, name_prefix);
-        info.vars_type = add_prefix (info.vars_type, name_prefix);
-        info.updater_name = add_prefix (info.updater_name, name_prefix);
-        info.compute_name = add_prefix (info.compute_name, name_prefix);
-        info.incident_name = add_prefix (info.incident_name, name_prefix);
-        info.reflected_name = add_prefix (info.reflected_name, name_prefix);
-    }
-
-    return info;
-}
-
-parse_circuit :: (circuit_str: string) -> [] Token {
-    split_tokens := String.split(circuit_str, cast(u8) #char ";");
-
-    tokens : [..] Token;
-    Children :: struct {
-        token_index: int;
-        num_children: int;
-        countdown: int;
-    }
-    children_stack: [..] Children;
-
-    for *token : split_tokens {
-        token_str := String.trim(token.*);
-        if token_str.count == 0 { continue; }
-
-        found_token_tag, tag, args := String.split_from_left(token_str, #char "(");
-        // remove closing parenthese from args
-        error_assert(args[args.count - 1] == #char ")", tprint("Token % is missing closing parenthese", tag));
-        args.count = args.count - 1;
-
-        num_children := 0;
-        new_token: Token;
-        if tag == {
-            case "R"; new_token.type = .Resistor;
-            case "C"; new_token.type = .Capacitor;
-            case "L"; new_token.type = .Inductor;
-            case "RVs"; new_token.type = .Resistive_Voltage_Source;
-            case "CVs"; new_token.type = .Capacitive_Voltage_Source;
-            case "RIs"; new_token.type = .Resistive_Current_Source;
-            case "RCSeries"; new_token.type = .Resistor_Capacitor_Series;
-            case "RCParallel"; new_token.type = .Resistor_Capacitor_Parallel;
-            case "IVs";
-                new_token.type = .Ideal_Voltage_Source;
-                num_children = 1;
-            case "IIs";
-                new_token.type = .Ideal_Current_Source;
-                num_children = 1;
-            case "Series";
-                new_token.type = .Series;
-                num_children = 2;
-            case "Parallel";
-                new_token.type = .Parallel;
-                num_children = 2;
-            case "Inverter";
-                new_token.type = .Inverter;
-                num_children = 1;
-            case "Custom";
-                new_token.type = .Custom;
-            case; error_assert(false, tprint("Unknown token type: %", tag));
-        }
-
-        args_split := String.split(args, cast(u8) #char ",");
-        new_token.name = args_split[0];
-
-        for old_token : tokens {
-            error_assert(new_token.name != old_token.name, tprint("Duplicate token name: %", new_token.name));
-        }
-
-        new_token.args.data = args_split.data + 1;
-        new_token.args.count = args_split.count - 1;
-        for *arg : new_token.args {
-            arg.* = String.trim(arg.*);
-        }
-
-        if (new_token.type == .Custom) {
-            num_children = string_to_int(new_token.args[0]);
-            new_token.args.data = new_token.args.data + 1;
-            new_token.args.count = new_token.args.count - 1;
-            new_token.custom_info = parse_custom_token_args(new_token.args);
-            verbose_print("Custom token: %\n", new_token.custom_info.*);
-        }
-
-        if children_stack.count != 0 {
-            parent_children := peek_pointer(children_stack);
-            parent_children.countdown = parent_children.countdown - 1;
-            assert(parent_children.countdown >= 0);
-            new_token.parent = tokens[parent_children.token_index].index;
-            new_token.tree_depth = tokens[new_token.parent].tree_depth + 1;
-            array_add(*tokens[parent_children.token_index].children, tokens.count);
-            if parent_children.countdown == 0 {
-                pop(*children_stack);
-            }
-        }
-
-        new_token.index = tokens.count;
-        array_add(*tokens, new_token);
-
-        if num_children != 0 {
-            array_add(*children_stack, .{peek_pointer(tokens).index, num_children, num_children});
-        }
-    }
-    verbose_print("Tokens: %\n", tokens);
-    return tokens;
-}
-
-File_Sections :: struct {
-    circuit: string;
-    inputs: string;
-    outputs: string;
-    meta: string;
-}
-
-parse_file_sections :: (file_str: string) -> File_Sections {
-    Section_Type :: enum {
-        Circuit;
-        Inputs;
-        Outputs;
-        Meta;
-    }
-
-    Section_Info :: struct {
-        start_in_file: s64;
-        start_after_tag: s64;
-        type: Section_Type;
-    }
-
-    section_info: [..] Section_Info;
-
-    add_section_info :: (file_str: string,
-                         section_info: *[..] Section_Info,
-                         tag: string,
-                         type: Section_Type) {
-        section_start := String.find_index_from_left (file_str, tag);
-        if section_start < 0 { return; }
-
-        start_after_tag := section_start + tag.count;
-        array_add (section_info, Section_Info.{ section_start, start_after_tag, type });
-    }
-    add_section_info (file_str, *section_info, "circuit:", .Circuit);
-    add_section_info (file_str, *section_info, "inputs:", .Inputs);
-    add_section_info (file_str, *section_info, "outputs:", .Outputs);
-    add_section_info (file_str, *section_info, "meta:", .Meta);
-
-    Sort.quick_sort (section_info, x => -x.start_in_file);
-
-    sections: File_Sections;
-    file_str_temp := file_str;
-    for info: section_info {
-        section_str := String.trim (string.{ file_str_temp.count - info.start_after_tag, file_str_temp.data + info.start_after_tag });
-        file_str_temp.count = info.start_in_file;
-
-        if info.type == {
-            case .Circuit; sections.circuit = section_str;
-            case .Inputs; sections.inputs = section_str;
-            case .Outputs; sections.outputs = section_str;
-            case .Meta; sections.meta = section_str;
-        }
-    }
-    return sections;
 }
