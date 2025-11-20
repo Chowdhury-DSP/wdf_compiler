@@ -7,6 +7,32 @@
 
 #include "../performance_counters/event_counter.h"
 
+// TOTAL (Apple M1): Reference: https://dougallj.github.io/applecpu/firestorm.html
+//   - FMSUB    -> (4/0.25  cycles/instruction)
+//   - FMUL     -> (4/0.25  cycles/instruction) [@TODO: double check this]
+//   - FADD     -> (2/0.25  cycles/instruction)
+//   - FNEG     -> (2/0.25  cycles/instruction)
+//   - LDR      -> (~2.5/0.333 cycles/instruction)
+//   - STR      -> (0.5/1   cycles/instruction)
+
+// add = add or negate or sub
+// Capacitor:
+//   - 1 load (state)
+//   - 1 store (state)
+//   - 2 add
+// Resistor:
+//   - no-op
+// Ideal Vs:
+//   - 1 mul
+//   - 1 add
+// Series:
+//   - 1 load (1-multiply coeff)
+//   - 1 mul
+//   - 4 add
+// Output:
+//   - 1 mul
+//   - 1 add
+
 // C1 reflected:
 //   - 1 load (C1 state)
 // R1 reflected: (no-op)
@@ -16,7 +42,7 @@
 // Vin reflected:
 //   - 1 fmsub
 // S1 incident:
-//   - 1 load
+//   - 1 load (1-multiply coeff)
 //   - 1 fmsub
 //   - 2 add
 // C1 incident:
