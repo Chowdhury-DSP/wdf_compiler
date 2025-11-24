@@ -60,28 +60,44 @@ generate_component_info_table :: () -> Component_Info_Table {
 Op_Info :: struct {
     latency: float;
     throughput: float;
-    exp_cycles: float;
 }
 
-PIPELINE :: 0.75; // 1 = fully pipelined, 0 = no pipelining
+CPU_Type :: enum {
+    M1;
+    ZEN4;
+}
 
 Op_Info_Table :: [OPS_COUNT] Op_Info;
-generate_op_info_table_m1 :: () -> Op_Info_Table {
-    // reference: https://dougallj.github.io/applecpu/firestorm.html
+generate_op_info_table :: (cpu_type: CPU_Type) -> Op_Info_Table {
 
     table: Op_Info_Table;
 
     using Op;
-    table[LOAD]  = .{latency=2.5, throughput=0.333};
-    table[STORE] = .{latency=0.5, throughput=1.0};
-    table[ADD]   = .{latency=3.0, throughput=0.25};
-    table[MUL]   = .{latency=4.0, throughput=0.25};
-
-    for *op : table {
-        op.exp_cycles = op.throughput * PIPELINE + op.latency * (1.0 - PIPELINE);
+    if (cpu_type == .M1) {
+        // reference: https://dougallj.github.io/applecpu/firestorm.html
+        table[LOAD]  = .{latency=2.5, throughput=0.333};
+        table[STORE] = .{latency=0.5, throughput=1.0};
+        table[ADD]   = .{latency=3.0, throughput=0.25};
+        table[MUL]   = .{latency=4.0, throughput=0.25};
+    } else if (cpu_type == .ZEN4) {
+        // https://www.agner.org/optimize/instruction_tables.pdf
+        table[LOAD]  = .{latency=5.0, throughput=0.5}; // MOVSS/D x,m32/64
+        table[STORE] = .{latency=4.0, throughput=1.0}; // MOVSS/D m32/64,x
+        table[ADD]   = .{latency=3.0, throughput=0.5};
+        table[MUL]   = .{latency=3.0, throughput=0.5};
     }
 
     return table;
+}
+op_info_table :: #run generate_op_info_table(.ZEN4);
+
+print_ops :: (ops_table: [] int) {
+    ops_str := "Operations: [";
+    for op_count, it : ops_table {
+        if op_count > 0 { ops_str = tprint("%1%3 %2, ", ops_str, cast(Op) it, op_count); }
+    }
+    ops_str.count -= 2;
+    print("%]\n", ops_str);
 }
 
 main :: () {
@@ -100,17 +116,22 @@ main :: () {
     circuit_tokens := parse_circuit(sections.circuit);
 
     component_info_table := generate_component_info_table();
-    op_info_table := generate_op_info_table_m1();
 
-    cycles := 0.0;
+    add_cycles :: (throughput_counter: *float, latency_counter: *float, ops_table: [] int, op: Op_With_Count) {
+        ops_table[op.op] += op.count;
+        op_info := op_info_table[op.op];
+        throughput_counter.* += op_info.throughput * op.count;
+        latency_counter.* += op_info.latency * op.count;
+    }
+
+    throughput_bound_cycles := 0.0;
+    latency_bound_cycles := 0.0;
     ops_table: [OPS_COUNT] int;
 
     for token : circuit_tokens {
         token_ops := component_info_table[token.type];
         for op : token_ops {
-            ops_table[op.op] += op.count;
-            op_info := op_info_table[op.op];
-            cycles += op_info.exp_cycles * op.count;
+            add_cycles (*throughput_bound_cycles, *latency_bound_cycles, ops_table, op);
         }
     }
 
@@ -119,30 +140,32 @@ main :: () {
             // voltage:
             //   - 1 mul
             //   - 1 add
-            ops_table[Op.ADD] += 1;
-            cycles += op_info_table[Op.ADD].exp_cycles * 1;
-            ops_table[Op.MUL] += 1;
-            cycles += op_info_table[Op.MUL].exp_cycles * 1;
+            add_cycles (*throughput_bound_cycles, *latency_bound_cycles, ops_table, .{.MUL, 1});
+            add_cycles (*throughput_bound_cycles, *latency_bound_cycles, ops_table, .{.ADD, 1});
         } else if output[0] == "I" {
             // current:
             //   - 1 load
             //   - 2 mul
             //   - 1 add
-            ops_table[Op.LOAD] += 1;
-            cycles += op_info_table[Op.LOAD].exp_cycles * 1;
-            ops_table[Op.ADD] += 1;
-            cycles += op_info_table[Op.ADD].exp_cycles * 1;
-            ops_table[Op.MUL] += 2;
-            cycles += op_info_table[Op.MUL].exp_cycles * 2;
+            add_cycles (*throughput_bound_cycles, *latency_bound_cycles, ops_table, .{.LOAD, 1});
+            add_cycles (*throughput_bound_cycles, *latency_bound_cycles, ops_table, .{.MUL,  2});
+            add_cycles (*throughput_bound_cycles, *latency_bound_cycles, ops_table, .{.ADD,  1});
         }
     }
 
-    print("Cycles/Samples: %\n", cycles);
-    for op_count, it : ops_table {
-        if op_count > 0 {
-            print("%: %\n", cast(Op) it, op_count);
-        }
+    print("Cycles/Samples (throughput-bound): %\n", throughput_bound_cycles);
+    print("Cycles/Samples (latency-bound): %\n", latency_bound_cycles);
+    print_ops(ops_table);
+
+    for arg_idx : 2..args.count-1 {
+        parts := String.split(args[arg_idx], ",");
+        name := parts[0];
+        cycles := string_to_float(parts[1]);
+        score := (latency_bound_cycles - cycles) / (latency_bound_cycles - throughput_bound_cycles);
+        print("% score: %\n", name, score);
     }
 }
 
-// jai perf_estimator.jai && ./perf_estimator ../preamp_eq_comb/preamp_eq_comb.wdf
+// @TODO: re-run poly and RT-WDF numbers...
+// ./perf_estimator ../rc_lowpass/rc_lowpass.wdf wdf_compiler,19.06 chowdsp_wdf,24.09 chowdsp_wdf_poly,27.51 rt-wdf,81.40
+// ./perf_estimator ../preamp_eq_comb/preamp_eq_comb.wdf wdf_compiler,70.61 chowdsp_wdf,95.83 chowdsp_wdf_poly,99.69 rt-wdf,411.35
