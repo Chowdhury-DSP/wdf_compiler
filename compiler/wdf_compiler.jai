@@ -28,6 +28,7 @@ main :: () {
     context.print_style.default_format_float.zero_removal = .ONE_ZERO_AFTER_DECIMAL;
 
     args_success, args, is_set, free_args := CLI.parse_arguments (Args, argument_flags);
+    if ! args_success { exit(1); }
 
     if args.version {
         print("wdf_compiler version: %\n", COMPILER_VERSION);
