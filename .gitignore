@@ -1,5 +1,6 @@
 build*/
 .build/
+bin/
 *.dSYM
 wdf_compiler
 *.exe
@@ -18,4 +19,3 @@ wdf_compiler
 xsimd/
 armadillo/
 rt-wdf/
-
