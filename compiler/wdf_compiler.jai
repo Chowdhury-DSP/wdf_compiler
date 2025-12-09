@@ -68,6 +68,9 @@ main :: () {
 
     meta_info := parse_meta_info(sections.meta);
     circuit_tokens := parse_circuit(sections.circuit);
+    print("%\n", circuit_tokens);
+    circuit_tokens = reduce_circuit(circuit_tokens, outputs);
+    // print("%\n", circuit_tokens);
 
     process_code, required_impedances := generate_process(circuit_tokens, inputs, outputs);
     updaters_code := generate_updaters(circuit_tokens, inputs, meta_info, *required_impedances);
@@ -817,6 +820,7 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistor_Capacitor_Series;
+                print("HERE!\n");
                 write_param(*params_vars, token, 0, "res_value");
                 write_param(*params_vars, token, 1, "cap_value");
                 array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
@@ -1236,3 +1240,118 @@ generate_updaters :: (tokens: [] Token,
 
     return gen_code;
 }
+
+reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
+    remove_token :: (tokens: *[] Token, index: s64) {
+        for *token : tokens.* {
+            if token.index > index { token.index -= 1; }
+            if token.parent > index { token.parent -= 1; }
+            for *child_idx : token.children {
+                if child_idx.* > index { child_idx.* -= 1; }
+            }
+        }
+        array_ordered_remove_by_index(tokens, index);
+    }
+
+    make_rc_series :: (original_token: Token, idx: s64, res: Token, cap: Token) -> Token {
+        new_args : [..] string;
+        array_add(*new_args, res.args[0]);
+        array_add(*new_args, cap.args[0]);
+        return  Token.{
+            name = original_token.name,
+            type = .Resistor_Capacitor_Series,
+            args = new_args,
+            parent = original_token.parent,
+            tree_depth = original_token.tree_depth,
+            index = idx,
+        };
+    }
+
+    // @TODO: what if we want to combine circuits, where 1 element is a parameter?
+    // (e.g. 2 resistors in parallel, where 1 is a potentiometer)
+    // @TODO: what to do if combined element is an input?
+
+    // For the reduction to work, each element's children need to have higher indexes
+    for token,idx : original_tokens {
+        for child_idx : token.children {
+            assert(child_idx > idx);
+        }
+    }
+
+    tokens := array_copy(original_tokens);
+
+    reductions_count := 1;
+    while reductions_count > 0 {
+        print("Reducing...\n");
+        reductions_count = 0;
+
+        idx := 0;
+        while idx < tokens.count {
+            token := tokens[idx];
+            if token.type == {
+                case .Series;
+                    child0 := tokens[token.children[0]];
+                    child1 := tokens[token.children[1]];
+
+                    // RCSeries
+                    if (child0.type == .Resistor && child1.type == .Capacitor) {
+                        print("Reducing RCSeries...\n");
+                        tokens[idx] = make_rc_series(token, idx, child0, child1);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+                    if (child1.type == .Resistor && child0.type == .Capacitor) {
+                        print("Reducing RCSeries...\n");
+                        tokens[idx] = make_rc_series(token, idx, child1, child0);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+            }
+            idx += 1;
+        }
+    }
+
+    // print("%\n", tokens);
+
+    return tokens;
+}
+
+/*
+[
+{name = "v_in"; type = Ideal_Voltage_Source; args = []; parent = 0; tree_depth = 0; children = [1]; input = ""; index = 0; custom_info = null; },
+{name = "s_i"; type = Series; args = []; parent = 0; tree_depth = 1; children = [2, 3]; input = ""; index = 1; custom_info = null; },
+{name = "lfc_cap"; type = Capacitor; args = ["4.7n"]; parent = 1; tree_depth = 2; children = []; input = ""; index = 2; custom_info = null; },
+{name = "s_o"; type = Series; args = []; parent = 1; tree_depth = 2; children = [4, 9]; input = ""; index = 3; custom_info = null; },
+{name = "p_p"; type = Parallel; args = []; parent = 3; tree_depth = 3; children = [5, 6]; input = ""; index = 4; custom_info = null; },
+{name = "r_series"; type = Resistor; args = ["10k"]; parent = 4; tree_depth = 4; children = []; input = ""; index = 5; custom_info = null; },
+{name = "hfl_res_cap"; type = Series; args = []; parent = 4; tree_depth = 4; children = [7, 8]; input = ""; index = 6; custom_info = null; },
+{name = "hfl_res"; type = Resistor; args = ["80k"]; parent = 6; tree_depth = 5; children = []; input = ""; index = 7; custom_info = null; },
+{name = "hfl_cap"; type = Capacitor; args = ["2.7n"]; parent = 6; tree_depth = 5; children = []; input = ""; index = 8; custom_info = null; },
+{name = "p_s"; type = Parallel; args = []; parent = 3; tree_depth = 3; children = [10, 11]; input = ""; index = 9; custom_info = null; },
+{name = "hfc_cap"; type = Capacitor; args = ["3.3u"]; parent = 9; tree_depth = 4; children = []; input = ""; index = 10; custom_info = null; },
+{name = "s_s"; type = Series; args = []; parent = 9; tree_depth = 4; children = [12, 13]; input = ""; index = 11; custom_info = null; },
+{name = "r_shunt"; type = Resistor; args = ["4.674k"]; parent = 11; tree_depth = 5; children = []; input = ""; index = 12; custom_info = null; },
+{name = "lfl_res_cap"; type = Parallel; args = []; parent = 11; tree_depth = 5; children = [14, 15]; input = ""; index = 13; custom_info = null; },
+{name = "lfl_res"; type = Resistor; args = ["15k"]; parent = 13; tree_depth = 6; children = []; input = ""; index = 14; custom_info = null; },
+{name = "lfl_cap"; type = Capacitor; args = ["0.15u"]; parent = 13; tree_depth = 6; children = []; input = ""; index = 15; custom_info = null; }
+]
+
+[
+{name = "v_in"; type = Ideal_Voltage_Source; args = []; parent = 0; tree_depth = 0; children = [1]; input = ""; index = 0; custom_info = null; },
+{name = "s_i"; type = Series; args = []; parent = 0; tree_depth = 1; children = [2, 3]; input = ""; index = 1; custom_info = null; },
+{name = "lfc_cap"; type = Capacitor; args = ["4.7n"]; parent = 1; tree_depth = 2; children = []; input = ""; index = 2; custom_info = null; },
+{name = "s_o"; type = Series; args = []; parent = 1; tree_depth = 2; children = [4, 9]; input = ""; index = 3; custom_info = null; },
+{name = "p_p"; type = Parallel; args = []; parent = 3; tree_depth = 3; children = [5, 6]; input = ""; index = 4; custom_info = null; },
+{name = "r_series"; type = Resistor; args = ["10k"]; parent = 4; tree_depth = 4; children = []; input = ""; index = 5; custom_info = null; },
+{name = "hfl_res_cap"; type = Resistor_Capacitor_Series; args = []; parent = 4; tree_depth = 4; children = []; input = ""; index = 6; custom_info = null; },
+{name = "p_s"; type = Parallel; args = []; parent = 3; tree_depth = 3; children = [10, 11]; input = ""; index = 7; custom_info = null; },
+{name = "hfc_cap"; type = Capacitor; args = ["3.3u"]; parent = 7; tree_depth = 4; children = []; input = ""; index = 8; custom_info = null; },
+{name = "s_s"; type = Series; args = []; parent = 7; tree_depth = 4; children = [12, 13]; input = ""; index = 9; custom_info = null; },
+{name = "r_shunt"; type = Resistor; args = ["4.674k"]; parent = 9; tree_depth = 5; children = []; input = ""; index = 10; custom_info = null; },
+{name = "lfl_res_cap"; type = Parallel; args = []; parent = 9; tree_depth = 5; children = [14, 15]; input = ""; index = 11; custom_info = null; },
+{name = "lfl_res"; type = Resistor; args = ["15k"]; parent = 11; tree_depth = 6; children = []; input = ""; index = 12; custom_info = null; },
+{name = "lfl_cap"; type = Capacitor; args = ["0.15u"]; parent = 11; tree_depth = 6; children = []; input = ""; index = 13; custom_info = null; }
+]
+*/
