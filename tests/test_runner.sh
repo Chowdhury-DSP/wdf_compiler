@@ -92,6 +92,7 @@ if [[ "$*" = *bench* ]]; then
    cpp_test diode_clipper
    cpp_test simple_triode
    cpp_test baxandall_eq
+   cpp_test pulse_shaper
 else
    test rc_lowpass cpp jai
    test rc_lowpass_double cpp jai
@@ -110,6 +111,7 @@ else
    test simple_triode cpp jai
    test bassman_tone_stack cpp jai
    test baxandall_eq cpp jai
+   test pulse_shaper cpp
 fi
 
 if [[ "$*" = *bad_configs* ]]; then

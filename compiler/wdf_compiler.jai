@@ -548,6 +548,12 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                                                             tprint("state.%_z", token.name),
                                                             tprint("% reflected", token.name)));
                 array_add(*down_tree_statements, tprint("state.%1_z = %1_a; // %1 state update", token.name));
+            case .Capacitor_Alpha;
+                array_add(*up_tree_statements, tprint("state.%1_b1 = %1_b; // %1 state update", token.name));
+                array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
+                                                            tprint("impedances.%1_b_coeff * state.%1_b1 + impedances.%1_a_coeff * state.%1_z", token.name),
+                                                            tprint("% reflected", token.name)));
+                array_add(*down_tree_statements, tprint("state.%1_z = %1_a; // %1 state update", token.name));
             case .Inductor;
                 array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
                                                             tprint("-state.%_z", token.name),
@@ -792,8 +798,17 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Capacitor;
-                write_param(*params_vars, token);
+                write_param(*params_vars, token, 0);
                 array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
+                add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
+
+            case .Capacitor_Alpha;
+                write_param(*params_vars, token, 0);
+                write_param(*params_vars, token, 1, "alpha");
+                array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
+                array_add(*state_vars, write_struct_field(tprint("%_b1", token.name)));
+                array_add(*impedance_vars, write_struct_field(tprint("%1_b_coeff", token.name)));
+                array_add(*impedance_vars, write_struct_field(tprint("%1_a_coeff", token.name)));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Inductor;
@@ -995,6 +1010,14 @@ generate_updater :: (tokens: [] Token,
             case .Capacitor;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
                 add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("2 * params.%1_value * fs", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("1 / %1_G", token.name), required_impedances.*, *available_values);
+                add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
+
+            case .Capacitor_Alpha;
+                array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
+                array_add(*impedance_updates, tprint("impedances.%1_b_coeff = (1 - params.%1_alpha) * 0.5;", token.name));
+                array_add(*impedance_updates, tprint("impedances.%1_a_coeff = (1 + params.%1_alpha) * 0.5;", token.name));
+                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("(1 + params.%1_alpha) * params.%1_value * fs", token.name), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("1 / %1_G", token.name), required_impedances.*, *available_values);
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 

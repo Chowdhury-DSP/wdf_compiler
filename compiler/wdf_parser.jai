@@ -9,6 +9,7 @@ Token_Type :: enum {
     Resistive_Current_Source;
     Resistor;
     Capacitor;
+    Capacitor_Alpha;
     Inductor;
     Series;
     Parallel;
@@ -117,6 +118,7 @@ parse_circuit :: (circuit_str: string) -> [] Token {
         if tag == {
             case "R"; new_token.type = .Resistor;
             case "C"; new_token.type = .Capacitor;
+            case "Ca"; new_token.type = .Capacitor_Alpha;
             case "L"; new_token.type = .Inductor;
             case "RVs"; new_token.type = .Resistive_Voltage_Source;
             case "CVs"; new_token.type = .Capacitive_Voltage_Source;
