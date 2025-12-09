@@ -1017,8 +1017,6 @@ generate_updater :: (tokens: [] Token,
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_b_coeff = (1 - params.%1_alpha) * 0.5;", token.name));
                 array_add(*impedance_updates, tprint("impedances.%1_a_coeff = (1 + params.%1_alpha) * 0.5;", token.name));
-                // add_impedance(*impedance_updates, tprint("%1_b_coeff", token.name), tprint("(1 - params.%1_alpha) * 0.5", token.name), required_impedances.*, *available_values);
-                // add_impedance(*impedance_updates, tprint("%1_a_coeff", token.name), tprint("(1 + params.%1_alpha) * 0.5", token.name), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("(1 + params.%1_alpha) * params.%1_value * fs", token.name), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("1 / %1_G", token.name), required_impedances.*, *available_values);
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
