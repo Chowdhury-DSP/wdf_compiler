@@ -1,0 +1,19 @@
+circuit:
+Custom(d53, 1, prefix=wdf_lib::diode::, params=Diode_Params, vars=Diode_Vars, updater=update_vars, compute=root_compute);
+    Parallel(P2);
+        Inverter(I1);
+            R(r162, 4.7k);
+        Series(S1);
+            Parallel(P1);
+                Ca(c40, 15n, 0.029);
+                R(r163, 100k);
+            RVs(Vs, 1n);
+
+inputs:
+Vs
+
+outputs:
+V:r162
+
+meta:
+include:"wdf_lib_diode_omega3.hpp"
