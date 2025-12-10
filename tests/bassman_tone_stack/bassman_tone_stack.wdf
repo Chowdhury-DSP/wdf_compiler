@@ -2,7 +2,9 @@ circuit:
 Custom(R, 6, prefix=bassman_r::, jai_prefix=Bassman_, params=R_Params, vars=R_Vars, updater=update_vars, compute=root_compute);
     RVs(Vin_Res3m, ?);
     R(Res2_Res3p, ?);
-    RCSeries(Res1p_Res1m_Cap1, ?, 250p);
+    Series(Res1p_Res1m_Cap1);
+        R(Res1p_Res1m, ?);
+        C(Cap1, 250p);
     C(Cap2, 20n);
     R(Res4, 56k);
     C(Cap3, 20n);

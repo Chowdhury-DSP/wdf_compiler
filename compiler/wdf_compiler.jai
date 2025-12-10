@@ -5,11 +5,12 @@ Process :: #import "Process";
 #load "wdf_parser.jai";
 
 Args :: struct {
-    verbose : bool = false;   @"?Verbose"
-    version : bool = false;   @"?Version"
-    lang    : string = "cpp"; @"?Language of generated code. Currently supports cpp (default) and jai."
-    dtype   : string = "float"; @"?Data type to use for generated code. (Default: float)"
-    align   : int = 16; @"?Default data alignment to use for generated code. (Default: 16)"
+    verbose   : bool = false;     @"?Verbose"
+    version   : bool = false;     @"?Version"
+    lang      : string = "cpp";   @"?Language of generated code. Currently supports cpp (default) and jai."
+    dtype     : string = "float"; @"?Data type to use for generated code. (Default: float)"
+    align     : int = 16;         @"?Default data alignment to use for generated code. (Default: 16)"
+    no_reduce : bool = false;     @"?Perform reductions on the circuit where possible (Default: true)"
 }
 argument_flags :: CLI.Default_Argument_Flags; // |.DOUBLE_DASH_REQUIRED;
 global_args: Args;
@@ -68,9 +69,10 @@ main :: () {
 
     meta_info := parse_meta_info(sections.meta);
     circuit_tokens := parse_circuit(sections.circuit);
-    print("%\n", circuit_tokens);
-    circuit_tokens = reduce_circuit(circuit_tokens, outputs);
-    // print("%\n", circuit_tokens);
+
+    if ! args.no_reduce {
+        circuit_tokens = reduce_circuit(circuit_tokens, outputs);
+    }
 
     process_code, required_impedances := generate_process(circuit_tokens, inputs, outputs);
     updaters_code := generate_updaters(circuit_tokens, inputs, meta_info, *required_impedances);
@@ -750,17 +752,21 @@ write_struct_field :: (name: string) -> string {
     return .{};
 }
 
-write_param :: (params_vars : *[..] string, token: *Token, idx := 0, suffix := "value") -> bool {
+write_param_named :: (params_vars : *[..] string, token: *Token, name: string, idx := 0) -> bool {
     is_defined_arg := is_param_defined(token, idx);
     if is_defined_arg {
         array_add(params_vars,
-                  write_constexpr_var(tprint("%1_%2", token.name, suffix),
+                  write_constexpr_var(name,
                                       tprint("%", get_value(token.args[idx]))));
     } else {
-        array_add(params_vars, write_struct_field(tprint("%1_%2", token.name, suffix)));
+        array_add(params_vars, write_struct_field(name));
     }
 
     return is_defined_arg;
+}
+
+write_param :: (params_vars : *[..] string, token: *Token, idx := 0, suffix := "value") -> bool {
+    return write_param_named(params_vars, token, tprint("%1_%2", token.name, suffix), idx);
 }
 
 get_constexpr_var :: (prefix: string, name: string) -> string {
@@ -820,16 +826,15 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistor_Capacitor_Series;
-                print("HERE!\n");
-                write_param(*params_vars, token, 0, "res_value");
-                write_param(*params_vars, token, 1, "cap_value");
+                write_param_named(*params_vars, token, token.param_names[0], 0);
+                write_param_named(*params_vars, token, token.param_names[1], 1);
                 array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
                 array_add(*impedance_vars, write_struct_field(tprint("%1_T_over_T_plus_2RC", token.name)));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistor_Capacitor_Parallel;
-                write_param(*params_vars, token, 0, "res_value");
-                write_param(*params_vars, token, 1, "cap_value");
+                write_param_named(*params_vars, token, token.param_names[0], 0);
+                write_param_named(*params_vars, token, token.param_names[1], 1);
                 array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
                 array_add(*impedance_vars, write_struct_field(tprint("%1_twoRC_over_twoRC_plus_T", token.name)));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
@@ -1033,15 +1038,15 @@ generate_updater :: (tokens: [] Token,
 
             case .Resistor_Capacitor_Series;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("(T / (2 * params.%1_cap_value)) + params.%1_res_value", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("(T / (2 * params.%2)) + params.%1", token.param_names[0], token.param_names[1]), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
-                array_add(*impedance_updates, tprint("impedances.%1_T_over_T_plus_2RC = T / (2 * params.%1_cap_value * params.%1_res_value + T);\n", token.name));
+                array_add(*impedance_updates, tprint("impedances.%1_T_over_T_plus_2RC = T / (2 * params.%3 * params.%2 + T);\n", token.name, token.param_names[0], token.param_names[1]));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistor_Capacitor_Parallel;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                array_add(*impedance_updates, write_define(tprint("%1_2RC", token.name), tprint("2 * params.%1_cap_value * params.%1_res_value;", token.name)));
-                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("params.%1_res_value * T / (%1_2RC + T)", token.name), required_impedances.*, *available_values);
+                array_add(*impedance_updates, write_define(tprint("%1_2RC", token.name), tprint("2 * params.%2 * params.%1;", token.param_names[0], token.param_names[1])));
+                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("params.%2 * T / (%1_2RC + T)", token.name, token.param_names[0]), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
                 array_add(*impedance_updates, tprint("impedances.%1_twoRC_over_twoRC_plus_T = %1_2RC / (%1_2RC + T);\n", token.name));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
@@ -1257,6 +1262,9 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
         new_args : [..] string;
         array_add(*new_args, res.args[0]);
         array_add(*new_args, cap.args[0]);
+        param_names : [..] string;
+        array_add(*param_names, tprint("%_value", res.name));
+        array_add(*param_names, tprint("%_value", cap.name));
         return  Token.{
             name = original_token.name,
             type = .Resistor_Capacitor_Series,
@@ -1264,6 +1272,24 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
             parent = original_token.parent,
             tree_depth = original_token.tree_depth,
             index = idx,
+            param_names = param_names,
+        };
+    }
+    make_rc_parallel :: (original_token: Token, idx: s64, res: Token, cap: Token) -> Token {
+        new_args : [..] string;
+        array_add(*new_args, res.args[0]);
+        array_add(*new_args, cap.args[0]);
+        param_names : [..] string;
+        array_add(*param_names, tprint("%_value", res.name));
+        array_add(*param_names, tprint("%_value", cap.name));
+        return  Token.{
+            name = original_token.name,
+            type = .Resistor_Capacitor_Parallel,
+            args = new_args,
+            parent = original_token.parent,
+            tree_depth = original_token.tree_depth,
+            index = idx,
+            param_names = param_names,
         };
     }
 
@@ -1281,8 +1307,8 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
     tokens := array_copy(original_tokens);
 
     reductions_count := 1;
+    total_reductions := 0;
     while reductions_count > 0 {
-        print("Reducing...\n");
         reductions_count = 0;
 
         idx := 0;
@@ -1293,17 +1319,47 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
                     child0 := tokens[token.children[0]];
                     child1 := tokens[token.children[1]];
 
+                    is_child_output := false;
+                    for output : outputs {
+                        output_info := String.split(output, ":");
+                        is_child_output |= child0.name == output_info[1];
+                        is_child_output |= child1.name == output_info[1];
+                    }
+
                     // RCSeries
-                    if (child0.type == .Resistor && child1.type == .Capacitor) {
-                        print("Reducing RCSeries...\n");
+                    if (child0.type == .Resistor && child1.type == .Capacitor && ! is_child_output) {
                         tokens[idx] = make_rc_series(token, idx, child0, child1);
                         remove_token(*tokens, token.children[1]);
                         remove_token(*tokens, token.children[0]);
                         reductions_count += 1;
                     }
-                    if (child1.type == .Resistor && child0.type == .Capacitor) {
-                        print("Reducing RCSeries...\n");
+                    if (child1.type == .Resistor && child0.type == .Capacitor && ! is_child_output) {
                         tokens[idx] = make_rc_series(token, idx, child1, child0);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+
+                case .Parallel;
+                    child0 := tokens[token.children[0]];
+                    child1 := tokens[token.children[1]];
+
+                    is_child_output := false;
+                    for output : outputs {
+                        output_info := String.split(output, ":");
+                        is_child_output |= child0.name == output_info[1];
+                        is_child_output |= child1.name == output_info[1];
+                    }
+
+                    // RCParallel
+                    if (child0.type == .Resistor && child1.type == .Capacitor && ! is_child_output) {
+                        tokens[idx] = make_rc_parallel(token, idx, child0, child1);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+                    if (child1.type == .Resistor && child0.type == .Capacitor && ! is_child_output) {
+                        tokens[idx] = make_rc_parallel(token, idx, child1, child0);
                         remove_token(*tokens, token.children[1]);
                         remove_token(*tokens, token.children[0]);
                         reductions_count += 1;
@@ -1311,47 +1367,10 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
             }
             idx += 1;
         }
+        total_reductions += reductions_count;
     }
 
-    // print("%\n", tokens);
+    verbose_print("Performed % reductions\n", total_reductions);
 
     return tokens;
 }
-
-/*
-[
-{name = "v_in"; type = Ideal_Voltage_Source; args = []; parent = 0; tree_depth = 0; children = [1]; input = ""; index = 0; custom_info = null; },
-{name = "s_i"; type = Series; args = []; parent = 0; tree_depth = 1; children = [2, 3]; input = ""; index = 1; custom_info = null; },
-{name = "lfc_cap"; type = Capacitor; args = ["4.7n"]; parent = 1; tree_depth = 2; children = []; input = ""; index = 2; custom_info = null; },
-{name = "s_o"; type = Series; args = []; parent = 1; tree_depth = 2; children = [4, 9]; input = ""; index = 3; custom_info = null; },
-{name = "p_p"; type = Parallel; args = []; parent = 3; tree_depth = 3; children = [5, 6]; input = ""; index = 4; custom_info = null; },
-{name = "r_series"; type = Resistor; args = ["10k"]; parent = 4; tree_depth = 4; children = []; input = ""; index = 5; custom_info = null; },
-{name = "hfl_res_cap"; type = Series; args = []; parent = 4; tree_depth = 4; children = [7, 8]; input = ""; index = 6; custom_info = null; },
-{name = "hfl_res"; type = Resistor; args = ["80k"]; parent = 6; tree_depth = 5; children = []; input = ""; index = 7; custom_info = null; },
-{name = "hfl_cap"; type = Capacitor; args = ["2.7n"]; parent = 6; tree_depth = 5; children = []; input = ""; index = 8; custom_info = null; },
-{name = "p_s"; type = Parallel; args = []; parent = 3; tree_depth = 3; children = [10, 11]; input = ""; index = 9; custom_info = null; },
-{name = "hfc_cap"; type = Capacitor; args = ["3.3u"]; parent = 9; tree_depth = 4; children = []; input = ""; index = 10; custom_info = null; },
-{name = "s_s"; type = Series; args = []; parent = 9; tree_depth = 4; children = [12, 13]; input = ""; index = 11; custom_info = null; },
-{name = "r_shunt"; type = Resistor; args = ["4.674k"]; parent = 11; tree_depth = 5; children = []; input = ""; index = 12; custom_info = null; },
-{name = "lfl_res_cap"; type = Parallel; args = []; parent = 11; tree_depth = 5; children = [14, 15]; input = ""; index = 13; custom_info = null; },
-{name = "lfl_res"; type = Resistor; args = ["15k"]; parent = 13; tree_depth = 6; children = []; input = ""; index = 14; custom_info = null; },
-{name = "lfl_cap"; type = Capacitor; args = ["0.15u"]; parent = 13; tree_depth = 6; children = []; input = ""; index = 15; custom_info = null; }
-]
-
-[
-{name = "v_in"; type = Ideal_Voltage_Source; args = []; parent = 0; tree_depth = 0; children = [1]; input = ""; index = 0; custom_info = null; },
-{name = "s_i"; type = Series; args = []; parent = 0; tree_depth = 1; children = [2, 3]; input = ""; index = 1; custom_info = null; },
-{name = "lfc_cap"; type = Capacitor; args = ["4.7n"]; parent = 1; tree_depth = 2; children = []; input = ""; index = 2; custom_info = null; },
-{name = "s_o"; type = Series; args = []; parent = 1; tree_depth = 2; children = [4, 9]; input = ""; index = 3; custom_info = null; },
-{name = "p_p"; type = Parallel; args = []; parent = 3; tree_depth = 3; children = [5, 6]; input = ""; index = 4; custom_info = null; },
-{name = "r_series"; type = Resistor; args = ["10k"]; parent = 4; tree_depth = 4; children = []; input = ""; index = 5; custom_info = null; },
-{name = "hfl_res_cap"; type = Resistor_Capacitor_Series; args = []; parent = 4; tree_depth = 4; children = []; input = ""; index = 6; custom_info = null; },
-{name = "p_s"; type = Parallel; args = []; parent = 3; tree_depth = 3; children = [10, 11]; input = ""; index = 7; custom_info = null; },
-{name = "hfc_cap"; type = Capacitor; args = ["3.3u"]; parent = 7; tree_depth = 4; children = []; input = ""; index = 8; custom_info = null; },
-{name = "s_s"; type = Series; args = []; parent = 7; tree_depth = 4; children = [12, 13]; input = ""; index = 9; custom_info = null; },
-{name = "r_shunt"; type = Resistor; args = ["4.674k"]; parent = 9; tree_depth = 5; children = []; input = ""; index = 10; custom_info = null; },
-{name = "lfl_res_cap"; type = Parallel; args = []; parent = 9; tree_depth = 5; children = [14, 15]; input = ""; index = 11; custom_info = null; },
-{name = "lfl_res"; type = Resistor; args = ["15k"]; parent = 11; tree_depth = 6; children = []; input = ""; index = 12; custom_info = null; },
-{name = "lfl_cap"; type = Capacitor; args = ["0.15u"]; parent = 11; tree_depth = 6; children = []; input = ""; index = 13; custom_info = null; }
-]
-*/

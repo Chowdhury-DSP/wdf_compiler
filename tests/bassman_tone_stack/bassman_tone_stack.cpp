@@ -193,7 +193,7 @@ int main()
     Params params {
         .Vin_Res3m_res_value = ref.Vin_Res3m.wdf.R,
         .Res2_Res3p_value = ref.Res2.wdf.R + ref.Res3p.wdf.R,
-        .Res1p_Res1m_Cap1_res_value = ref.Res1p.wdf.R + ref.Res1m.wdf.R,
+        .Res1p_Res1m_value = ref.Res1p.wdf.R + ref.Res1m.wdf.R,
     };
     // printf ("%f\n", params.Vin_Res3m_res_value);
     // printf ("%f\n", params.Res2_Res3p_value);

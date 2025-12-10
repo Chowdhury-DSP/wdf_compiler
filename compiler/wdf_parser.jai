@@ -29,6 +29,7 @@ Token :: struct {
     children: [..] s64;
     input: string;
     index: s64 = 0;
+    param_names: [] string;
 
     Custom_Token_Info :: struct {
         params_type: string;
@@ -156,6 +157,20 @@ parse_circuit :: (circuit_str: string) -> [] Token {
         new_token.args.count = args_split.count - 1;
         for *arg : new_token.args {
             arg.* = String.trim(arg.*);
+        }
+
+        // combo param names
+        if new_token.type == {
+            case .Resistor_Capacitor_Series;
+                param_names : [..] string;
+                array_add(*param_names, tprint("%_res_value", new_token.name));
+                array_add(*param_names, tprint("%_cap_value", new_token.name));
+                new_token.param_names = param_names;
+            case .Resistor_Capacitor_Parallel;
+                param_names : [..] string;
+                array_add(*param_names, tprint("%_res_value", new_token.name));
+                array_add(*param_names, tprint("%_cap_value", new_token.name));
+                new_token.param_names = param_names;
         }
 
         if (new_token.type == .Custom) {

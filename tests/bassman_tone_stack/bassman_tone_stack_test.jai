@@ -12,7 +12,7 @@ main :: () {
     params := Params.{
         Vin_Res3m_res_value = 12.5e3,
         Res2_Res3p_value = 512.5e3,
-        Res1p_Res1m_Cap1_res_value = 250.0e3,
+        Res1p_Res1m_value = 250.0e3,
     };
     impedances: Impedances;
     calc_impedances(*impedances, fs, params);
