@@ -1,4 +1,4 @@
-#include "reductions_test.h"
+#include "reductions_circuit.h"
 
 #include "../chowdsp_wdf.h"
 #include <iostream>
@@ -17,8 +17,8 @@ struct Reference_WDF
     chowdsp::wdft::WDFSeriesT<float, decltype (S1), decltype (R3)> S2 { S1, R3 };
 
     chowdsp::wdft::ResistorT<float> Rl { 100.0e3f };
-    chowdsp::wdft::WDFParallelT<float, decltype (S2), decltype (Rl)> P1 { S2, Rl };
-    chowdsp::wdft::IdealVoltageSourceT<float, decltype (P1)> Vin { P1 };
+    chowdsp::wdft::WDFSeriesT<float, decltype (S2), decltype (Rl)> Sl { S2, Rl };
+    chowdsp::wdft::IdealVoltageSourceT<float, decltype (Sl)> Vin { Sl };
 
     void prepare (float fs)
     {
@@ -27,15 +27,15 @@ struct Reference_WDF
     float process (float V)
     {
         Vin.setVoltage (V);
-        Vin.incident (P1.reflected());
-        P1.incident (Vin.reflected());
+        Vin.incident (Sl.reflected());
+        Sl.incident (Vin.reflected());
         return chowdsp::wdft::voltage<float> (Rl);
     }
 };
 
 int main()
 {
-    std::cout << "RC Lowpass test\n";
+    std::cout << "Reductions Circuit test\n";
 
     static constexpr float fs = 48000.0f;
 

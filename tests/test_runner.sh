@@ -112,7 +112,7 @@ else
    test bassman_tone_stack cpp jai
    test baxandall_eq cpp jai
    test pulse_shaper cpp
-   test reductions_test cpp
+   test reductions_circuit cpp jai
 fi
 
 if [[ "$*" = *bad_configs* ]]; then

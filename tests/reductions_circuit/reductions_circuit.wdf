@@ -1,6 +1,6 @@
 circuit:
 IVs(Vin);
-    Parallel(P1);
+    Series(Sl);
         Series(S2);
             Series(S1);
                 R(R1, 1k);
