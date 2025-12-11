@@ -31,6 +31,18 @@ Token :: struct {
     index: s64 = 0;
     param_names: [] string;
 
+    Param_Calc_Info :: struct {
+        Calc_Type :: enum {
+            Sum;
+            Reciprocal_Sum;
+        }
+        param_name_idx: s64 = -1;
+        calc: Calc_Type;
+        child_left: *Param_Calc_Info = null;
+        child_right: *Param_Calc_Info = null;
+    }
+    param_calc_info: [] Param_Calc_Info;
+
     Custom_Token_Info :: struct {
         params_type: string;
         state_type: string;
@@ -40,7 +52,7 @@ Token :: struct {
         incident_name: string; // only if not root
         reflected_name: string; // only if not root
     }
-    custom_info: *Custom_Token_Info;
+    custom_info: *Custom_Token_Info = null;
 }
 
 parse_custom_token_args :: (args: [] string) -> *Token.Custom_Token_Info {
@@ -164,7 +176,7 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             case .Resistor; #through;
             case .Capacitor; #through;
             case .Inductor;
-            param_names : [..] string;
+                param_names : [..] string;
                 array_add(*param_names, tprint("%_value", new_token.name));
                 new_token.param_names = param_names;
 
@@ -174,6 +186,10 @@ parse_circuit :: (circuit_str: string) -> [] Token {
                 array_add(*param_names, tprint("%_res_value", new_token.name));
                 array_add(*param_names, tprint("%_cap_value", new_token.name));
                 new_token.param_names = param_names;
+        }
+        array_resize(*new_token.param_calc_info, new_token.param_names.count);
+        for name,idx : new_token.param_names {
+            new_token.param_calc_info[idx].param_name_idx = idx;
         }
 
         if (new_token.type == .Custom) {
