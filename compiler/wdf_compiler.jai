@@ -1013,10 +1013,10 @@ generate_updater :: (tokens: [] Token,
     if global_args.lang == {
         case "cpp";
             array_add(*impedance_updates, "[[maybe_unused]] static constexpr auto sum = [] (auto a, auto b) { return a + b; };");
-            array_add(*impedance_updates, "[[maybe_unused]] static constexpr auto recip_sum = [] (auto a, auto b) { return (a + b) / (a * b); };");
+            array_add(*impedance_updates, "[[maybe_unused]] static constexpr auto recip_sum = [] (auto a, auto b) { return (a * b) / (a + b); };");
         case "jai";
             array_add(*impedance_updates, "sum :: (a: $T, b: T) -> T { return a + b; }");
-            array_add(*impedance_updates, "recip_sum :: (a: $T, b: T) -> T { return (a + b) / (a * b); }");
+            array_add(*impedance_updates, "recip_sum :: (a: $T, b: T) -> T { return (a * b) / (a + b); }");
     }
     array_add(*impedance_updates, ""); // line break
     array_add(*impedance_updates, write_define("T", "1 / fs"));
@@ -1301,7 +1301,7 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
         update_param_name_idxs(info.child_right, shift);
     }
 
-    make_r_series :: (original_token: Token, idx: s64, res1: Token, res2: Token) -> Token {
+    make_r :: (original_token: Token, idx: s64, res1: Token, res2: Token, calc: Token.Param_Calc_Info.Calc_Type) -> Token {
         new_args : [] string;
         array_resize(*new_args, res1.args.count + res2.args.count);
         for idx : 0..res1.args.count-1 { new_args[idx] = res1.args[idx]; }
@@ -1316,7 +1316,7 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
         param_calc_info: [] Token.Param_Calc_Info;
         array_resize(*param_calc_info, 1);
         param_calc_info[0] = .{
-            calc = .Sum,
+            calc = calc,
             child_left = *res1.param_calc_info[0],
             child_right = *res2.param_calc_info[0],
         };
@@ -1428,7 +1428,7 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
 
                     // R + R
                     if (child0.type == .Resistor && child1.type == .Resistor && ! is_child_output) {
-                        tokens[idx] = make_r_series(token, idx, child0, child1);
+                        tokens[idx] = make_r(token, idx, child0, child1, .Sum);
                         remove_token(*tokens, token.children[1]);
                         remove_token(*tokens, token.children[0]);
                         reductions_count += 1;
@@ -1457,6 +1457,14 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
                         output_info := String.split(output, ":");
                         is_child_output |= child0.name == output_info[1];
                         is_child_output |= child1.name == output_info[1];
+                    }
+
+                    // R || R
+                    if (child0.type == .Resistor && child1.type == .Resistor && ! is_child_output) {
+                        tokens[idx] = make_r(token, idx, child0, child1, .Reciprocal_Sum);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
                     }
 
                     // RCParallel

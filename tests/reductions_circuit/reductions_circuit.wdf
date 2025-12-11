@@ -1,12 +1,16 @@
 circuit:
 IVs(Vin);
     Series(Sl);
-        Series(S2);
-            Series(S1);
-                R(R1, 1k);
-                R(R2, ?);
-            R(R3, 4k);
         R(Rl, 100k);
+        Parallel(P2);
+            Series(S2);
+                Series(S1);
+                    R(R1, 1k);
+                    R(R2, ?);
+                R(R3, 4k);
+            Parallel(P1);
+                R(R4, ?);
+                R(R5, 3k);
 
 inputs:
 Vin

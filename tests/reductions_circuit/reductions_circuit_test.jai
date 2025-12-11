@@ -10,7 +10,12 @@ main :: () {
     fs : float32 : 48000.0;
 
     impedances: Impedances;
-    calc_impedances(*impedances, fs, .{ R2_value = 5.0e3 });
+    calc_impedances(*impedances,
+                    fs,
+                    .{
+                        R2_value = 5.0e3,
+                        R4_value = 10.0e3,
+                    });
     state: State;
 
     data_str, _ := read_entire_file("data.bin");

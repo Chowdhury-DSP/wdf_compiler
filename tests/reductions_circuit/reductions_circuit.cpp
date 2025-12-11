@@ -16,8 +16,14 @@ struct Reference_WDF
     chowdsp::wdft::ResistorT<float> R3 { 4.0e3f };
     chowdsp::wdft::WDFSeriesT<float, decltype (S1), decltype (R3)> S2 { S1, R3 };
 
+    chowdsp::wdft::ResistorT<float> R4 { 10.0e3f };
+    chowdsp::wdft::ResistorT<float> R5 { 3.0e3f };
+    chowdsp::wdft::WDFParallelT<float, decltype (R4), decltype (R5)> P1 { R4, R5 };
+
+    chowdsp::wdft::WDFParallelT<float, decltype (S2), decltype (P1)> P2 { S2, P1 };
+
     chowdsp::wdft::ResistorT<float> Rl { 100.0e3f };
-    chowdsp::wdft::WDFSeriesT<float, decltype (S2), decltype (Rl)> Sl { S2, Rl };
+    chowdsp::wdft::WDFSeriesT<float, decltype (Rl), decltype (P2)> Sl { Rl, P2 };
     chowdsp::wdft::IdealVoltageSourceT<float, decltype (Sl)> Vin { Sl };
 
     void prepare (float fs)
@@ -43,7 +49,13 @@ int main()
     ref.prepare (fs);
 
     Impedances impedances {};
-    calc_impedances (impedances, fs, { .R2_value = ref.R2.wdf.R });
+    calc_impedances (
+        impedances,
+        fs,
+        {
+            .R2_value = ref.R2.wdf.R,
+            .R4_value = ref.R4.wdf.R,
+    });
     State state {};
 
     static constexpr int N = 100;
