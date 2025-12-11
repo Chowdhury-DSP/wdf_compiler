@@ -159,13 +159,16 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             arg.* = String.trim(arg.*);
         }
 
-        // combo param names
+        // param names
         if new_token.type == {
-            case .Resistor_Capacitor_Series;
-                param_names : [..] string;
-                array_add(*param_names, tprint("%_res_value", new_token.name));
-                array_add(*param_names, tprint("%_cap_value", new_token.name));
+            case .Resistor; #through;
+            case .Capacitor; #through;
+            case .Inductor;
+            param_names : [..] string;
+                array_add(*param_names, tprint("%_value", new_token.name));
                 new_token.param_names = param_names;
+
+            case .Resistor_Capacitor_Series; #through;
             case .Resistor_Capacitor_Parallel;
                 param_names : [..] string;
                 array_add(*param_names, tprint("%_res_value", new_token.name));

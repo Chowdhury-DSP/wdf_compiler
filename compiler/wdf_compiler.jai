@@ -803,11 +803,11 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
 
         if token.type == {
             case .Resistor;
-                write_param(*params_vars, token);
+                write_param_named(*params_vars, token, token.param_names[0]);
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Capacitor;
-                write_param(*params_vars, token, 0);
+                write_param_named(*params_vars, token, token.param_names[0]);
                 array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
@@ -821,7 +821,7 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Inductor;
-                write_param(*params_vars, token);
+                write_param_named(*params_vars, token, token.param_names[0]);
                 array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
@@ -1012,13 +1012,15 @@ generate_updater :: (tokens: [] Token,
         if token.type == {
             case .Resistor;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("params.%1_value", token.name), required_impedances.*, *available_values);
+                array_add(*impedance_updates, write_define(tprint("%1_value", token.name), tprint("params.%1;", token.param_names[0])));
+                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("%1_value", token.name), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Capacitor;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("2 * params.%1_value * fs", token.name), required_impedances.*, *available_values);
+                array_add(*impedance_updates, write_define(tprint("%1_value", token.name), tprint("params.%1;", token.param_names[0])));
+                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("2 * %1_value * fs", token.name), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("1 / %1_G", token.name), required_impedances.*, *available_values);
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
@@ -1032,21 +1034,26 @@ generate_updater :: (tokens: [] Token,
 
             case .Inductor;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("2 * params.%1_value * fs", token.name), required_impedances.*, *available_values);
+                array_add(*impedance_updates, write_define(tprint("%1_value", token.name), tprint("params.%1;", token.param_names[0])));
+                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("2 * %1_value * fs", token.name), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistor_Capacitor_Series;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("(T / (2 * params.%2)) + params.%1", token.param_names[0], token.param_names[1]), required_impedances.*, *available_values);
+                array_add(*impedance_updates, write_define(tprint("%1_res_value", token.name), tprint("params.%1;", token.param_names[0])));
+                array_add(*impedance_updates, write_define(tprint("%1_cap_value", token.name), tprint("params.%1;", token.param_names[1])));
+                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("(T / (2 * %1_cap_value)) + %1_res_value", token.name), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
-                array_add(*impedance_updates, tprint("impedances.%1_T_over_T_plus_2RC = T / (2 * params.%3 * params.%2 + T);\n", token.name, token.param_names[0], token.param_names[1]));
+                array_add(*impedance_updates, tprint("impedances.%1_T_over_T_plus_2RC = T / (2 * %1_cap_value * %1_res_value + T);\n", token.name));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistor_Capacitor_Parallel;
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                array_add(*impedance_updates, write_define(tprint("%1_2RC", token.name), tprint("2 * params.%2 * params.%1;", token.param_names[0], token.param_names[1])));
-                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("params.%2 * T / (%1_2RC + T)", token.name, token.param_names[0]), required_impedances.*, *available_values);
+                array_add(*impedance_updates, write_define(tprint("%1_res_value", token.name), tprint("params.%1;", token.param_names[0])));
+                array_add(*impedance_updates, write_define(tprint("%1_cap_value", token.name), tprint("params.%1;", token.param_names[1])));
+                array_add(*impedance_updates, write_define(tprint("%1_2RC", token.name), tprint("2 * %1_cap_value * %1_res_value;", token.name)));
+                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("%1_res_value * T / (%1_2RC + T)", token.name), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
                 array_add(*impedance_updates, tprint("impedances.%1_twoRC_over_twoRC_plus_T = %1_2RC / (%1_2RC + T);\n", token.name));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
@@ -1307,6 +1314,7 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
     tokens := array_copy(original_tokens);
 
     reductions_count := 1;
+    reduction_iters := 0;
     total_reductions := 0;
     while reductions_count > 0 {
         reductions_count = 0;
@@ -1367,10 +1375,13 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
             }
             idx += 1;
         }
+        reduction_iters += 1;
         total_reductions += reductions_count;
     }
 
-    verbose_print("Performed % reductions\n", total_reductions);
+    verbose_print("Performed %1 reductions over %2 iterations\n",
+                  total_reductions,
+                  reduction_iters);
 
     return tokens;
 }
