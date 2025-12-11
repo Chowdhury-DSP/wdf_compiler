@@ -9,6 +9,7 @@
 
 struct Reference_WDF
 {
+    // Resistor combos
     chowdsp::wdft::ResistorT<float> R1 { 1.0e3f };
     chowdsp::wdft::ResistorT<float> R2 { 5.0e3f };
     chowdsp::wdft::WDFSeriesT<float, decltype (R1), decltype (R2)> S1 { R1, R2 };
@@ -22,8 +23,26 @@ struct Reference_WDF
 
     chowdsp::wdft::WDFParallelT<float, decltype (S2), decltype (P1)> P2 { S2, P1 };
 
+    // Capacitor combos
+    chowdsp::wdft::CapacitorT<float> C1 { 1.0e-6f };
+    chowdsp::wdft::CapacitorT<float> C2 { 5.0e-6f };
+    chowdsp::wdft::WDFSeriesT<float, decltype (C1), decltype (C2)> S4 { C1, C2 };
+
+    chowdsp::wdft::CapacitorT<float> C3 { 4.0e-9f };
+    chowdsp::wdft::WDFSeriesT<float, decltype (S4), decltype (C3)> S5 { S4, C3 };
+
+    chowdsp::wdft::CapacitorT<float> C4 { 10.0e-9f };
+    chowdsp::wdft::CapacitorT<float> C5 { 3.0e-6f };
+    chowdsp::wdft::WDFParallelT<float, decltype (C4), decltype (C5)> P3 { C4, C5 };
+
+    chowdsp::wdft::WDFParallelT<float, decltype (S5), decltype (P3)> P4 { S5, P3 };
+
+    // join resistor combos + capacitor combos
+    chowdsp::wdft::WDFSeriesT<float, decltype (P2), decltype (P4)> S3 { P2, P4 };
+
+    // Load
     chowdsp::wdft::ResistorT<float> Rl { 100.0e3f };
-    chowdsp::wdft::WDFSeriesT<float, decltype (Rl), decltype (P2)> Sl { Rl, P2 };
+    chowdsp::wdft::WDFSeriesT<float, decltype (Rl), decltype (S3)> Sl { Rl, S3 };
     chowdsp::wdft::IdealVoltageSourceT<float, decltype (Sl)> Vin { Sl };
 
     void prepare (float fs)
@@ -55,6 +74,8 @@ int main()
         {
             .R2_value = ref.R2.wdf.R,
             .R4_value = ref.R4.wdf.R,
+            .C2_value = ref.C2.C_value,
+            .C4_value = ref.C4.C_value,
     });
     State state {};
 

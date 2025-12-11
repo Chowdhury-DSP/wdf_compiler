@@ -15,6 +15,8 @@ main :: () {
                     .{
                         R2_value = 5.0e3,
                         R4_value = 10.0e3,
+                        C2_value = 5.0e-6,
+                        C4_value = 10.0e-9,
                     });
     state: State;
 

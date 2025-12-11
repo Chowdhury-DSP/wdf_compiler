@@ -807,7 +807,7 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Capacitor;
-                write_param_named(*params_vars, token, token.param_names[0]);
+                for name,idx : token.param_names { write_param_named(*params_vars, token, name, idx); }
                 array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
@@ -826,15 +826,13 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistor_Capacitor_Series;
-                write_param_named(*params_vars, token, token.param_names[0], 0);
-                write_param_named(*params_vars, token, token.param_names[1], 1);
+                for name,idx : token.param_names { write_param_named(*params_vars, token, name, idx); }
                 array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
                 array_add(*impedance_vars, write_struct_field(tprint("%1_T_over_T_plus_2RC", token.name)));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistor_Capacitor_Parallel;
-                write_param_named(*params_vars, token, token.param_names[0], 0);
-                write_param_named(*params_vars, token, token.param_names[1], 1);
+                for name,idx : token.param_names { write_param_named(*params_vars, token, name, idx); }
                 array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
                 array_add(*impedance_vars, write_struct_field(tprint("%1_twoRC_over_twoRC_plus_T", token.name)));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
@@ -1291,6 +1289,14 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
         array_ordered_remove_by_index(tokens, index);
     }
 
+    join_arrays :: (arr1: [] $T, arr2: [] T) -> [] T {
+        new_arr : [] string;
+        array_resize(*new_arr, arr1.count + arr2.count);
+        for idx : 0..arr1.count-1 { new_arr[idx] = arr1[idx]; }
+        for idx : arr1.count..new_arr.count-1 { new_arr[idx] = arr2[idx - arr1.count]; }
+        return new_arr;
+    }
+
     update_param_name_idxs :: (info: *Token.Param_Calc_Info, shift: s64) {
         if (info.param_name_idx >= 0) {
             info.param_name_idx += shift;
@@ -1301,29 +1307,22 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
         update_param_name_idxs(info.child_right, shift);
     }
 
-    make_r :: (original_token: Token, idx: s64, res1: Token, res2: Token, calc: Token.Param_Calc_Info.Calc_Type) -> Token {
-        new_args : [] string;
-        array_resize(*new_args, res1.args.count + res2.args.count);
-        for idx : 0..res1.args.count-1 { new_args[idx] = res1.args[idx]; }
-        for idx : res1.args.count..new_args.count-1 { new_args[idx] = res2.args[idx - res1.args.count]; }
-
-        param_names : [] string;
-        array_resize(*param_names, res1.param_names.count + res2.param_names.count);
-        for idx : 0..res1.param_names.count-1 { param_names[idx] = res1.param_names[idx]; }
-        for idx : res1.param_names.count..param_names.count-1 { param_names[idx] = res2.param_names[idx - res1.param_names.count]; }
-        update_param_name_idxs(*res2.param_calc_info[0], res1.param_names.count);
+    make_1port :: (original_token: Token, idx: s64, e1: Token, e2: Token, type: Token_Type, calc: Token.Param_Calc_Info.Calc_Type) -> Token {
+        new_args := join_arrays (e1.args, e2.args);
+        param_names := join_arrays (e1.param_names, e2.param_names);
+        update_param_name_idxs(*e2.param_calc_info[0], e1.param_names.count);
 
         param_calc_info: [] Token.Param_Calc_Info;
         array_resize(*param_calc_info, 1);
         param_calc_info[0] = .{
             calc = calc,
-            child_left = *res1.param_calc_info[0],
-            child_right = *res2.param_calc_info[0],
+            child_left = *e1.param_calc_info[0],
+            child_right = *e2.param_calc_info[0],
         };
 
         return  Token.{
             name = original_token.name,
-            type = .Resistor,
+            type = type,
             args = new_args,
             parent = original_token.parent,
             tree_depth = original_token.tree_depth,
@@ -1333,56 +1332,19 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
         };
     }
 
-    make_rc_series :: (original_token: Token, idx: s64, res: Token, cap: Token) -> Token {
-        new_args : [] string;
-        array_resize(*new_args, 2);
-        new_args[0] = res.args[0];
-        new_args[1] = cap.args[0];
+    make_rc :: (original_token: Token, idx: s64, res: Token, cap: Token, type: Token_Type) -> Token {
+        new_args := join_arrays (res.args, cap.args);
+        param_names := join_arrays (res.param_names, cap.param_names);
+        update_param_name_idxs(*cap.param_calc_info[0], res.param_names.count);
 
-        param_names : [] string;
-        array_resize(*param_names, 2);
-        param_names[0] = tprint("%_value", res.name);
-        param_names[1] = tprint("%_value", cap.name);
-
-        // @TODO: this should be more like a "deep copy"?
         param_calc_info: [] Token.Param_Calc_Info;
-        array_resize(*param_calc_info, param_names.count);
-        for name,idx : param_names {
-            param_calc_info[idx].param_name_idx = idx;
-        }
+        array_resize(*param_calc_info, 2);
+        param_calc_info[0] = res.param_calc_info[0];
+        param_calc_info[1] = cap.param_calc_info[0];
 
         return  Token.{
             name = original_token.name,
-            type = .Resistor_Capacitor_Series,
-            args = new_args,
-            parent = original_token.parent,
-            tree_depth = original_token.tree_depth,
-            index = idx,
-            param_names = param_names,
-            param_calc_info = param_calc_info,
-        };
-    }
-    make_rc_parallel :: (original_token: Token, idx: s64, res: Token, cap: Token) -> Token {
-        new_args : [] string;
-        array_resize(*new_args, 2);
-        new_args[0] = res.args[0];
-        new_args[1] = cap.args[0];
-
-        param_names : [] string;
-        array_resize(*param_names, 2);
-        param_names[0] = tprint("%_value", res.name);
-        param_names[1] = tprint("%_value", cap.name);
-
-        // @TODO: this should be more like a "deep copy"?
-        param_calc_info: [] Token.Param_Calc_Info;
-        array_resize(*param_calc_info, param_names.count);
-        for name,idx : param_names {
-            param_calc_info[idx].param_name_idx = idx;
-        }
-
-        return  Token.{
-            name = original_token.name,
-            type = .Resistor_Capacitor_Parallel,
+            type = type,
             args = new_args,
             parent = original_token.parent,
             tree_depth = original_token.tree_depth,
@@ -1392,8 +1354,6 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
         };
     }
 
-    // @TODO: what if we want to combine circuits, where 1 element is a parameter?
-    // (e.g. 2 resistors in parallel, where 1 is a potentiometer)
     // @TODO: what to do if combined element is an input?
 
     // For the reduction to work, each element's children need to have higher indexes
@@ -1428,7 +1388,15 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
 
                     // R + R
                     if (child0.type == .Resistor && child1.type == .Resistor && ! is_child_output) {
-                        tokens[idx] = make_r(token, idx, child0, child1, .Sum);
+                        tokens[idx] = make_1port(token, idx, child0, child1, .Resistor, .Sum);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+
+                    // C + C
+                    if (child0.type == .Capacitor && child1.type == .Capacitor && ! is_child_output) {
+                        tokens[idx] = make_1port(token, idx, child0, child1, .Capacitor, .Reciprocal_Sum);
                         remove_token(*tokens, token.children[1]);
                         remove_token(*tokens, token.children[0]);
                         reductions_count += 1;
@@ -1436,13 +1404,13 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
 
                     // RCSeries
                     if (child0.type == .Resistor && child1.type == .Capacitor && ! is_child_output) {
-                        tokens[idx] = make_rc_series(token, idx, child0, child1);
+                        tokens[idx] = make_rc(token, idx, child0, child1, .Resistor_Capacitor_Series);
                         remove_token(*tokens, token.children[1]);
                         remove_token(*tokens, token.children[0]);
                         reductions_count += 1;
                     }
                     if (child1.type == .Resistor && child0.type == .Capacitor && ! is_child_output) {
-                        tokens[idx] = make_rc_series(token, idx, child1, child0);
+                        tokens[idx] = make_rc(token, idx, child1, child0, .Resistor_Capacitor_Series);
                         remove_token(*tokens, token.children[1]);
                         remove_token(*tokens, token.children[0]);
                         reductions_count += 1;
@@ -1461,7 +1429,15 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
 
                     // R || R
                     if (child0.type == .Resistor && child1.type == .Resistor && ! is_child_output) {
-                        tokens[idx] = make_r(token, idx, child0, child1, .Reciprocal_Sum);
+                        tokens[idx] = make_1port(token, idx, child0, child1, .Resistor, .Reciprocal_Sum);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+
+                    // C || C
+                    if (child0.type == .Capacitor && child1.type == .Capacitor && ! is_child_output) {
+                        tokens[idx] = make_1port(token, idx, child0, child1, .Capacitor, .Sum);
                         remove_token(*tokens, token.children[1]);
                         remove_token(*tokens, token.children[0]);
                         reductions_count += 1;
@@ -1469,13 +1445,13 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
 
                     // RCParallel
                     if (child0.type == .Resistor && child1.type == .Capacitor && ! is_child_output) {
-                        tokens[idx] = make_rc_parallel(token, idx, child0, child1);
+                        tokens[idx] = make_rc(token, idx, child0, child1, .Resistor_Capacitor_Parallel);
                         remove_token(*tokens, token.children[1]);
                         remove_token(*tokens, token.children[0]);
                         reductions_count += 1;
                     }
                     if (child1.type == .Resistor && child0.type == .Capacitor && ! is_child_output) {
-                        tokens[idx] = make_rc_parallel(token, idx, child1, child0);
+                        tokens[idx] = make_rc(token, idx, child1, child0, .Resistor_Capacitor_Parallel);
                         remove_token(*tokens, token.children[1]);
                         remove_token(*tokens, token.children[0]);
                         reductions_count += 1;
