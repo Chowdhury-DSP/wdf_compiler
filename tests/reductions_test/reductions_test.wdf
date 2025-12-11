@@ -1,0 +1,15 @@
+circuit:
+IVs(Vin);
+    Parallel(P1);
+        Series(S2);
+            Series(S1);
+                R(R1, 1k);
+                R(R2, ?);
+            R(R3, 4k);
+        R(Rl, 100k);
+
+inputs:
+Vin
+
+outputs:
+V:Rl

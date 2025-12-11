@@ -803,7 +803,7 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
 
         if token.type == {
             case .Resistor;
-                write_param_named(*params_vars, token, token.param_names[0]);
+                for name,idx : token.param_names { write_param_named(*params_vars, token, name, idx); }
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Capacitor;
@@ -992,10 +992,18 @@ generate_updater :: (tokens: [] Token,
 
     param_calc :: (token: Token, param_calc_info: Token.Param_Calc_Info) -> string {
         if (param_calc_info.param_name_idx >= 0) {
-            return tprint("params.%1;", token.param_names[param_calc_info.param_name_idx]);
+            return tprint("params.%1", token.param_names[param_calc_info.param_name_idx]);
         }
 
-        return ""; // @TODO
+        left_calc := param_calc(token, param_calc_info.child_left);
+        right_calc := param_calc(token, param_calc_info.child_right);
+
+        if #complete param_calc_info.calc == {
+            case .Sum;
+                return tprint("sum(%1, %2)", left_calc, right_calc);
+            case .Reciprocal_Sum;
+                return tprint("recip_sum(%1, %2)", left_calc, right_calc);
+        }
     }
 
     available_values : [..] string;
@@ -1283,16 +1291,61 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
         array_ordered_remove_by_index(tokens, index);
     }
 
+    update_param_name_idxs :: (info: *Token.Param_Calc_Info, shift: s64) {
+        if (info.param_name_idx >= 0) {
+            info.param_name_idx += shift;
+            return;
+        }
+
+        update_param_name_idxs(info.child_left, shift);
+        update_param_name_idxs(info.child_right, shift);
+    }
+
+    make_r_series :: (original_token: Token, idx: s64, res1: Token, res2: Token) -> Token {
+        new_args : [] string;
+        array_resize(*new_args, res1.args.count + res2.args.count);
+        for idx : 0..res1.args.count-1 { new_args[idx] = res1.args[idx]; }
+        for idx : res1.args.count..new_args.count-1 { new_args[idx] = res2.args[idx - res1.args.count]; }
+
+        param_names : [] string;
+        array_resize(*param_names, res1.param_names.count + res2.param_names.count);
+        for idx : 0..res1.param_names.count-1 { param_names[idx] = res1.param_names[idx]; }
+        for idx : res1.param_names.count..param_names.count-1 { param_names[idx] = res2.param_names[idx - res1.param_names.count]; }
+        update_param_name_idxs(*res2.param_calc_info[0], res1.param_names.count);
+
+        param_calc_info: [] Token.Param_Calc_Info;
+        array_resize(*param_calc_info, 1);
+        param_calc_info[0] = .{
+            calc = .Sum,
+            child_left = *res1.param_calc_info[0],
+            child_right = *res2.param_calc_info[0],
+        };
+
+        return  Token.{
+            name = original_token.name,
+            type = .Resistor,
+            args = new_args,
+            parent = original_token.parent,
+            tree_depth = original_token.tree_depth,
+            index = idx,
+            param_names = param_names,
+            param_calc_info = param_calc_info,
+        };
+    }
+
     make_rc_series :: (original_token: Token, idx: s64, res: Token, cap: Token) -> Token {
-        new_args : [..] string;
-        array_add(*new_args, res.args[0]);
-        array_add(*new_args, cap.args[0]);
-        param_names : [..] string;
-        array_add(*param_names, tprint("%_value", res.name));
-        array_add(*param_names, tprint("%_value", cap.name));
+        new_args : [] string;
+        array_resize(*new_args, 2);
+        new_args[0] = res.args[0];
+        new_args[1] = cap.args[0];
+
+        param_names : [] string;
+        array_resize(*param_names, 2);
+        param_names[0] = tprint("%_value", res.name);
+        param_names[1] = tprint("%_value", cap.name);
 
         // @TODO: this should be more like a "deep copy"?
-        param_calc_info: [..] Token.Param_Calc_Info;
+        param_calc_info: [] Token.Param_Calc_Info;
         array_resize(*param_calc_info, param_names.count);
         for name,idx : param_names {
             param_calc_info[idx].param_name_idx = idx;
@@ -1310,15 +1363,18 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
         };
     }
     make_rc_parallel :: (original_token: Token, idx: s64, res: Token, cap: Token) -> Token {
-        new_args : [..] string;
-        array_add(*new_args, res.args[0]);
-        array_add(*new_args, cap.args[0]);
-        param_names : [..] string;
-        array_add(*param_names, tprint("%_value", res.name));
-        array_add(*param_names, tprint("%_value", cap.name));
+        new_args : [] string;
+        array_resize(*new_args, 2);
+        new_args[0] = res.args[0];
+        new_args[1] = cap.args[0];
+
+        param_names : [] string;
+        array_resize(*param_names, 2);
+        param_names[0] = tprint("%_value", res.name);
+        param_names[1] = tprint("%_value", cap.name);
 
         // @TODO: this should be more like a "deep copy"?
-        param_calc_info: [..] Token.Param_Calc_Info;
+        param_calc_info: [] Token.Param_Calc_Info;
         array_resize(*param_calc_info, param_names.count);
         for name,idx : param_names {
             param_calc_info[idx].param_name_idx = idx;
@@ -1368,6 +1424,14 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
                         output_info := String.split(output, ":");
                         is_child_output |= child0.name == output_info[1];
                         is_child_output |= child1.name == output_info[1];
+                    }
+
+                    // R + R
+                    if (child0.type == .Resistor && child1.type == .Resistor && ! is_child_output) {
+                        tokens[idx] = make_r_series(token, idx, child0, child1);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
                     }
 
                     // RCSeries
