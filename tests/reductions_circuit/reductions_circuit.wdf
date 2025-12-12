@@ -1,0 +1,41 @@
+circuit:
+IVs(Vin);
+    Series(Sl);
+        R(Rl, 100k);
+        Series(S8);
+            Parallel(P7);
+                C(C8, 100n);
+                Parallel(P6);
+                    R(R8, 100k);
+                    Parallel(P5);
+                        R(R7, 10k);
+                        C(C7, 10u);
+            Series(S7);
+                C(C6, 4u);
+                Series(S6);
+                    R(R6, 10k);
+                    Series(S3);
+                        Parallel(P2);
+                            Series(S2);
+                                Series(S1);
+                                    R(R1, 1k);
+                                    R(R2, ?);
+                                R(R3, 4k);
+                            Parallel(P1);
+                                R(R4, ?);
+                                R(R5, 3k);
+                        Parallel(P4);
+                            Series(S5);
+                                Series(S4);
+                                    C(C1, 1u);
+                                    C(C2, ?);
+                                C(C3, 4n);
+                            Parallel(P3);
+                                C(C4, ?);
+                                C(C5, 3u);
+
+inputs:
+Vin
+
+outputs:
+V:Rl

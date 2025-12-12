@@ -29,6 +29,19 @@ Token :: struct {
     children: [..] s64;
     input: string;
     index: s64 = 0;
+    param_names: [] string;
+
+    Param_Calc_Info :: struct {
+        Calc_Type :: enum {
+            Sum;
+            Reciprocal_Sum;
+        }
+        param_name_idx: s64 = -1;
+        calc: Calc_Type;
+        child_left: *Param_Calc_Info = null;
+        child_right: *Param_Calc_Info = null;
+    }
+    param_calc_info: [] Param_Calc_Info;
 
     Custom_Token_Info :: struct {
         params_type: string;
@@ -39,7 +52,7 @@ Token :: struct {
         incident_name: string; // only if not root
         reflected_name: string; // only if not root
     }
-    custom_info: *Custom_Token_Info;
+    custom_info: *Custom_Token_Info = null;
 }
 
 parse_custom_token_args :: (args: [] string) -> *Token.Custom_Token_Info {
@@ -156,6 +169,36 @@ parse_circuit :: (circuit_str: string) -> [] Token {
         new_token.args.count = args_split.count - 1;
         for *arg : new_token.args {
             arg.* = String.trim(arg.*);
+        }
+
+        // param names
+        if new_token.type == {
+            case .Resistor; #through;
+            case .Capacitor; #through;
+            case .Inductor;
+                param_names : [] string;
+                array_resize(*param_names, 1);
+                param_names[0] = tprint("%_value", new_token.name);
+                new_token.param_names = param_names;
+
+            case .Resistor_Capacitor_Series; #through;
+            case .Resistor_Capacitor_Parallel;
+                param_names : [] string;
+                array_resize(*param_names, 2);
+                param_names[0] = tprint("%_res_value", new_token.name);
+                param_names[1] = tprint("%_cap_value", new_token.name);
+                new_token.param_names = param_names;
+        }
+        array_resize(*new_token.param_calc_info, new_token.param_names.count);
+        for name,idx : new_token.param_names {
+            new_token.param_calc_info[idx].param_name_idx = idx;
+        }
+        if new_token.param_names.count > 0 { // @TODO: do we want to do this for all elements?
+            old_count := new_token.args.count;
+            array_resize(*new_token.args, new_token.param_names.count);
+            for idx : old_count..new_token.args.count-1 {
+                new_token.args[idx] = "?";
+            }
         }
 
         if (new_token.type == .Custom) {
