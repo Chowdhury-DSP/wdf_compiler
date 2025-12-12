@@ -8,7 +8,7 @@ error_assert :: (cond: bool, message: string) #expand {
 #if #exists(global_args ) {
     verbose_print :: (format_string: string, args: .. Any) {
         if (global_args.verbose) {
-            print(format_string, args);
+            print(format_string, ..args);
         }
     }
 } else {

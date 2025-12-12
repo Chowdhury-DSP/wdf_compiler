@@ -286,7 +286,6 @@ namespace wdft
 
         WDFMembers<T> wdf;
 
-    private:
         T C_value = (T) 1.0e-6;
         T z = (T) 0.0;
 
