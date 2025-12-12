@@ -4,17 +4,6 @@
 #include <iostream>
 #include <fstream>
 
-// struct Params {
-//     static constexpr float lfc_cap_value = 4.7e-09;
-//     static constexpr float r_series_value = 1.0e+04;
-//     static constexpr float hfl_res_value = 8.0e+04;
-//     static constexpr float hfl_cap_value = 2.7e-09;
-//     static constexpr float hfc_cap_value = 3.3e-06;
-//     static constexpr float r_shunt_value = 4.674e+03;
-//     static constexpr float lfl_res_value = 1.5e+04;
-//     static constexpr float lfl_cap_value = 1.5e-07;
-// };
-
 struct Reference_WDF
 {
     chowdsp::wdft::ResistorCapacitorParallelT<float> lfl_res_cap { 15.0e3f, 0.15e-6f };
