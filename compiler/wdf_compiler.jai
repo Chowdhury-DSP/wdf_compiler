@@ -1354,6 +1354,41 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
         };
     }
 
+    rc_add :: (original_token: Token, idx: s64, rc: Token, new: Token) -> Token {
+        new_args := join_arrays (rc.args, new.args);
+        param_names := join_arrays (rc.param_names, new.param_names);
+        update_param_name_idxs(*new.param_calc_info[0], rc.param_names.count);
+
+        param_calc_info: [] Token.Param_Calc_Info;
+        array_resize(*param_calc_info, 2);
+        if (new.type == .Resistor) {
+            param_calc_info[0] = .{
+                calc = ifx rc.type == .Resistor_Capacitor_Series then .Sum else .Reciprocal_Sum,
+                child_left = *rc.param_calc_info[0],
+                child_right = *new.param_calc_info[0],
+            };
+            param_calc_info[1] = rc.param_calc_info[1];
+        } else if (new.type == .Capacitor) {
+            param_calc_info[0] = rc.param_calc_info[0];
+            param_calc_info[1] = .{
+                calc = ifx rc.type == .Resistor_Capacitor_Series then .Reciprocal_Sum else .Sum,
+                child_left = *rc.param_calc_info[1],
+                child_right = *new.param_calc_info[0],
+            };
+        }
+
+        return  Token.{
+            name = original_token.name,
+            type = rc.type,
+            args = new_args,
+            parent = original_token.parent,
+            tree_depth = original_token.tree_depth,
+            index = idx,
+            param_names = param_names,
+            param_calc_info = param_calc_info,
+        };
+    }
+
     // @TODO: what to do if combined element is an input?
 
     // For the reduction to work, each element's children need to have higher indexes
@@ -1416,6 +1451,34 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
                         reductions_count += 1;
                     }
 
+                    // RCSeries + R
+                    if (child0.type == .Resistor_Capacitor_Series && child1.type == .Resistor && ! is_child_output) {
+                        tokens[idx] = rc_add(token, idx, child0, child1);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+                    if (child0.type == .Resistor && child1.type == .Resistor_Capacitor_Series && ! is_child_output) {
+                        tokens[idx] = rc_add(token, idx, child1, child0);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+
+                    // RCSeries + C
+                    if (child0.type == .Resistor_Capacitor_Series && child1.type == .Capacitor && ! is_child_output) {
+                        tokens[idx] = rc_add(token, idx, child0, child1);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+                    if (child0.type == .Capacitor && child1.type == .Resistor_Capacitor_Series && ! is_child_output) {
+                        tokens[idx] = rc_add(token, idx, child1, child0);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+
                 case .Parallel;
                     child0 := tokens[token.children[0]];
                     child1 := tokens[token.children[1]];
@@ -1452,6 +1515,34 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
                     }
                     if (child1.type == .Resistor && child0.type == .Capacitor && ! is_child_output) {
                         tokens[idx] = make_rc(token, idx, child1, child0, .Resistor_Capacitor_Parallel);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+
+                    // RCParallel || R
+                    if (child0.type == .Resistor_Capacitor_Parallel && child1.type == .Resistor && ! is_child_output) {
+                        tokens[idx] = rc_add(token, idx, child0, child1);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+                    if (child0.type == .Resistor && child1.type == .Resistor_Capacitor_Parallel && ! is_child_output) {
+                        tokens[idx] = rc_add(token, idx, child1, child0);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+
+                    // RCParallel + C
+                    if (child0.type == .Resistor_Capacitor_Parallel && child1.type == .Capacitor && ! is_child_output) {
+                        tokens[idx] = rc_add(token, idx, child0, child1);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+                    if (child0.type == .Capacitor && child1.type == .Resistor_Capacitor_Parallel && ! is_child_output) {
+                        tokens[idx] = rc_add(token, idx, child1, child0);
                         remove_token(*tokens, token.children[1]);
                         remove_token(*tokens, token.children[0]);
                         reductions_count += 1;
