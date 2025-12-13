@@ -259,27 +259,6 @@ generate_method :: (name: string,
     return method_code;
 }
 
-get_value :: (val_str: string) -> float32 {
-    val, success, remainder := string_to_float(val_str);
-    error_assert (success, tprint("Unable to parse value string: %", val_str));
-    if remainder.count == 0 { return val; }
-    if remainder[0] == {
-        case #char "M";
-            val *= 1.0e6;
-        case #char "k";
-            val *= 1.0e3;
-        case #char "m";
-            val *= 1.0e-3;
-        case #char "u";
-            val *= 1.0e-6;
-        case #char "n";
-            val *= 1.0e-9;
-        case #char "p";
-            val *= 1.0e-12;
-    }
-    return val;
-}
-
 generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_statements : *[..] string) {
     num_children := token.children.count;
     has_state := token.custom_info.state_type.count > 0;
