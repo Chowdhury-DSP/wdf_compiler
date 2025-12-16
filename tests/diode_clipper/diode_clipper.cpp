@@ -2,6 +2,7 @@
 
 #include "../chowdsp_wdf.h"
 #include <chrono>
+#include <fstream>
 #include <iostream>
 #include <random>
 
@@ -50,12 +51,14 @@ int main()
     calc_impedances (impedances, fs, params);
     State state {};
 
+    static constexpr int N = 100;
+    std::array<float, N> ref_output {};
     float max_error = 0.0f;
-    for (int i = 0; i < 100; ++i)
+    for (int i = 0; i < N; ++i)
     {
         const auto test_output = process (state, impedances, 1.0f);
-        const auto ref_output = ref.process (1.0f);
-        const auto error = std::abs (test_output - ref_output);
+        ref_output[i] = ref.process (1.0f);
+        const auto error = std::abs (test_output - ref_output[i]);
         max_error = std::max (error, max_error);
     }
     std::cout << "Max Error: " << max_error << '\n';
@@ -65,6 +68,10 @@ int main()
         std::cout << "Error is too large... failing test!\n";
         return 1;
     }
+
+    std::ofstream ofp { "data.bin", std::ios::out | std::ios::binary };
+    ofp.write(reinterpret_cast<const char*>(ref_output.data()), N * sizeof (float));
+    ofp.close();
 
 #if RUN_BENCH
     static constexpr int M = 10'000'000;

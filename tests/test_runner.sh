@@ -108,7 +108,7 @@ else
    test preamp_eq cpp jai
    test preamp_eq_comb cpp jai
    test hard_clipper cpp jai
-   test diode_clipper cpp
+   test diode_clipper cpp jai
    test diode_circuit cpp jai
    test simple_triode cpp jai
    test bassman_tone_stack cpp jai

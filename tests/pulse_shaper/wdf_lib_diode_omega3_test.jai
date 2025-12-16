@@ -3,7 +3,7 @@
  * "An Improved and Generalized Diode Clipper Model for Wave Digital Filters" by Werner et al.
  * The Wright-Omega function is implemented using an approximation derived by
  * D'Angelo et al (see wdf_lib_omega.h for details). This implementation uses the
- * "4th-order" approximation, but depending on the usage, you may prefer to use a lower-order approximation.
+ * "3rd-order" approximation, but depending on the usage, you may prefer to use a lower-order approximation.
  *
  * Reference: https://www.researchgate.net/publication/299514713_An_Improved_and_Generalized_Diode_Clipper_Model_for_Wave_Digital_Filters
  */
