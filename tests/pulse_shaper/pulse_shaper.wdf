@@ -1,5 +1,5 @@
 circuit:
-Custom(d53, 1, prefix=wdf_lib::diode::, params=Diode_Params, vars=Diode_Vars, updater=update_vars, compute=root_compute);
+Custom(d53, 1, prefix=wdf_lib::diode::, jai_prefix=, params=Diode_Params, vars=Diode_Vars, updater=update_vars, compute=root_compute);
     Parallel(P2);
         Inverter(I1);
             R(r162, 4.7k);
@@ -17,3 +17,4 @@ V:r162
 
 meta:
 include:"wdf_lib_diode_omega3.hpp"
+load:"wdf_lib_diode_omega3_test.jai"

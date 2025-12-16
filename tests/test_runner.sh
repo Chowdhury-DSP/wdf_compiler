@@ -113,7 +113,7 @@ else
    test simple_triode cpp jai
    test bassman_tone_stack cpp jai
    test baxandall_eq cpp jai
-   test pulse_shaper cpp
+   test pulse_shaper cpp jai
    test reductions_circuit cpp jai
 fi
 
