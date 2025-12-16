@@ -108,6 +108,21 @@ parse_custom_token_args :: (args: [] string) -> *Token.Custom_Token_Info {
 }
 
 parse_circuit :: (circuit_str: string) -> [] Token {
+    make_array :: ($T: Type, count: s64) -> [] T {
+        array: []T;
+        array.data = cast(*T) alloc(count * size_of(T));
+        array.count = count;
+        return array;
+    }
+
+    resize_array :: (array: *[] $T, new_count: s64) {
+        if array.count == 0 {
+            array.* = make_array(T, new_count);
+            return;
+        }
+        array_resize(array, new_count);
+    }
+
     split_tokens := String.split(circuit_str, cast(u8) #char ";");
 
     tokens : [..] Token;
@@ -177,26 +192,24 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             case .Resistor; #through;
             case .Capacitor; #through;
             case .Inductor;
-                param_names : [] string;
-                array_resize(*param_names, 1);
+                param_names := make_array(string, 1);
                 param_names[0] = tprint("%_value", new_token.name);
                 new_token.param_names = param_names;
 
             case .Resistor_Capacitor_Series; #through;
             case .Resistor_Capacitor_Parallel;
-                param_names : [] string;
-                array_resize(*param_names, 2);
+                param_names := make_array(string, 2);
                 param_names[0] = tprint("%_res_value", new_token.name);
                 param_names[1] = tprint("%_cap_value", new_token.name);
                 new_token.param_names = param_names;
         }
-        array_resize(*new_token.param_calc_info, new_token.param_names.count);
+        resize_array(*new_token.param_calc_info, new_token.param_names.count);
         for name,idx : new_token.param_names {
             new_token.param_calc_info[idx].param_name_idx = idx;
         }
         if new_token.param_names.count > 0 { // @TODO: do we want to do this for all elements?
             old_count := new_token.args.count;
-            array_resize(*new_token.args, new_token.param_names.count);
+            resize_array(*new_token.args, new_token.param_names.count);
             for idx : old_count..new_token.args.count-1 {
                 new_token.args[idx] = "?";
             }
