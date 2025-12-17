@@ -3,6 +3,7 @@ CLI :: #import "Command_Line";
 File :: #import "File";
 Process :: #import "Process";
 #load "wdf_parser.jai";
+#load "scratch.jai";
 
 Args :: struct {
     verbose   : bool = false;     @"?Verbose"
@@ -27,6 +28,7 @@ main :: () {
     context.allocator = temp;
     context.print_style.default_format_float.mode = .SCIENTIFIC;
     context.print_style.default_format_float.zero_removal = .ONE_ZERO_AFTER_DECIMAL;
+    set_initial_data(*scratch, SCRATCH_SIZE, alloc(SCRATCH_SIZE));
 
     args_success, args, is_set, free_args := CLI.parse_arguments (Args, argument_flags);
     if ! args_success { exit(1); }
@@ -87,52 +89,64 @@ main :: () {
     gen_file, success := File.file_open(output_file, true);
     File.file_write(*gen_file, gen_code);
     // print(gen_code);
+
+    verbose_print("Bytes allocated: %\n", context.temporary_storage.total_bytes_occupied);
 }
 
 start_gen_code :: (meta_info: Meta_Info) -> string {
+    ts := context.temporary_storage;
+    start_scratch();
+    builder: String_Builder;
+
     cli_args := get_command_line_arguments();
-    gen_code := tprint("// Auto-generated with wdf_compiler version %.\n// Command: wdf_compiler", COMPILER_VERSION);
+    print_to_builder(*builder, "// Auto-generated with wdf_compiler version %.\n// Command: wdf_compiler", COMPILER_VERSION);
     for i : 1..cli_args.count - 1 {
-        gen_code = tprint("%1 %2", gen_code, cli_args[i]);
+        print_to_builder(*builder, " %", cli_args[i]);
     }
 
-    gen_code = tprint("%1\n", gen_code);
-    if global_args.lang == "cpp" { gen_code = tprint("%1\n#pragma once\n", gen_code); }
+    print_to_builder(*builder, "\n");
+    if global_args.lang == "cpp" { print_to_builder(*builder, "\n#pragma once\n"); }
 
     if global_args.lang == "jai" {
         if meta_info.extra_loads.count > 0 {
-            includes_code := "";
-            for include : meta_info.extra_loads {
-                includes_code = tprint("%#load %;\n", includes_code, include);
+            loads_builder: String_Builder;
+            for load : meta_info.extra_loads {
+                print_to_builder(*loads_builder, "#load %;\n", load);
             }
-            gen_code = tprint("%\n%", gen_code, includes_code);
+            print_to_builder(*builder, "\n%", builder_to_string(*loads_builder));
         }
     } else {
         if meta_info.extra_includes.count > 0 {
-            includes_code := "";
+            includes_builder: String_Builder;
             for include : meta_info.extra_includes {
-                includes_code = tprint("%#include %\n", includes_code, include);
+                print_to_builder(*includes_builder, "#include %\n", include);
             }
-            gen_code = tprint("%\n%", gen_code, includes_code);
+            print_to_builder(*builder, "\n%", builder_to_string(*includes_builder));
         }
     }
 
     if global_args.lang == "cpp" {
         if (meta_info.namespace.count > 0) {
-            gen_code = tprint("%\nnamespace %\n{\n", gen_code, meta_info.namespace);
+            print_to_builder(*builder, "\nnamespace %\n{\n", meta_info.namespace);
         }
     }
-    return gen_code;
+
+    context.temporary_storage = ts;
+    return builder_to_string(*builder);
 }
 
 end_gen_code :: (meta_info: Meta_Info) -> string {
-    gen_code := "";
+    ts := context.temporary_storage;
+    start_scratch();
+    builder: String_Builder;
+
     if global_args.lang == "cpp" {
         if (meta_info.namespace.count > 0) {
-            gen_code = tprint("} // namespace %\n\n", meta_info.namespace);
+            print_to_builder(*builder, "} // namespace %\n\n", meta_info.namespace);
         }
     }
-    return gen_code;
+    context.temporary_storage = ts;
+    return builder_to_string(*builder);
 }
 
 Meta_Info :: struct {
@@ -144,6 +158,9 @@ Meta_Info :: struct {
 
 parse_meta_info :: (meta_info_str: string) -> Meta_Info {
     meta_info : Meta_Info;
+
+    ts := context.temporary_storage;
+    start_scratch();
 
     info_lines := String.split(meta_info_str, cast(u8) #char "\n");
     for line : info_lines {
@@ -166,26 +183,32 @@ parse_meta_info :: (meta_info_str: string) -> Meta_Info {
         }
     }
 
+    context.temporary_storage = ts;
     verbose_print("Meta info: %\n", meta_info);
     return meta_info;
 }
 
 generate_struct :: (impedance_vars: [] string, name: string) -> string {
-    struct_code := "";
+    ts := context.temporary_storage;
+    start_scratch();
+    builder: String_Builder;
+
     if global_args.lang == "jai" {
-        struct_code = tprint("%1%2 :: struct {\n", struct_code, name);
+        print_to_builder(*builder, "% :: struct {\n", name);
     } else {
-        struct_code = tprint("%1struct %2 {\n", struct_code, name);
+        print_to_builder(*builder, "struct % {\n", name);
     }
     for var : impedance_vars {
-        struct_code = tprint("%    %\n", struct_code, var);
+        print_to_builder(*builder, "    %\n", var);
     }
     if global_args.lang == "jai" {
-        struct_code = tprint("%}\n", struct_code);
+        print_to_builder(*builder, "}\n");
     } else {
-        struct_code = tprint("%};\n", struct_code);
+        print_to_builder(*builder, "};\n");
     }
-    return struct_code;
+
+    context.temporary_storage = ts;
+    return builder_to_string(*builder);
 }
 
 Method_Arg :: struct {
@@ -217,46 +240,50 @@ generate_method :: (name: string,
                     args: [] Method_Arg,
                     lines: [] string,
                     return_types : [] string = .[]) -> string {
+    ts := context.temporary_storage;
+    start_scratch();
+    builder: String_Builder;
+
     return_type := get_return_type(return_types);
 
-    method_code := "";
     if global_args.lang == "jai" {
-        method_code = tprint("%1%2 :: (", method_code, name);
+        print_to_builder(*builder, "% :: (", name);
     } else {
-        method_code = tprint("%1inline %2 %3(", method_code, return_type, name); // @TODO: do we always want these methods to be marked inline?
+        print_to_builder(*builder, "inline %1 %2(", return_type, name); // @TODO: do we always want these methods to be marked inline?
     }
     for arg, idx : args {
-        if idx != 0 { method_code = tprint("%1, ", method_code); }
+        if idx != 0 { print_to_builder(*builder, ", "); }
         if global_args.lang == "jai" {
-            method_code = tprint("%1%2: ", method_code, arg.name);
-            if arg.is_reference { method_code = tprint("%1*", method_code); }
-            method_code = tprint("%1%2", method_code, arg.type);
-            if arg.default_value.count > 0 { method_code = tprint("%1 = %2", method_code, arg.default_value); }
+            print_to_builder(*builder, "%: ", arg.name);
+            if arg.is_reference { print_to_builder(*builder, "*"); }
+            print_to_builder(*builder, "%", arg.type);
+            if arg.default_value.count > 0 { print_to_builder(*builder, " = %", arg.default_value); }
         } else {
-            if arg.is_const { method_code = tprint("%1const ", method_code); }
-            method_code = tprint("%1%2", method_code, arg.type);
-            if arg.is_reference { method_code = tprint("%1&", method_code); }
-            method_code = tprint("%1 %2", method_code, arg.name);
-            if arg.default_value.count > 0 { method_code = tprint("%1= %2", method_code, arg.default_value); }
+            if arg.is_const { print_to_builder(*builder, "const "); }
+            print_to_builder(*builder, "%", arg.type);
+            if arg.is_reference { print_to_builder(*builder, "&"); }
+            print_to_builder(*builder, " %", arg.name);
+            if arg.default_value.count > 0 { print_to_builder(*builder, " = %", arg.default_value); }
         }
     }
 
     if global_args.lang == "jai" {
         if return_type == "void" {
-            method_code = tprint("%1) {\n", method_code);
+            print_to_builder(*builder, ") {\n");
         } else {
-            method_code = tprint("%1) -> %2 {\n", method_code, return_type);
+            print_to_builder(*builder, ") -> % {\n", return_type);
         }
     } else {
-        method_code = tprint("%1) {\n", method_code);
+        print_to_builder(*builder, ") {\n");
     }
 
     for line : lines {
-        method_code = tprint("%1    %2\n", method_code, line);
+        print_to_builder(*builder, "    %\n", line);
     }
-    method_code = tprint("%1}\n", method_code);
+    print_to_builder(*builder, "}\n");
 
-    return method_code;
+    context.temporary_storage = ts;
+    return builder_to_string(*builder);
 }
 
 generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_statements : *[..] string) {
@@ -442,10 +469,14 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
 }
 
 generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) -> string, [..] string {
+    ts := context.temporary_storage;
+    start_scratch();
+
     input_args : [..] Method_Arg;
     array_add (*input_args, Method_Arg.{name="state", type="State", is_reference=true});
     array_add (*input_args, Method_Arg.{name="impedances", type="Impedances", is_reference=true, is_const=true});
     required_impedances : [..] string;
+    required_impedances.allocator = .{ts_allocator_proc, ts};
 
     for input : inputs {
         input_token : *Token;
@@ -679,11 +710,12 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
         array_add(*code_statements, return_statement);
     }
 
-    return generate_method("process",
-                           input_args,
-                           code_statements,
-                           return_types),
-            required_impedances;
+    method_code := generate_method("process",
+                                   input_args,
+                                   code_statements,
+                                   return_types);
+    context.temporary_storage = ts;
+    return copy_string(method_code), required_impedances;
 }
 
 add_impedance_update_todo :: (todos: *[..] *Token, token: *Token, new_child: *Token, append := true) {
@@ -1205,18 +1237,26 @@ generate_updater :: (tokens: [] Token,
 generate_circuit :: (tokens: [] Token, inputs: [] string, required_impedances: [] string) -> string {
     circuit_vars := generate_circuit_vars(tokens, inputs, required_impedances);
 
+    ts := context.temporary_storage;
+    start_scratch();
+    builder: String_Builder;
 
-    gen_code := generate_struct(circuit_vars.params_vars, "Params");
-    gen_code = tprint("%\n%", gen_code, generate_struct(circuit_vars.impedance_vars, "Impedances"));
-    gen_code = tprint("%\n%", gen_code, generate_struct(circuit_vars.state_vars, "State"));
+    print_to_builder(*builder, generate_struct(circuit_vars.params_vars, "Params"));
+    print_to_builder(*builder, "\n%", generate_struct(circuit_vars.impedance_vars, "Impedances"));
+    print_to_builder(*builder, "\n%", generate_struct(circuit_vars.state_vars, "State"));
 
-    return gen_code;
+    context.temporary_storage = ts;
+    return builder_to_string(*builder);
 }
 
 generate_updaters :: (tokens: [] Token,
                       inputs: [] string,
                       meta_info: Meta_Info,
                       required_impedances: *[..] string) -> string {
+    ts := context.temporary_storage;
+    start_scratch();
+    builder: String_Builder;
+
     updater_args := Method_Arg.[
         .{name="impedances", type="Impedances", is_reference=true},
         .{name="fs", type=global_args.dtype},
@@ -1253,7 +1293,8 @@ generate_updaters :: (tokens: [] Token,
         gen_code = tprint("%\n%", gen_code, updater_method);
     }
 
-    return gen_code;
+    context.temporary_storage = ts;
+    return copy_string(gen_code);
 }
 
 reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {

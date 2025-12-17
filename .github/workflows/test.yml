@@ -30,4 +30,5 @@ jobs:
       run: bash tests/test_runner.sh gcc bad_configs
 
     - name: Run Bench
+      if: github.event_name != 'pull_request'
       run: bash tests/test_runner.sh gcc bench

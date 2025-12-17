@@ -24,13 +24,13 @@ Token_Type :: enum {
 Token :: struct {
     name: string;
     type: Token_Type;
-    args: [] string;
+    args: [] string; // Args provided to the token in WDF config
     parent: s64;
     tree_depth: s64 = 0;
     children: [..] s64;
     input: string;
     index: s64 = 0;
-    param_names: [] string;
+    param_names: [] string; // Parameter names that either become part of the generated code, or are used for some intermediate calculation(s)
 
     Param_Calc_Info :: struct {
         Calc_Type :: enum {
