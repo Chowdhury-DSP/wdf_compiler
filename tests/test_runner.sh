@@ -38,6 +38,7 @@ cpp_test () {
    test="$1"
    echo "Running CPP Test: $test"
    cd "${SCRIPT_DIR}/${test}"
+   rm -f data.bin
 
    wdf_compiler_flags=""
    cpp_compiler_flags=${libcpp_flag}
@@ -107,12 +108,12 @@ else
    test preamp_eq cpp jai
    test preamp_eq_comb cpp jai
    test hard_clipper cpp jai
-   test diode_clipper cpp
-   test diode_circuit cpp
+   test diode_clipper cpp jai
+   test diode_circuit cpp jai
    test simple_triode cpp jai
    test bassman_tone_stack cpp jai
    test baxandall_eq cpp jai
-   test pulse_shaper cpp
+   test pulse_shaper cpp jai
    test reductions_circuit cpp jai
 fi
 
