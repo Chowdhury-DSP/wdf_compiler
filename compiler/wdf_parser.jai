@@ -18,6 +18,7 @@ Token_Type :: enum {
     Resistor_Capacitor_Series;
     Resistor_Capacitor_Parallel;
     Capacitive_Voltage_Source;
+    Resistive_Capacitive_Voltage_Source;
     Custom;
 }
 
@@ -152,6 +153,7 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             case "L"; new_token.type = .Inductor;
             case "RVs"; new_token.type = .Resistive_Voltage_Source;
             case "CVs"; new_token.type = .Capacitive_Voltage_Source;
+            case "RCVs"; new_token.type = .Resistive_Capacitive_Voltage_Source;
             case "RIs"; new_token.type = .Resistive_Current_Source;
             case "RCSeries"; new_token.type = .Resistor_Capacitor_Series;
             case "RCParallel"; new_token.type = .Resistor_Capacitor_Parallel;
@@ -228,6 +230,24 @@ parse_circuit :: (circuit_str: string) -> [] Token {
                     resize_array(*new_token.args, 2);
                     new_token.args[0] = "?";
                     new_token.args[1] = res_arg;
+                }
+
+            case .Resistive_Capacitive_Voltage_Source;
+                error_assert(new_token.args.count >= 2, "RCVs requires at least 2 arguments");
+
+                param_names := make_array(string, 3);
+                param_names[0] = tprint("%_v_value", new_token.name);
+                param_names[1] = tprint("%_res_value", new_token.name);
+                param_names[2] = tprint("%_cap_value", new_token.name);
+                new_token.param_names = param_names;
+
+                if new_token.args.count == 2 {
+                    res_arg := new_token.args[0];
+                    cap_arg := new_token.args[1];
+                    resize_array(*new_token.args, 3);
+                    new_token.args[0] = "?";
+                    new_token.args[1] = res_arg;
+                    new_token.args[2] = cap_arg;
                 }
         }
         resize_array(*new_token.param_calc_info, new_token.param_names.count);

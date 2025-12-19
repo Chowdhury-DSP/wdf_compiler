@@ -3,14 +3,14 @@ IVs(Vb, 1.5);
     Series(Sl);
         Series(S3);
             Series(S4);
-                C(C1, 10n);
                 CVs(Vcc, 1.2, ?);
+                C(C1, 10n);
             Series(S2);
                 R(R2);
                 Series(S1);
                     RVs(Vin, 5k);
                     R(R1, 10k);
-        R(Rl, 100k);
+        RCVs(Rl, -1.1, 100k, 10u);
 
 inputs:
 Vin

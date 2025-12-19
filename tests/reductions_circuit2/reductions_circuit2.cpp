@@ -22,7 +22,7 @@ struct Reference_WDF
 
     chowdsp::wdft::WDFSeriesT<float, decltype (S4), decltype (S2)> S3 { S4, S2 };
 
-    chowdsp::wdft::ResistorT<float> Rl { 100.0e3f };
+    chowdsp::wdft::ResistiveCapacitiveVoltageSourceT<float> Rl { 100.0e3f, 10.0e-6f };
     chowdsp::wdft::WDFSeriesT<float, decltype (Rl), decltype (S3)> Sl { Rl, S3 };
     chowdsp::wdft::IdealVoltageSourceT<float, decltype (Sl)> Vb { Sl };
 
@@ -30,6 +30,7 @@ struct Reference_WDF
     {
         Vb.setVoltage (1.5f);
         Vcc.setVoltage (1.2f);
+        Rl.setVoltage (-1.1f);
     }
 
     float process (float V)
