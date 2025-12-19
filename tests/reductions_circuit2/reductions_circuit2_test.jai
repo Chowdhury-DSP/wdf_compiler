@@ -13,10 +13,8 @@ main :: () {
     calc_impedances(*impedances,
                     fs,
                     .{
-                        // R2_value = 5.0e3,
-                        // R4_value = 10.0e3,
-                        // C2_value = 5.0e-6,
-                        // C4_value = 10.0e-9,
+                        Vcc_cap_value = 1.0e-6,
+                        R2_value = 11.0e3,
                     });
     state: State;
 

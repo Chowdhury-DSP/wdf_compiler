@@ -16,13 +16,20 @@ struct Reference_WDF
     chowdsp::wdft::ResistorT<float> R2 { 11.0e3f };
     chowdsp::wdft::WDFSeriesT<float, decltype (R2), decltype (S1)> S2 { R2, S1 };
 
+    chowdsp::wdft::CapacitiveVoltageSourceT<float> Vcc { 1.0e-6f };
+    chowdsp::wdft::CapacitorT<float> C1 { 10.0e-9f };
+    chowdsp::wdft::WDFSeriesT<float, decltype (Vcc), decltype (C1)> S4 { Vcc, C1 };
+
+    chowdsp::wdft::WDFSeriesT<float, decltype (S4), decltype (S2)> S3 { S4, S2 };
+
     chowdsp::wdft::ResistorT<float> Rl { 100.0e3f };
-    chowdsp::wdft::WDFSeriesT<float, decltype (Rl), decltype (S2)> Sl { Rl, S2 };
+    chowdsp::wdft::WDFSeriesT<float, decltype (Rl), decltype (S3)> Sl { Rl, S3 };
     chowdsp::wdft::IdealVoltageSourceT<float, decltype (Sl)> Vb { Sl };
 
     void prepare (float fs)
     {
         Vb.setVoltage (1.5f);
+        Vcc.setVoltage (1.2f);
     }
 
     float process (float V)
@@ -48,11 +55,9 @@ int main()
         impedances,
         fs,
         {
-            // .R2_value = ref.R2.wdf.R,
-            // .R4_value = ref.R4.wdf.R,
-            // .C2_value = ref.C2.C_value,
-            // .C4_value = ref.C4.C_value,
-    });
+            .Vcc_cap_value = 1.0e-6f,
+            .R2_value = 11.0e3f,
+        });
     State state {};
 
     static constexpr int N = 100;
