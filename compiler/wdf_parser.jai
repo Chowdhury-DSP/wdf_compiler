@@ -43,6 +43,7 @@ Token :: struct {
         child_right: *Param_Calc_Info = null;
     }
     param_calc_info: [] Param_Calc_Info;
+    invert := false;
 
     Custom_Token_Info :: struct {
         params_type: string;
@@ -202,6 +203,19 @@ parse_circuit :: (circuit_str: string) -> [] Token {
                 param_names[0] = tprint("%_res_value", new_token.name);
                 param_names[1] = tprint("%_cap_value", new_token.name);
                 new_token.param_names = param_names;
+
+            case .Resistive_Voltage_Source;
+                param_names := make_array(string, 2);
+                param_names[0] = tprint("%_v_value", new_token.name);
+                param_names[1] = tprint("%_res_value", new_token.name);
+                new_token.param_names = param_names;
+
+                if new_token.args.count == 1 {
+                    res_arg := new_token.args[0];
+                    resize_array(*new_token.args, 2);
+                    new_token.args[0] = "?";
+                    new_token.args[1] = res_arg;
+                }
         }
         resize_array(*new_token.param_calc_info, new_token.param_names.count);
         for name,idx : new_token.param_names {

@@ -49,7 +49,7 @@ cpp_test () {
        cpp_compiler_flags="${cpp_compiler_flags} -I${SCRIPT_DIR}/xsimd/include"
    fi
 
-   $wdf_compiler "${test}.wdf" "${test}.h" ${wdf_compiler_flags}
+   $wdf_compiler "${test}.wdf" "${test}.h" ${wdf_compiler_flags} -verbose
    $cpp_compiler "${test}.cpp" ${bench_flags} -I../../lib --std=c++20 ${cpp_compiler_flags} -o "${test}.exe"
    if [[ "$OSTYPE" == "darwin"* ]]; then
       echo ${sudo_pass} | sudo -S "./${test}.exe"
@@ -115,6 +115,7 @@ else
    test baxandall_eq cpp jai
    test pulse_shaper cpp jai
    test reductions_circuit cpp jai
+   test reductions_circuit2 cpp jai
 fi
 
 if [[ "$*" = *bad_configs* ]]; then

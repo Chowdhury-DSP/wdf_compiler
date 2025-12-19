@@ -73,7 +73,7 @@ main :: () {
     circuit_tokens := parse_circuit(sections.circuit);
 
     if ! args.no_reduce {
-        circuit_tokens = reduce_circuit(circuit_tokens, outputs);
+        circuit_tokens = reduce_circuit(circuit_tokens, inputs, outputs);
     }
 
     process_code, required_impedances := generate_process(circuit_tokens, inputs, outputs);
@@ -588,8 +588,9 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                 array_add(*required_impedances, tprint("%_twoRC_over_twoRC_plus_T", token.name));
             case .Resistive_Voltage_Source;
                 if ! is_input(token, inputs) { token.input = tprint("impedances.%1_V", token.name); }
+                input := ifx token.invert then tprint("-(%)", token.input) else token.input;
                 array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
-                                                            token.input,
+                                                            input,
                                                             tprint("% reflected", token.name)));
             case .Resistive_Current_Source;
                 if ! is_input(token, inputs) { token.input = tprint("impedances.%1_I", token.name); }
@@ -883,10 +884,9 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                     }
                 }
 
-                if is_input_source {
-                    write_param(*params_vars, token, 0, "res_value");
-                } else {
-                    write_param(*params_vars, token, 1, "res_value");
+                for name,idx : token.param_names {
+                    if idx == 0 { continue; } // @TODO: handle this if we allow combined inputs
+                    write_param_named(*params_vars, token, name, idx);
                 }
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
@@ -1121,7 +1121,8 @@ generate_updater :: (tokens: [] Token,
                 }
 
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
-                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("params.%1_res_value", token.name), required_impedances.*, *available_values);
+                array_add(*impedance_updates, write_define(tprint("%1_res_value", token.name), param_calc(token, token.param_calc_info[1])));
+                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("%1_res_value", token.name), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
@@ -1297,7 +1298,7 @@ generate_updaters :: (tokens: [] Token,
     return copy_string(gen_code);
 }
 
-reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
+reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] string) -> [] Token {
     remove_token :: (tokens: *[] Token, index: s64) {
         for *token : tokens.* {
             if token.index > index { token.index -= 1; }
@@ -1307,6 +1308,12 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
             }
         }
         array_ordered_remove_by_index(tokens, index);
+    }
+
+    sub_input :: (inputs: [] string, old: Token, new: Token) {
+        for *input : inputs {
+            if input.* == old.name { input.* = new.name; }
+        }
     }
 
     join_arrays :: (arr1: [] $T, arr2: [] T) -> [] T {
@@ -1409,7 +1416,34 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
         };
     }
 
-    // @TODO: what to do if combined element is an input?
+    rv_add :: (original_token: Token, idx: s64, rv: Token, new: Token) -> Token {
+        new_args := join_arrays (rv.args, new.args);
+        param_names := join_arrays (rv.param_names, new.param_names);
+        update_param_name_idxs(*new.param_calc_info[0], rv.param_names.count);
+
+        param_calc_info: [] Token.Param_Calc_Info;
+        array_resize(*param_calc_info, 2);
+        if (new.type == .Resistor) {
+            param_calc_info[0] = rv.param_calc_info[0];
+            param_calc_info[1] = .{
+                calc = .Sum,
+                child_left = *rv.param_calc_info[1],
+                child_right = *new.param_calc_info[0],
+            };
+        }
+
+        return  Token.{
+            name = original_token.name,
+            type = rv.type,
+            args = new_args,
+            parent = original_token.parent,
+            tree_depth = original_token.tree_depth,
+            index = idx,
+            param_names = param_names,
+            param_calc_info = param_calc_info,
+            invert = ! rv.invert,
+        };
+    }
 
     // For the reduction to work, each element's children need to have higher indexes
     for token,idx : original_tokens {
@@ -1494,6 +1528,22 @@ reduce_circuit :: (original_tokens: [] Token, outputs: [] string) -> [] Token {
                     }
                     if (child0.type == .Capacitor && child1.type == .Resistor_Capacitor_Series && ! is_child_output) {
                         tokens[idx] = rc_add(token, idx, child1, child0);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+
+                    // RVs + R
+                    if (child0.type == .Resistive_Voltage_Source && child1.type == .Resistor && ! is_child_output) {
+                        tokens[idx] = rv_add(token, idx, child0, child1);
+                        sub_input(inputs, child0, tokens[idx]);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+                    if (child0.type == .Resistor && child1.type == .Resistive_Voltage_Source && ! is_child_output) {
+                        tokens[idx] = rv_add(token, idx, child1, child0);
+                        sub_input(inputs, child1, tokens[idx]);
                         remove_token(*tokens, token.children[1]);
                         remove_token(*tokens, token.children[0]);
                         reductions_count += 1;
