@@ -25,8 +25,7 @@ omega3 :: (x: float32) -> float32 {
 log_approx :: (x: float32) -> float32 {
     Convert :: struct {
         f: float32;
-    #place f;
-        i: s32;
+        #overlay (f) i: s32;
     }
     v: Convert;
     v.f = x;
@@ -53,8 +52,7 @@ exp_approx :: (x: float32) -> float32
 
     Convert :: struct {
         f: float32;
-    #place f;
-        i: s32;
+        #overlay (f) i: s32;
     }
     v: Convert;
     xi := cast(s32) x;
