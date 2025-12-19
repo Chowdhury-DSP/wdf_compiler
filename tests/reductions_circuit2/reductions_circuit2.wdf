@@ -2,14 +2,22 @@ circuit:
 IVs(Vb, 1.5);
     Series(Sl);
         Series(S3);
-            Series(S4);
-                CVs(Vcc, 1.2, ?);
-                C(C1, 10n);
-            Series(S2);
-                R(R2);
-                Series(S1);
-                    RVs(Vin, 5k);
-                    R(R1, 10k);
+            Series(S6);
+                R(Rp, 4k);
+                Series(S4);
+                    CVs(Vcc, 1.2, ?);
+                    C(C1, 10n);
+            Series(S7);
+                C(Cp2, 7n);
+                Series(S8);
+                    R(Rp2, 7k);
+                    Series(S5);
+                        C(Cp, 4u);
+                        Series(S2);
+                            R(R2);
+                            Series(S1);
+                                RVs(Vin, 5k);
+                                R(R1, 10k);
         RCVs(Rl, -1.1, 100k, 10u);
 
 inputs:

@@ -16,11 +16,23 @@ struct Reference_WDF
     chowdsp::wdft::ResistorT<float> R2 { 11.0e3f };
     chowdsp::wdft::WDFSeriesT<float, decltype (R2), decltype (S1)> S2 { R2, S1 };
 
+    chowdsp::wdft::CapacitorT<float> Cp { 4.0e-6f };
+    chowdsp::wdft::WDFSeriesT<float, decltype (Cp), decltype (S2)> S5 { Cp, S2 };
+
+    chowdsp::wdft::ResistorT<float> Rp2 { 7.0e3f };
+    chowdsp::wdft::WDFSeriesT<float, decltype (Rp2), decltype (S5)> S8 { Rp2, S5 };
+
+    chowdsp::wdft::CapacitorT<float> Cp2 { 7.0e-9f };
+    chowdsp::wdft::WDFSeriesT<float, decltype (Cp2), decltype (S8)> S7 { Cp2, S8 };
+
     chowdsp::wdft::CapacitiveVoltageSourceT<float> Vcc { 1.0e-6f };
     chowdsp::wdft::CapacitorT<float> C1 { 10.0e-9f };
     chowdsp::wdft::WDFSeriesT<float, decltype (Vcc), decltype (C1)> S4 { Vcc, C1 };
 
-    chowdsp::wdft::WDFSeriesT<float, decltype (S4), decltype (S2)> S3 { S4, S2 };
+    chowdsp::wdft::ResistorT<float> Rp { 4.0e3f };
+    chowdsp::wdft::WDFSeriesT<float, decltype (Rp), decltype (S4)> S6 { Rp, S4 };
+
+    chowdsp::wdft::WDFSeriesT<float, decltype (S6), decltype (S7)> S3 { S6, S7 };
 
     chowdsp::wdft::ResistiveCapacitiveVoltageSourceT<float> Rl { 100.0e3f, 10.0e-6f };
     chowdsp::wdft::WDFSeriesT<float, decltype (Rl), decltype (S3)> Sl { Rl, S3 };

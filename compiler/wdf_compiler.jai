@@ -1518,6 +1518,67 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
         };
     }
 
+    make_rcvs :: (original_token: Token, idx: s64, combo: Token, new: Token) -> Token {
+        new_args := join_arrays (combo.args, new.args);
+        param_names := join_arrays (combo.param_names, new.param_names);
+        update_param_name_idxs(*new.param_calc_info[0], combo.param_names.count);
+
+        param_calc_info: [] Token.Param_Calc_Info;
+        array_resize(*param_calc_info, 3);
+        param_calc_info[0] = combo.param_calc_info[0];
+        if new.type == .Resistor {
+            param_calc_info[1] = new.param_calc_info[0]; // res
+            param_calc_info[2] = combo.param_calc_info[1]; // cap
+        } else if new.type == .Capacitor {
+            param_calc_info[1] = combo.param_calc_info[1]; // res
+            param_calc_info[2] = new.param_calc_info[0]; // cap
+        }
+
+        return  Token.{
+            name = original_token.name,
+            type = .Resistive_Capacitive_Voltage_Source,
+            args = new_args,
+            parent = original_token.parent,
+            tree_depth = original_token.tree_depth,
+            index = idx,
+            param_names = param_names,
+            param_calc_info = param_calc_info,
+            invert = combo.invert,
+        };
+    }
+
+    rcvs_add :: (original_token: Token, idx: s64, vs: Token, new: Token) -> Token {
+        new_args := join_arrays (vs.args, new.args);
+        param_names := join_arrays (vs.param_names, new.param_names);
+        update_param_name_idxs(*new.param_calc_info[0], vs.param_names.count);
+
+        param_calc_info: [] Token.Param_Calc_Info;
+        array_resize(*param_calc_info, 3);
+        param_calc_info[0] = vs.param_calc_info[0];
+        if (new.type == .Resistor) {
+            param_calc_info[1] = .{
+                calc = .Sum,
+                child_left = *vs.param_calc_info[1],
+                child_right = *new.param_calc_info[0],
+            };
+            param_calc_info[2] = vs.param_calc_info[2];
+        } else {
+            assert(false);
+        }
+
+        return  Token.{
+            name = original_token.name,
+            type = vs.type,
+            args = new_args,
+            parent = original_token.parent,
+            tree_depth = original_token.tree_depth,
+            index = idx,
+            param_names = param_names,
+            param_calc_info = param_calc_info,
+            invert = ! vs.invert,
+        };
+    }
+
     // For the reduction to work, each element's children need to have higher indexes
     for token,idx : original_tokens {
         for child_idx : token.children {
@@ -1637,6 +1698,43 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
                         remove_token(*tokens, token.children[0]);
                         reductions_count += 1;
                     }
+
+                    // RVs + C
+                    if (child0.type == .Resistive_Voltage_Source && child1.type == .Capacitor && ! is_child_output) {
+                        tokens[idx] = make_rcvs(token, idx, child0, child1);
+                        sub_input(inputs, child0, tokens[idx]);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+                    if (child0.type == .Capacitor && child1.type == .Resistive_Voltage_Source && ! is_child_output) {
+                        tokens[idx] = make_rcvs(token, idx, child1, child0);
+                        sub_input(inputs, child1, tokens[idx]);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+
+                    // RCVs + R
+                    if (child0.type == .Resistive_Capacitive_Voltage_Source && child1.type == .Resistor && ! is_child_output) {
+                        tokens[idx] = rcvs_add(token, idx, child0, child1);
+                        sub_input(inputs, child0, tokens[idx]);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+                    if (child0.type == .Resistor && child1.type == .Resistive_Capacitive_Voltage_Source && ! is_child_output) {
+                        tokens[idx] = rcvs_add(token, idx, child1, child0);
+                        sub_input(inputs, child1, tokens[idx]);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+
+                    // @TODO:
+                    // CVs + R
+                    // RCVs + C
+                    // RCVs + RCSeries
 
                 case .Parallel;
                     child0 := tokens[token.children[0]];
