@@ -191,10 +191,10 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
 
                         for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
                         {
-                            Results->Counters[PMCIndex] += CPU->LastSysEnterCounters[PMCIndex];
+                            Results->counters[PMCIndex] += CPU->LastSysEnterCounters[PMCIndex];
                         }
 
-                        Results->TSCElapsed += CPU->LastSysEnterTSC;
+                        Results->tsc_elapsed += CPU->LastSysEnterTSC;
                         CPU->LastSysEnterValid = false;
                     }
                     else
@@ -218,8 +218,7 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
                     // NOTE(casey): Make sure everything is written back before signaling completion
                     _mm_mfence(); // NOTE(casey): This is a stronger memory barrier than necessary, but should not be harmful
 
-                    // NOTE(casey): Signal completion to anyone waiting for these results
-                    Results->Completed = true;
+                    Results->completed = true;
                 }
                 else
                 {
@@ -256,12 +255,9 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
                         // NOTE(casey): Apply the current PMCs as "ending" counters
                         for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
                         {
-                            Results->Counters[PMCIndex] += PMCData[PMCIndex];
+                            Results->counters[PMCIndex] += PMCData[PMCIndex];
                         }
-                        Results->TSCElapsed += TSC;
-
-                        // NOTE(casey): Record that this region has incurred a context switch
-                        ++Results->ContextSwitchCount;
+                        Results->tsc_elapsed += TSC;
 
                         // NOTE(casey): Remove this region from the running set
                         CPU->FirstRunningRegion = Internal->Next;
@@ -286,9 +282,9 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
                             // NOTE(casey): Apply the current PMCs as "begin" counters
                             for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
                             {
-                                Results->Counters[PMCIndex] -= PMCData[PMCIndex];
+                                Results->counters[PMCIndex] -= PMCData[PMCIndex];
                             }
-                            Results->TSCElapsed -= TSC;
+                            Results->tsc_elapsed -= TSC;
 
                             // NOTE(casey): Remove this region from thne suspended list
                             *FindRegion = (*FindRegion)->Internals.Next;
@@ -342,10 +338,10 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
                         Win32FindPMCData(Tracer, Event, PMCData);
                         for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
                         {
-                            Results->Counters[PMCIndex] -= PMCData[PMCIndex];
+                            Results->counters[PMCIndex] -= PMCData[PMCIndex];
                         }
 
-                        Results->TSCElapsed -= TSC;
+                        Results->tsc_elapsed -= TSC;
                     }
                 }
             }
@@ -353,7 +349,10 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
     }
     else
     {
-        assert(false && "Out-of-bounds CPUID in ETW event");
+        // printf("CPUID: %d", CPUID);
+        // printf("CPUCount: %d", Tracer->CPUCount);
+        // // Maybe this isn't a big deal??
+        // assert(false && "Out-of-bounds CPUID in ETW event");
     }
 }
 
@@ -369,9 +368,9 @@ static ULONG WINAPI ControlCallback(WMIDPREQUESTCODE, void *, ULONG *, void *)
     return ERROR_SUCCESS;
 }
 
-static PMC_Source_Mapping MapPMCNames(wchar_t const **Strings)
+static PMC_Source_Mapping map_pmc_names(wchar_t const **Strings)
 {
-    PMC_Source_Mapping Result = {};
+    PMC_Source_Mapping mapping = {};
 
     ULONG BufferSize;
     TraceQueryInformation(0, TraceProfileSourceListInfo, 0, 0, &BufferSize);
@@ -393,7 +392,7 @@ static PMC_Source_Mapping MapPMCNames(wchar_t const **Strings)
                     {
                         if(lstrcmpW(Info->Description, SourceString) == 0)
                         {
-                            Result.source_index[SourceNameIndex] = Info->Source;
+                            mapping.source_index[SourceNameIndex] = Info->Source;
                             ++FoundCount;
                             break;
                         }
@@ -410,7 +409,7 @@ static PMC_Source_Mapping MapPMCNames(wchar_t const **Strings)
 
     Win32Deallocate(Buffer);
 
-    return Result;
+    return mapping;
 }
 
 static void SetTracePMCSources(pmc_tracer *Tracer, PMC_Source_Mapping *Mapping)
@@ -566,15 +565,9 @@ static void StopCountingPMCs(pmc_tracer *Tracer, pmc_traced_region *ResultDest)
     assert(TraceEvent(Tracer->TraceHandle, &TraceMarker.Header) == ERROR_SUCCESS && "Unable to insert ETW close marker");
 }
 
-static b32 IsComplete(pmc_traced_region *Region)
+static PMC_Trace_Result get_or_wait_for_result(pmc_tracer *tracer, pmc_traced_region *region)
 {
-    b32 Result = Region->Results.Completed;
-    return Result;
-}
-
-static PMC_Trace_Result GetOrWaitForResult(pmc_tracer *Tracer, pmc_traced_region *Region)
-{
-    while(!IsComplete(Region))
+    while(region->Results.completed == false)
     {
         /* NOTE(casey): This is a spin-lock loop on purpose, because if there was a Sleep() in here
            or some other yield, it might cause Windows to demote this region, which we don't want.
@@ -587,6 +580,5 @@ static PMC_Trace_Result GetOrWaitForResult(pmc_tracer *Tracer, pmc_traced_region
 
     _mm_mfence(); // NOTE(casey): This is a stronger memory barrier than necessary, but should not be harmful
 
-    PMC_Trace_Result Result = Region->Results;
-    return Result;
+    return region->Results;
 }

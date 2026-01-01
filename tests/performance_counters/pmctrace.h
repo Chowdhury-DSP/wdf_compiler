@@ -19,11 +19,10 @@ struct PMC_Source_Mapping
 
 struct PMC_Trace_Result
 {
-    uint64_t Counters[PMC_COUNT];
+    uint64_t counters[PMC_COUNT];
 
-    uint64_t TSCElapsed;
-    uint64_t ContextSwitchCount;
-    uint32_t Completed;
+    uint64_t tsc_elapsed;
+    uint32_t completed;
 };
 
 struct pmc_traced_region;
@@ -42,7 +41,7 @@ struct pmc_traced_region
 
 struct pmc_tracer;
 
-static PMC_Source_Mapping MapPMCNames(wchar_t const **Strings);
+static PMC_Source_Mapping map_pmc_names(wchar_t const **Strings);
 
 static void StartTracing(pmc_tracer *Tracer, PMC_Source_Mapping *Mapping);
 static void StopTracing(pmc_tracer *Tracer);
@@ -50,8 +49,4 @@ static void StopTracing(pmc_tracer *Tracer);
 static void StartCountingPMCs(pmc_tracer *Tracer, pmc_traced_region *ResultDest);
 static void StopCountingPMCs(pmc_tracer *Tracer, pmc_traced_region *ResultDest);
 
-// NOTE(casey): Region results can be read as soon as IsComplete returns true. GetOrWaitForResult will read results
-// instantly if they are complete, so if you already know the results are complete via IsComplete, you can call
-// GetOrWaitForResult to retrieve the results without waiting - it only waits when the results are incomplete.
-static uint32_t IsComplete(pmc_traced_region *Region);
-static PMC_Trace_Result GetOrWaitForResult(pmc_tracer *Tracer, pmc_traced_region *Region);
+static PMC_Trace_Result get_or_wait_for_result(pmc_tracer *tracer, pmc_traced_region *region);

@@ -129,7 +129,7 @@ struct event_collector {
         L"BranchInstructions",
         L"BranchMispredictions",
     };
-    pmc_mapping = MapPMCNames(amd_name_array);
+    pmc_mapping = map_pmc_names(amd_name_array);
     StartTracing(&tracer, &pmc_mapping);
   }
   bool has_events() {
@@ -170,12 +170,12 @@ struct event_collector {
 #elif defined(_WIN32)
     // const auto cycles_diff = __rdtsc() - cycles_at_start;
     StopCountingPMCs(&tracer, &region);
-    const auto result = GetOrWaitForResult(&tracer, &region);
-    count.event_counts[0] = result.Counters[0]; // cycles
-    count.event_counts[1] = result.Counters[1]; // instructions
-    count.event_counts[2] = result.Counters[3]; // missed branches
+    const auto result = get_or_wait_for_result(&tracer, &region);
+    count.event_counts[0] = result.counters[0]; // cycles
+    count.event_counts[1] = result.counters[1]; // instructions
+    count.event_counts[2] = result.counters[3]; // missed branches
     count.event_counts[3] = 0; //
-    count.event_counts[4] = result.Counters[2]; // branches
+    count.event_counts[4] = result.counters[2]; // branches
 #endif
     count.elapsed = end_clock - start_clock;
     return count;
