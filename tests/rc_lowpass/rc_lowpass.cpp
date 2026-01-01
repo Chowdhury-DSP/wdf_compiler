@@ -150,7 +150,8 @@ int main()
     ofp.close();
 
 #if RUN_BENCH
-    static constexpr int M = 100'000'000;
+    static constexpr int M = 1'000;
+    // static constexpr int M = 100'000'000;
     static constexpr int n_iter = 4;
 
     auto* data_in = (float*) malloc (M * sizeof (float));

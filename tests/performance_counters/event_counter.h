@@ -119,21 +119,21 @@ struct event_collector {
   }
 #elif defined(_WIN32)
   pmc_tracer tracer {};
-  pmc_source_mapping pmc_mapping {};
+  PMC_Source_Mapping pmc_mapping {};
   pmc_traced_region region {};
   event_collector() {
-    pmc_name_array amd_name_array =
+    const wchar_t* amd_name_array[] =
     {
         L"TotalCycles",
         L"TotalIssues",
         L"BranchInstructions",
         L"BranchMispredictions",
     };
-    pmc_mapping = MapPMCNames(&amd_name_array);
+    pmc_mapping = MapPMCNames(amd_name_array);
     StartTracing(&tracer, &pmc_mapping);
   }
   bool has_events() {
-    return IsValid(&pmc_mapping);
+    return true;
   }
 #else
   event_collector() {}
@@ -170,7 +170,7 @@ struct event_collector {
 #elif defined(_WIN32)
     // const auto cycles_diff = __rdtsc() - cycles_at_start;
     StopCountingPMCs(&tracer, &region);
-    pmc_trace_result result = GetOrWaitForResult(&tracer, &region);
+    const auto result = GetOrWaitForResult(&tracer, &region);
     count.event_counts[0] = result.Counters[0]; // cycles
     count.event_counts[1] = result.Counters[1]; // instructions
     count.event_counts[2] = result.Counters[3]; // missed branches

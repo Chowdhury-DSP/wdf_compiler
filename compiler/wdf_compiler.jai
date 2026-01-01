@@ -13,7 +13,7 @@ Args :: struct {
     align     : int = 16;         @"?Default data alignment to use for generated code. (Default: 16)"
     no_reduce : bool = false;     @"?Perform reductions on the circuit where possible (Default: true)"
 }
-argument_flags :: CLI.Default_Argument_Flags; // |.DOUBLE_DASH_REQUIRED;
+argument_flags :: CLI.Default_Argument_Flags;
 global_args: Args;
 
 get_compiler_version :: () -> string {
