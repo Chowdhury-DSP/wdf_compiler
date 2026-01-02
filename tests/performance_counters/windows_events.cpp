@@ -34,17 +34,22 @@ struct pmc_tracer_etw_marker_userdata
 };
 struct pmc_tracer_etw_marker
 {
-    EVENT_TRACE_HEADER Header;
+    EVENT_TRACE_HEADER header;
     pmc_tracer_etw_marker_userdata UserData;
 };
+// struct ETW_Marker
+// {
+//     EVENT_TRACE_HEADER header;
+//     PMC_Traced_Region *region;
+// };
 
-struct pmc_tracer_cpu
+struct PMC_Tracer_CPU
 {
-    PMC_Traced_Region *FirstRunningRegion;
+    PMC_Traced_Region *region;
 
-    u64 LastSysEnterCounters[PMC_COUNT];
-    u64 LastSysEnterTSC;
-    b32 LastSysEnterValid;
+    u64 last_sys_enter_counters[PMC_COUNT];
+    u64 last_sys_enter_tsc;
+    b32 last_sys_enter_valid;
 };
 
 #define PMC_TRACE_RESULT_MASK 0xff
@@ -57,12 +62,7 @@ struct PMC_Tracer
     HANDLE ProcessingThread;
 
     PMC_Source_Mapping Mapping;
-    pmc_tracer_cpu *CPUs; // NOTE(casey): [CPUCount]
-    PMC_Traced_Region *FirstSuspendedRegion;
-
-    u32 CPUCount;
-
-    u64 TraceKey;
+    PMC_Tracer_CPU CPU;
 };
 
 #define WIN32_TRACE_OPCODE_SYSTEMCALL_ENTER 51
@@ -126,114 +126,98 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
 
     GUID EventGUID = Event->EventHeader.ProviderId;
 	UCHAR Opcode = Event->EventHeader.EventDescriptor.Opcode;
-    u32 CPUID = GetEventProcessorIndex(Event);
     u64 TSC = Event->EventHeader.TimeStamp.QuadPart;
     u64 PMCData[PMC_COUNT] = {};
 
-    if(CPUID < Tracer->CPUCount)
+    PMC_Tracer_CPU *CPU = &Tracer->CPU;
+
+    if(GUIDsAreEqual(EventGUID, TraceMarkerCategoryGuid))
     {
-        pmc_tracer_cpu *CPU = &Tracer->CPUs[CPUID];
+        pmc_tracer_etw_marker_userdata *Marker = (pmc_tracer_etw_marker_userdata *)Event->UserData;
+        // u64 MarkerKey = Marker->TraceKey;
+        PMC_Traced_Region *region = Marker->Dest;
+        // PMC_Traced_Region *region = (PMC_Traced_Region *)Event->UserData;
 
-        if(GUIDsAreEqual(EventGUID, TraceMarkerCategoryGuid))
+        if(Opcode == TraceMarker_Open)
         {
-            pmc_tracer_etw_marker_userdata *Marker = (pmc_tracer_etw_marker_userdata *)Event->UserData;
-            u64 MarkerKey = Marker->TraceKey;
-            PMC_Traced_Region *Region = Marker->Dest;
+            // OPEN
 
-            // NOTE(casey): Only process marker events if the keys match. If they don't match, they
-            // are events that were inserted by another instance of the tracer, so we don't want
-            // to accidentally start counting them as if they came from our own trace.
-            if(Tracer->TraceKey == MarkerKey)
-            {
-                if(Opcode == TraceMarker_Open)
-                {
-                    // OPEN
+            // NOTE(casey): Add this region to the list of regions running on this CPU core
+            CPU->region = region;
 
-                    // NOTE(casey): Add this region to the list of regions running on this CPU core
-                    CPU->FirstRunningRegion = Region;
-
-                    // NOTE(casey): Mark that this region will get its starting counter values from the next SysExit event
-                    Region->take_next_sys_exit_as_start = true;
-                }
-                else if(Opcode == TraceMarker_Close)
-                {
-                    // CLOSE
-
-                    PMC_Trace_Result *results = &Region->results;
-
-                    if(CPU->LastSysEnterValid)
-                    {
-                        // NOTE(casey): Apply the counters and TSC we saved from the preceeding SysEnter event
-
-                        for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
-                        {
-                            results->counters[PMCIndex] += CPU->LastSysEnterCounters[PMCIndex];
-                        }
-
-                        results->tsc_elapsed += CPU->LastSysEnterTSC;
-                        CPU->LastSysEnterValid = false;
-                    }
-                    else
-                    {
-                        assert(false && "No ENTER for CLOSE event");
-                    }
-
-                    // NOTE(casey): Make sure everything is written back before signaling completion
-                    _mm_mfence(); // NOTE(casey): This is a stronger memory barrier than necessary, but should not be harmful
-
-                    results->completed = true;
-                }
-                else
-                {
-                    assert(false && "Unrecognized ETW marker type");
-                }
-            }
+            // NOTE(casey): Mark that this region will get its starting counter values from the next SysExit event
+            region->take_next_sys_exit_as_start = true;
         }
-        else if(GUIDsAreEqual(EventGUID, Win32DPCEventGuid))
+        else if(Opcode == TraceMarker_Close)
         {
-            if(Opcode == WIN32_TRACE_OPCODE_SYSTEMCALL_ENTER)
+            // CLOSE
+
+            PMC_Trace_Result *results = &region->results;
+
+            if(CPU->last_sys_enter_valid)
             {
-                // ENTER
+                // NOTE(casey): Apply the counters and TSC we saved from the preceeding SysEnter event
 
-                // NOTE(casey): Remember the state at this SysEnter so it can be applied to a
-                // region later if there is a following Close event.
-                if(CPU->FirstRunningRegion)
+                for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
                 {
-                    CPU->LastSysEnterValid = true;
-                    CPU->LastSysEnterTSC = TSC;
-                    Win32FindPMCData(Tracer, Event, CPU->LastSysEnterCounters);
+                    results->counters[PMCIndex] += CPU->last_sys_enter_counters[PMCIndex];
                 }
+
+                results->tsc_elapsed += CPU->last_sys_enter_tsc;
+                CPU->last_sys_enter_valid = false;
             }
-            else if(Opcode == WIN32_TRACE_OPCODE_SYSTEMCALL_EXIT)
+            else
             {
-                // EXIT
-
-                if (PMC_Traced_Region *Region = CPU->FirstRunningRegion)
-                {
-                    PMC_Trace_Result *results = &Region->results;
-
-                    // NOTE(casey): Exit
-                    if(Region->take_next_sys_exit_as_start)
-                    {
-                        Region->take_next_sys_exit_as_start = false;
-                        Win32FindPMCData(Tracer, Event, PMCData);
-                        for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
-                        {
-                            results->counters[PMCIndex] -= PMCData[PMCIndex];
-                        }
-
-                        results->tsc_elapsed -= TSC;
-                    }
-                }
+                assert(false && "No ENTER for CLOSE event");
             }
+
+            // NOTE(casey): Make sure everything is written back before signaling completion
+            _mm_mfence(); // NOTE(casey): This is a stronger memory barrier than necessary, but should not be harmful
+
+            results->completed = true;
+        }
+        else
+        {
+            assert(false && "Unrecognized ETW marker type");
         }
     }
-    else
+    else if(GUIDsAreEqual(EventGUID, Win32DPCEventGuid))
     {
-        // printf("CPUID: %d", CPUID);
-        // printf("CPUCount: %d", Tracer->CPUCount);
-        // // Maybe this isn't a big deal??
-        // assert(false && "Out-of-bounds CPUID in ETW event");
+        if(Opcode == WIN32_TRACE_OPCODE_SYSTEMCALL_ENTER)
+        {
+            // ENTER
+
+            // NOTE(casey): Remember the state at this SysEnter so it can be applied to a
+            // region later if there is a following Close event.
+            if(CPU->region)
+            {
+                CPU->last_sys_enter_valid = true;
+                CPU->last_sys_enter_tsc = TSC;
+                Win32FindPMCData(Tracer, Event, CPU->last_sys_enter_counters);
+            }
+        }
+        else if(Opcode == WIN32_TRACE_OPCODE_SYSTEMCALL_EXIT)
+        {
+            // EXIT
+
+            if (PMC_Traced_Region *region = CPU->region)
+            {
+                PMC_Trace_Result *results = &region->results;
+
+                // NOTE(casey): Exit
+                if(region->take_next_sys_exit_as_start)
+                {
+                    region->take_next_sys_exit_as_start = false;
+                    Win32FindPMCData(Tracer, Event, PMCData);
+                    for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
+                    {
+                        results->counters[PMCIndex] -= PMCData[PMCIndex];
+                    }
+
+                    results->tsc_elapsed -= TSC;
+                }
+            }
+        }
     }
 }
 
@@ -361,22 +345,9 @@ static void start_tracing(PMC_Tracer *Tracer, PMC_Source_Mapping *SourceMapping)
 {
     *Tracer = {};
 
-    Tracer->TraceKey = __rdtsc();
-
-    SYSTEM_INFO SysInfo = {};
-    GetSystemInfo(&SysInfo);
-    Tracer->CPUCount = SysInfo.dwNumberOfProcessors;
-
-    Tracer->CPUs = (pmc_tracer_cpu *)Win32AllocateSize(Tracer->CPUCount * sizeof(pmc_tracer_cpu));
-    if(Tracer->CPUs)
-    {
-        Win32RegisterTraceMarker(Tracer);
-        Win32CreateTrace(Tracer, SourceMapping);
-    }
-    else
-    {
-        assert(false && "Unable to allocate memory for CPU core tracking");
-    }
+    Tracer->CPU = {};
+    Win32RegisterTraceMarker(Tracer);
+    Win32CreateTrace(Tracer, SourceMapping);
 }
 
 static void stop_tracing(PMC_Tracer *Tracer)
@@ -402,43 +373,41 @@ static void stop_tracing(PMC_Tracer *Tracer)
     {
         UnregisterTraceGuids(Tracer->MarkerRegistrationHandle);
     }
-
-    Win32Deallocate(Tracer->CPUs);
 }
 
-static void start_counting(PMC_Tracer *Tracer, PMC_Traced_Region *ResultDest)
+static void start_counting(PMC_Tracer *tracer, PMC_Traced_Region *region)
 {
-    pmc_tracer_etw_marker TraceMarker = {};
-    TraceMarker.Header.Size = sizeof(TraceMarker);
-    TraceMarker.Header.Flags = WNODE_FLAG_TRACED_GUID;
-    TraceMarker.Header.Guid = TraceMarkerCategoryGuid;
-    TraceMarker.Header.Class.Type = TraceMarker_Open;
+    pmc_tracer_etw_marker trace_marker = {};
+    trace_marker.header.Size = sizeof(trace_marker);
+    trace_marker.header.Flags = WNODE_FLAG_TRACED_GUID;
+    trace_marker.header.Guid = TraceMarkerCategoryGuid;
+    trace_marker.header.Class.Type = TraceMarker_Open;
 
-    TraceMarker.UserData.TraceKey = Tracer->TraceKey;
-    TraceMarker.UserData.Dest = ResultDest;
+    trace_marker.UserData.Dest = region;
 
-    ResultDest->results = {};
+    region->results = {};
 
-    assert(TraceEvent(Tracer->TraceHandle, &TraceMarker.Header) == ERROR_SUCCESS && "Unable to insert ETW open marker");
+    auto status = TraceEvent(tracer->TraceHandle, &trace_marker.header);
+    assert(status == ERROR_SUCCESS && "Unable to insert ETW open marker");
 }
 
-static void stop_counting(PMC_Tracer *Tracer, PMC_Traced_Region *ResultDest)
+static void stop_counting(PMC_Tracer *tracer, PMC_Traced_Region *region)
 {
-    pmc_tracer_etw_marker TraceMarker = {};
-    TraceMarker.Header.Size = sizeof(TraceMarker);
-    TraceMarker.Header.Flags = WNODE_FLAG_TRACED_GUID;
-    TraceMarker.Header.Guid = TraceMarkerCategoryGuid;
-    TraceMarker.Header.Class.Type = TraceMarker_Close;
+    pmc_tracer_etw_marker trace_marker = {};
+    trace_marker.header.Size = sizeof(trace_marker);
+    trace_marker.header.Flags = WNODE_FLAG_TRACED_GUID;
+    trace_marker.header.Guid = TraceMarkerCategoryGuid;
+    trace_marker.header.Class.Type = TraceMarker_Close;
 
-    TraceMarker.UserData.TraceKey = Tracer->TraceKey;
-    TraceMarker.UserData.Dest = ResultDest;
+    trace_marker.UserData.Dest = region;
 
     /* TODO(casey): In some circumstances, I believe this can fail due to ETW's internal buffers being
        full. In that case, I _think_ it should be possible to mark the particular trace results as
        invalid, but keep trying to issue the TraceEvent, succeed, and then continune without having
        to error out of the entire run. However, I have not found a reliable repro case for this
        yet, so I haven't yet tried to implement such a recovery case. */
-    assert(TraceEvent(Tracer->TraceHandle, &TraceMarker.Header) == ERROR_SUCCESS && "Unable to insert ETW close marker");
+    auto status = TraceEvent(tracer->TraceHandle, &trace_marker.header);
+    assert(status == ERROR_SUCCESS && "Unable to insert ETW close marker");
 }
 
 static PMC_Trace_Result get_or_wait_for_result(PMC_Tracer *tracer, PMC_Traced_Region *region)
