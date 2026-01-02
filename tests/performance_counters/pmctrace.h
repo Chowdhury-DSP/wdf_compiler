@@ -1,14 +1,4 @@
-/* ========================================================================
-
-   (C) Copyright 2024 by Molly Rocket, Inc., All Rights Reserved.
-
-   This software is provided 'as-is', without any express or implied
-   warranty. In no event will the authors be held liable for any damages
-   arising from the use of this software.
-
-   Please see https://computerenhance.com for more information
-
-   ======================================================================== */
+// Loosely adapted from Casey Muratori's "pmctrace"
 
 #define PMC_COUNT 4
 
@@ -31,14 +21,14 @@ struct PMC_Traced_Region
     uint32_t take_next_sys_exit_as_start;
 };
 
-struct pmc_tracer;
+struct PMC_Tracer;
 
-static PMC_Source_Mapping map_pmc_names(wchar_t const **Strings);
+static PMC_Source_Mapping map_pmc_names(wchar_t const **strings);
 
-static void StartTracing(pmc_tracer *Tracer, PMC_Source_Mapping *Mapping);
-static void StopTracing(pmc_tracer *Tracer);
+static void start_tracing(PMC_Tracer *tracer, PMC_Source_Mapping *mapping);
+static void stop_tracing(PMC_Tracer *tracer);
 
-static void StartCountingPMCs(pmc_tracer *Tracer, PMC_Traced_Region *ResultDest);
-static void StopCountingPMCs(pmc_tracer *Tracer, PMC_Traced_Region *ResultDest);
+static void start_counting(PMC_Tracer *tracer, PMC_Traced_Region *result_dest);
+static void stop_counting(PMC_Tracer *tracer, PMC_Traced_Region *result_dest);
 
-static PMC_Trace_Result get_or_wait_for_result(pmc_tracer *tracer, PMC_Traced_Region *region);
+static PMC_Trace_Result get_or_wait_for_result(PMC_Tracer *tracer, PMC_Traced_Region *region);

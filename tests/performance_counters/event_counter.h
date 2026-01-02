@@ -118,7 +118,7 @@ struct event_collector {
     return apple_events.setup_performance_counters();
   }
 #elif defined(_WIN32)
-  pmc_tracer tracer {};
+  PMC_Tracer tracer {};
   PMC_Source_Mapping pmc_mapping {};
   PMC_Traced_Region region {};
   event_collector() {
@@ -130,7 +130,10 @@ struct event_collector {
         L"BranchMispredictions",
     };
     pmc_mapping = map_pmc_names(amd_name_array);
-    StartTracing(&tracer, &pmc_mapping);
+    start_tracing(&tracer, &pmc_mapping);
+  }
+  ~event_collector() {
+    stop_tracing(&tracer);
   }
   bool has_events() {
     return true;
@@ -149,7 +152,7 @@ struct event_collector {
     if(has_events()) { diff = apple_events.get_counters(); }
 #elif defined(_WIN32)
     // cycles_at_start = __rdtsc();
-    StartCountingPMCs(&tracer, &region);
+    start_counting(&tracer, &region);
 #endif
     start_clock = std::chrono::steady_clock::now();
   }
@@ -169,7 +172,7 @@ struct event_collector {
     count.event_counts[4] = diff.branches;
 #elif defined(_WIN32)
     // const auto cycles_diff = __rdtsc() - cycles_at_start;
-    StopCountingPMCs(&tracer, &region);
+    stop_counting(&tracer, &region);
     const auto result = get_or_wait_for_result(&tracer, &region);
     count.event_counts[0] = result.counters[0]; // cycles
     count.event_counts[1] = result.counters[1]; // instructions

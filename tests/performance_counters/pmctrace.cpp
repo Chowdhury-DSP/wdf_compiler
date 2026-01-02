@@ -1,15 +1,3 @@
-/* ========================================================================
-
-   (C) Copyright 2024 by Molly Rocket, Inc., All Rights Reserved.
-
-   This software is provided 'as-is', without any express or implied
-   warranty. In no event will the authors be held liable for any damages
-   arising from the use of this software.
-
-   Please see https://computerenhance.com for more information
-
-   ======================================================================== */
-
 #include <cassert>
 #include <windows.h>
 #include <evntrace.h>
@@ -50,12 +38,6 @@ struct pmc_tracer_etw_marker
     pmc_tracer_etw_marker_userdata UserData;
 };
 
-struct etw_thread_switch_userdata
-{
-    DWORD NewThreadId;
-    DWORD OldThreadId;
-};
-
 struct pmc_tracer_cpu
 {
     PMC_Traced_Region *FirstRunningRegion;
@@ -66,7 +48,7 @@ struct pmc_tracer_cpu
 };
 
 #define PMC_TRACE_RESULT_MASK 0xff
-struct pmc_tracer
+struct PMC_Tracer
 {
     win32_trace_description Win32TraceDesc;
     TRACEHANDLE MarkerRegistrationHandle;
@@ -113,7 +95,7 @@ static b32 GUIDsAreEqual(GUID A, GUID B)
     return Result;
 }
 
-static void Win32FindPMCData(pmc_tracer *Tracer, EVENT_RECORD *Event, u64 *PMCData)
+static void Win32FindPMCData(PMC_Tracer *Tracer, EVENT_RECORD *Event, u64 *PMCData)
 {
     EVENT_EXTENDED_ITEM_PMC_COUNTERS *PMC = 0;
     u64 PMCDataSize = 0;
@@ -140,7 +122,7 @@ static void Win32FindPMCData(pmc_tracer *Tracer, EVENT_RECORD *Event, u64 *PMCDa
 
 static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
 {
-    pmc_tracer *Tracer = (pmc_tracer *)Event->UserContext;
+    PMC_Tracer *Tracer = (PMC_Tracer *)Event->UserContext;
 
     GUID EventGUID = Event->EventHeader.ProviderId;
 	UCHAR Opcode = Event->EventHeader.EventDescriptor.Opcode;
@@ -311,7 +293,7 @@ static PMC_Source_Mapping map_pmc_names(wchar_t const **Strings)
     return mapping;
 }
 
-static void SetTracePMCSources(pmc_tracer *Tracer, PMC_Source_Mapping *Mapping)
+static void SetTracePMCSources(PMC_Tracer *Tracer, PMC_Source_Mapping *Mapping)
 {
     ULONG Status = TraceSetInformation(Tracer->TraceHandle, TracePmcCounterListInfo,
                                        Mapping->source_index, PMC_COUNT * sizeof(Mapping->source_index[0]));
@@ -327,7 +309,7 @@ static void SetTracePMCSources(pmc_tracer *Tracer, PMC_Source_Mapping *Mapping)
     assert(EventListStatus == ERROR_SUCCESS && "Unable to select events");
 }
 
-static void Win32RegisterTraceMarker(pmc_tracer *Tracer)
+static void Win32RegisterTraceMarker(PMC_Tracer *Tracer)
 {
     TRACE_GUID_REGISTRATION MarkerEventClassGuids[] = {(LPGUID)&TraceMarkerCategoryGuid, 0};
     ULONG Status = RegisterTraceGuids((WMIDPREQUEST)ControlCallback, 0, (LPGUID)&TraceMarkerProviderGuid,
@@ -337,7 +319,7 @@ static void Win32RegisterTraceMarker(pmc_tracer *Tracer)
     assert(Status == ERROR_SUCCESS && "ETW marker registration failed");
 }
 
-static void Win32CreateTrace(pmc_tracer *Tracer, PMC_Source_Mapping *SourceMapping)
+static void Win32CreateTrace(PMC_Tracer *Tracer, PMC_Source_Mapping *SourceMapping)
 {
     const WCHAR TraceName[] = L"Win32PMCTrace";
 
@@ -375,7 +357,7 @@ static void Win32CreateTrace(pmc_tracer *Tracer, PMC_Source_Mapping *SourceMappi
     assert(Tracer->ProcessingThread != 0 && "Unable to create processing thread");
 }
 
-static void StartTracing(pmc_tracer *Tracer, PMC_Source_Mapping *SourceMapping)
+static void start_tracing(PMC_Tracer *Tracer, PMC_Source_Mapping *SourceMapping)
 {
     *Tracer = {};
 
@@ -397,7 +379,7 @@ static void StartTracing(pmc_tracer *Tracer, PMC_Source_Mapping *SourceMapping)
     }
 }
 
-static void StopTracing(pmc_tracer *Tracer)
+static void stop_tracing(PMC_Tracer *Tracer)
 {
     // TODO(casey): Try to verify that 0 is never a valid trace handle - it's unclear from the documentation
     if(Tracer->TraceHandle)
@@ -424,7 +406,7 @@ static void StopTracing(pmc_tracer *Tracer)
     Win32Deallocate(Tracer->CPUs);
 }
 
-static void StartCountingPMCs(pmc_tracer *Tracer, PMC_Traced_Region *ResultDest)
+static void start_counting(PMC_Tracer *Tracer, PMC_Traced_Region *ResultDest)
 {
     pmc_tracer_etw_marker TraceMarker = {};
     TraceMarker.Header.Size = sizeof(TraceMarker);
@@ -440,7 +422,7 @@ static void StartCountingPMCs(pmc_tracer *Tracer, PMC_Traced_Region *ResultDest)
     assert(TraceEvent(Tracer->TraceHandle, &TraceMarker.Header) == ERROR_SUCCESS && "Unable to insert ETW open marker");
 }
 
-static void StopCountingPMCs(pmc_tracer *Tracer, PMC_Traced_Region *ResultDest)
+static void stop_counting(PMC_Tracer *Tracer, PMC_Traced_Region *ResultDest)
 {
     pmc_tracer_etw_marker TraceMarker = {};
     TraceMarker.Header.Size = sizeof(TraceMarker);
@@ -459,7 +441,7 @@ static void StopCountingPMCs(pmc_tracer *Tracer, PMC_Traced_Region *ResultDest)
     assert(TraceEvent(Tracer->TraceHandle, &TraceMarker.Header) == ERROR_SUCCESS && "Unable to insert ETW close marker");
 }
 
-static PMC_Trace_Result get_or_wait_for_result(pmc_tracer *tracer, PMC_Traced_Region *region)
+static PMC_Trace_Result get_or_wait_for_result(PMC_Tracer *tracer, PMC_Traced_Region *region)
 {
     while(region->results.completed == false)
     {
