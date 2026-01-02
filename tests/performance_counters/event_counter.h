@@ -24,8 +24,8 @@
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
-#include "pmctrace.h"
-#include "pmctrace.cpp"
+#include "windows_events.h"
+#include "windows_events.cpp"
 #endif
 
 struct event_count {
