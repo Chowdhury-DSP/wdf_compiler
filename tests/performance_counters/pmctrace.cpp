@@ -42,7 +42,7 @@ struct win32_trace_description
 struct pmc_tracer_etw_marker_userdata
 {
     u64 TraceKey;
-    pmc_traced_region *Dest;
+    PMC_Traced_Region *Dest;
 };
 struct pmc_tracer_etw_marker
 {
@@ -58,7 +58,7 @@ struct etw_thread_switch_userdata
 
 struct pmc_tracer_cpu
 {
-    pmc_traced_region *FirstRunningRegion;
+    PMC_Traced_Region *FirstRunningRegion;
 
     u64 LastSysEnterCounters[PMC_COUNT];
     u64 LastSysEnterTSC;
@@ -76,18 +76,16 @@ struct pmc_tracer
 
     PMC_Source_Mapping Mapping;
     pmc_tracer_cpu *CPUs; // NOTE(casey): [CPUCount]
-    pmc_traced_region *FirstSuspendedRegion;
+    PMC_Traced_Region *FirstSuspendedRegion;
 
     u32 CPUCount;
 
     u64 TraceKey;
 };
 
-#define WIN32_TRACE_OPCODE_SWITCH_THREAD 36
 #define WIN32_TRACE_OPCODE_SYSTEMCALL_ENTER 51
 #define WIN32_TRACE_OPCODE_SYSTEMCALL_EXIT 52
 
-static GUID Win32ThreadEventGuid = {0x3d6fa8d1, 0xfe05, 0x11d0, {0x9d, 0xda, 0x00, 0xc0, 0x4f, 0xd7, 0xba, 0x7c}};
 static GUID Win32DPCEventGuid = {0xce1dbfb4, 0x137e, 0x4da6, {0x87, 0xb0, 0x3f, 0x59, 0xaa, 0x10, 0x2c, 0xbc}};
 
 static GUID TraceMarkerProviderGuid = {0xb877a9af, 0x4155, 0x40f2, {0xa9, 0xba, 0x34, 0xbe, 0xdf, 0xaf, 0xd1, 0x22}};
@@ -158,7 +156,7 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
         {
             pmc_tracer_etw_marker_userdata *Marker = (pmc_tracer_etw_marker_userdata *)Event->UserData;
             u64 MarkerKey = Marker->TraceKey;
-            pmc_traced_region *Region = Marker->Dest;
+            PMC_Traced_Region *Region = Marker->Dest;
 
             // NOTE(casey): Only process marker events if the keys match. If they don't match, they
             // are events that were inserted by another instance of the tracer, so we don't want
@@ -169,21 +167,17 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
                 {
                     // OPEN
 
-                    pmc_region_internals *Internal = &Region->Internals;
-
                     // NOTE(casey): Add this region to the list of regions running on this CPU core
-                    Internal->Next = CPU->FirstRunningRegion;
                     CPU->FirstRunningRegion = Region;
 
                     // NOTE(casey): Mark that this region will get its starting counter values from the next SysExit event
-                    Internal->TakeNextSysExitAsStart = true;
+                    Region->take_next_sys_exit_as_start = true;
                 }
                 else if(Opcode == TraceMarker_Close)
                 {
                     // CLOSE
 
-                    pmc_region_internals *Internal = &Region->Internals;
-                    PMC_Trace_Result *Results = &Region->Results;
+                    PMC_Trace_Result *results = &Region->results;
 
                     if(CPU->LastSysEnterValid)
                     {
@@ -191,10 +185,10 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
 
                         for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
                         {
-                            Results->counters[PMCIndex] += CPU->LastSysEnterCounters[PMCIndex];
+                            results->counters[PMCIndex] += CPU->LastSysEnterCounters[PMCIndex];
                         }
 
-                        Results->tsc_elapsed += CPU->LastSysEnterTSC;
+                        results->tsc_elapsed += CPU->LastSysEnterTSC;
                         CPU->LastSysEnterValid = false;
                     }
                     else
@@ -202,106 +196,14 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
                         assert(false && "No ENTER for CLOSE event");
                     }
 
-                    // NOTE(casey): Remove this trace from the list of traces running on this CPU core
-                    pmc_traced_region **FindRegion = &CPU->FirstRunningRegion;
-                    while(*FindRegion)
-                    {
-                        if(*FindRegion == Region)
-                        {
-                            *FindRegion = Region->Internals.Next;
-                            break;
-                        }
-
-                        FindRegion = &(*FindRegion)->Internals.Next;
-                    }
-
                     // NOTE(casey): Make sure everything is written back before signaling completion
                     _mm_mfence(); // NOTE(casey): This is a stronger memory barrier than necessary, but should not be harmful
 
-                    Results->completed = true;
+                    results->completed = true;
                 }
                 else
                 {
                     assert(false && "Unrecognized ETW marker type");
-                }
-            }
-        }
-        else if(GUIDsAreEqual(EventGUID, Win32ThreadEventGuid))
-        {
-            if(Opcode == WIN32_TRACE_OPCODE_SWITCH_THREAD)
-            {
-                if(Event->UserDataLength == 24)
-                {
-                    etw_thread_switch_userdata *Switch = (etw_thread_switch_userdata *)Event->UserData;
-
-                    // NOTE(casey): Get the PMC data once, since we may need it multiple times as we
-                    // process suspending and resuming regions
-                    if(CPU->FirstRunningRegion || Tracer->FirstSuspendedRegion)
-                    {
-                        Win32FindPMCData(Tracer, Event, PMCData);
-                    }
-
-                    // NOTE(casey): Suspend any existing regions running on this CPU core
-                    while(CPU->FirstRunningRegion)
-                    {
-                        // SWITCH FROM
-
-                        pmc_traced_region *Region = CPU->FirstRunningRegion;
-                        pmc_region_internals *Internal = &Region->Internals;
-                        PMC_Trace_Result *Results = &Region->Results;
-
-                        assert(Switch->OldThreadId == Internal->TracingThreadID && "Switched thread ID mismatch");
-
-                        // NOTE(casey): Apply the current PMCs as "ending" counters
-                        for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
-                        {
-                            Results->counters[PMCIndex] += PMCData[PMCIndex];
-                        }
-                        Results->tsc_elapsed += TSC;
-
-                        // NOTE(casey): Remove this region from the running set
-                        CPU->FirstRunningRegion = Internal->Next;
-
-                        // NOTE(casey): Put this region on the suspended list
-                        Internal->Next = Tracer->FirstSuspendedRegion;
-                        Tracer->FirstSuspendedRegion = Region;
-                    }
-
-                    // NOTE(casey): Look for matching region IDs that will be resumed
-                    pmc_traced_region **FindRegion = &Tracer->FirstSuspendedRegion;
-                    while(*FindRegion)
-                    {
-                        if((*FindRegion)->Internals.TracingThreadID == Switch->NewThreadId)
-                        {
-                            // SWITCH TO
-
-                            pmc_traced_region *Region = *FindRegion;
-                            pmc_region_internals *Internal = &Region->Internals;
-                            PMC_Trace_Result *Results = &Region->Results;
-
-                            // NOTE(casey): Apply the current PMCs as "begin" counters
-                            for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
-                            {
-                                Results->counters[PMCIndex] -= PMCData[PMCIndex];
-                            }
-                            Results->tsc_elapsed -= TSC;
-
-                            // NOTE(casey): Remove this region from thne suspended list
-                            *FindRegion = (*FindRegion)->Internals.Next;
-
-                            // NOTE(casey): Put this region on the running list
-                            Internal->Next = CPU->FirstRunningRegion;
-                            CPU->FirstRunningRegion = Region;
-                        }
-                        else
-                        {
-                            FindRegion = &(*FindRegion)->Internals.Next;
-                        }
-                    }
-                }
-                else
-                {
-                    assert(false && "Unexpected CSwitch data size");
                 }
             }
         }
@@ -324,24 +226,21 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
             {
                 // EXIT
 
-                for(pmc_traced_region *Region = CPU->FirstRunningRegion;
-                    Region;
-                    Region = Region->Internals.Next)
+                if (PMC_Traced_Region *Region = CPU->FirstRunningRegion)
                 {
-                    pmc_region_internals *Internal = &Region->Internals;
-                    PMC_Trace_Result *Results = &Region->Results;
+                    PMC_Trace_Result *results = &Region->results;
 
                     // NOTE(casey): Exit
-                    if(Internal->TakeNextSysExitAsStart)
+                    if(Region->take_next_sys_exit_as_start)
                     {
-                        Internal->TakeNextSysExitAsStart = false;
+                        Region->take_next_sys_exit_as_start = false;
                         Win32FindPMCData(Tracer, Event, PMCData);
                         for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
                         {
-                            Results->counters[PMCIndex] -= PMCData[PMCIndex];
+                            results->counters[PMCIndex] -= PMCData[PMCIndex];
                         }
 
-                        Results->tsc_elapsed -= TSC;
+                        results->tsc_elapsed -= TSC;
                     }
                 }
             }
@@ -420,7 +319,6 @@ static void SetTracePMCSources(pmc_tracer *Tracer, PMC_Source_Mapping *Mapping)
 
     CLASSIC_EVENT_ID EventIDs[] =
     {
-        {Win32ThreadEventGuid, WIN32_TRACE_OPCODE_SWITCH_THREAD},
         {Win32DPCEventGuid, WIN32_TRACE_OPCODE_SYSTEMCALL_ENTER},
         {Win32DPCEventGuid, WIN32_TRACE_OPCODE_SYSTEMCALL_EXIT},
     };
@@ -526,7 +424,7 @@ static void StopTracing(pmc_tracer *Tracer)
     Win32Deallocate(Tracer->CPUs);
 }
 
-static void StartCountingPMCs(pmc_tracer *Tracer, pmc_traced_region *ResultDest)
+static void StartCountingPMCs(pmc_tracer *Tracer, PMC_Traced_Region *ResultDest)
 {
     pmc_tracer_etw_marker TraceMarker = {};
     TraceMarker.Header.Size = sizeof(TraceMarker);
@@ -537,16 +435,12 @@ static void StartCountingPMCs(pmc_tracer *Tracer, pmc_traced_region *ResultDest)
     TraceMarker.UserData.TraceKey = Tracer->TraceKey;
     TraceMarker.UserData.Dest = ResultDest;
 
-    /* TODO(casey): Is this necessary, or is it safe to pick up the thread index from the OPEN marker?
-       If we never see an error where the open marker differs from the thread ID recorded here, then
-       presumably this is not necessary, */
-    ResultDest->Internals.TracingThreadID = GetCurrentThreadId();
-    ResultDest->Results = {};
+    ResultDest->results = {};
 
     assert(TraceEvent(Tracer->TraceHandle, &TraceMarker.Header) == ERROR_SUCCESS && "Unable to insert ETW open marker");
 }
 
-static void StopCountingPMCs(pmc_tracer *Tracer, pmc_traced_region *ResultDest)
+static void StopCountingPMCs(pmc_tracer *Tracer, PMC_Traced_Region *ResultDest)
 {
     pmc_tracer_etw_marker TraceMarker = {};
     TraceMarker.Header.Size = sizeof(TraceMarker);
@@ -565,9 +459,9 @@ static void StopCountingPMCs(pmc_tracer *Tracer, pmc_traced_region *ResultDest)
     assert(TraceEvent(Tracer->TraceHandle, &TraceMarker.Header) == ERROR_SUCCESS && "Unable to insert ETW close marker");
 }
 
-static PMC_Trace_Result get_or_wait_for_result(pmc_tracer *tracer, pmc_traced_region *region)
+static PMC_Trace_Result get_or_wait_for_result(pmc_tracer *tracer, PMC_Traced_Region *region)
 {
-    while(region->Results.completed == false)
+    while(region->results.completed == false)
     {
         /* NOTE(casey): This is a spin-lock loop on purpose, because if there was a Sleep() in here
            or some other yield, it might cause Windows to demote this region, which we don't want.
@@ -580,5 +474,5 @@ static PMC_Trace_Result get_or_wait_for_result(pmc_tracer *tracer, pmc_traced_re
 
     _mm_mfence(); // NOTE(casey): This is a stronger memory barrier than necessary, but should not be harmful
 
-    return region->Results;
+    return region->results;
 }

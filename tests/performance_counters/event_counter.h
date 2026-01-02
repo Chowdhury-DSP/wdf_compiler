@@ -120,7 +120,7 @@ struct event_collector {
 #elif defined(_WIN32)
   pmc_tracer tracer {};
   PMC_Source_Mapping pmc_mapping {};
-  pmc_traced_region region {};
+  PMC_Traced_Region region {};
   event_collector() {
     const wchar_t* amd_name_array[] =
     {

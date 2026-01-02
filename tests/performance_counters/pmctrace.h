@@ -25,18 +25,10 @@ struct PMC_Trace_Result
     uint32_t completed;
 };
 
-struct pmc_traced_region;
-struct pmc_region_internals
+struct PMC_Traced_Region
 {
-    pmc_traced_region *Next;
-    uint32_t TakeNextSysExitAsStart;
-    uint32_t TracingThreadID;
-};
-
-struct pmc_traced_region
-{
-    PMC_Trace_Result Results;
-    pmc_region_internals Internals;
+    PMC_Trace_Result results;
+    uint32_t take_next_sys_exit_as_start;
 };
 
 struct pmc_tracer;
@@ -46,7 +38,7 @@ static PMC_Source_Mapping map_pmc_names(wchar_t const **Strings);
 static void StartTracing(pmc_tracer *Tracer, PMC_Source_Mapping *Mapping);
 static void StopTracing(pmc_tracer *Tracer);
 
-static void StartCountingPMCs(pmc_tracer *Tracer, pmc_traced_region *ResultDest);
-static void StopCountingPMCs(pmc_tracer *Tracer, pmc_traced_region *ResultDest);
+static void StartCountingPMCs(pmc_tracer *Tracer, PMC_Traced_Region *ResultDest);
+static void StopCountingPMCs(pmc_tracer *Tracer, PMC_Traced_Region *ResultDest);
 
-static PMC_Trace_Result get_or_wait_for_result(pmc_tracer *tracer, pmc_traced_region *region);
+static PMC_Trace_Result get_or_wait_for_result(pmc_tracer *tracer, PMC_Traced_Region *region);
