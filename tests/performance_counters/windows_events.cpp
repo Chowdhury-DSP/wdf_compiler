@@ -35,7 +35,6 @@ struct PMC_Tracer_CPU
 
     u64 last_sys_enter_counters[PMC_COUNT];
     u64 last_sys_enter_tsc;
-    b32 last_sys_enter_valid;
 };
 
 #define PMC_TRACE_RESULT_MASK 0xff
@@ -109,13 +108,12 @@ static void Win32FindPMCData(PMC_Tracer *Tracer, EVENT_RECORD *Event, u64 *PMCDa
 static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
 {
     PMC_Tracer *Tracer = (PMC_Tracer *)Event->UserContext;
+    PMC_Tracer_CPU *CPU = &Tracer->CPU;
 
     GUID EventGUID = Event->EventHeader.ProviderId;
 	UCHAR Opcode = Event->EventHeader.EventDescriptor.Opcode;
     u64 TSC = Event->EventHeader.TimeStamp.QuadPart;
     u64 PMCData[PMC_COUNT] = {};
-
-    PMC_Tracer_CPU *CPU = &Tracer->CPU;
 
     if(GUIDsAreEqual(EventGUID, TraceMarkerCategoryGuid))
     {
@@ -124,35 +122,16 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
         if(Opcode == Trace_Marker_Open)
         {
             // OPEN
-
-            // NOTE(casey): Add this region to the list of regions running on this CPU core
             CPU->region = region;
-
-            // NOTE(casey): Mark that this region will get its starting counter values from the next SysExit event
             region->take_next_sys_exit_as_start = true;
         }
         else if(Opcode == Trace_Marker_Close)
         {
             // CLOSE
-
             PMC_Trace_Result *results = &region->results;
-
-            if(CPU->last_sys_enter_valid)
-            {
-                // NOTE(casey): Apply the counters and TSC we saved from the preceeding SysEnter event
-                for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
-                    results->counters[PMCIndex] += CPU->last_sys_enter_counters[PMCIndex];
-                results->tsc_elapsed += CPU->last_sys_enter_tsc;
-                CPU->last_sys_enter_valid = false;
-            }
-            else
-            {
-                assert(false && "No ENTER for CLOSE event");
-            }
-
-            // NOTE(casey): Make sure everything is written back before signaling completion
-            _mm_mfence(); // NOTE(casey): This is a stronger memory barrier than necessary, but should not be harmful
-
+            for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
+                results->counters[PMCIndex] += CPU->last_sys_enter_counters[PMCIndex];
+            results->tsc_elapsed += CPU->last_sys_enter_tsc;
             results->completed = true;
         }
         else
@@ -165,12 +144,8 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
         if(Opcode == WIN32_TRACE_OPCODE_SYSTEMCALL_ENTER)
         {
             // ENTER
-
-            // NOTE(casey): Remember the state at this SysEnter so it can be applied to a
-            // region later if there is a following Close event.
             if(CPU->region)
             {
-                CPU->last_sys_enter_valid = true;
                 CPU->last_sys_enter_tsc = TSC;
                 Win32FindPMCData(Tracer, Event, CPU->last_sys_enter_counters);
             }
@@ -178,16 +153,14 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
         else if(Opcode == WIN32_TRACE_OPCODE_SYSTEMCALL_EXIT)
         {
             // EXIT
-
             if (PMC_Traced_Region *region = CPU->region)
             {
-                PMC_Trace_Result *results = &region->results;
-
-                // NOTE(casey): Exit
                 if(region->take_next_sys_exit_as_start)
                 {
                     region->take_next_sys_exit_as_start = false;
                     Win32FindPMCData(Tracer, Event, PMCData);
+
+                    PMC_Trace_Result *results = &region->results;
                     for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
                         results->counters[PMCIndex] -= PMCData[PMCIndex];
                     results->tsc_elapsed -= TSC;
@@ -287,12 +260,10 @@ static void Win32CreateTrace(PMC_Tracer *Tracer, PMC_Source_Mapping *SourceMappi
     Props->Wnode.BufferSize = sizeof(Tracer->Win32TraceDesc);
     Props->LoggerNameOffset = offsetof(Win32_Trace_Description, Name);
 
-    // NOTE(casey): Attempt to stop any existing orphaned trace from a previous run
+    // If there's a previously running trace, this should kill it...
+    // but doesn't always seem to work?
     ControlTraceW(0, TraceName, (EVENT_TRACE_PROPERTIES *)Props, EVENT_TRACE_CONTROL_STOP);
 
-    /* NOTE(casey): Attempt to start the trace. Note that the fields we care about MUST
-       be filled in after the EVENT_TRACE_CONTROL_STOP ControlTraceW call, because
-       that call will overwrite the properties! */
     Props->Wnode.ClientContext = 3;
     Props->Wnode.Flags = WNODE_FLAG_TRACED_GUID | WNODE_FLAG_VERSIONED_PROPERTIES;
     Props->LogFileMode = EVENT_TRACE_REAL_TIME_MODE | EVENT_TRACE_SYSTEM_LOGGER_MODE;
@@ -320,15 +291,12 @@ static void Win32CreateTrace(PMC_Tracer *Tracer, PMC_Source_Mapping *SourceMappi
 static void start_tracing(PMC_Tracer *Tracer, PMC_Source_Mapping *SourceMapping)
 {
     *Tracer = {};
-
-    Tracer->CPU = {};
     Win32RegisterTraceMarker(Tracer);
     Win32CreateTrace(Tracer, SourceMapping);
 }
 
 static void stop_tracing(PMC_Tracer *Tracer)
 {
-    // TODO(casey): Try to verify that 0 is never a valid trace handle - it's unclear from the documentation
     if(Tracer->TraceHandle)
     {
         ControlTraceW(Tracer->TraceHandle, 0, (EVENT_TRACE_PROPERTIES *)&Tracer->Win32TraceDesc.Properties, EVENT_TRACE_CONTROL_STOP);
@@ -377,11 +345,6 @@ static void stop_counting(PMC_Tracer *tracer, PMC_Traced_Region *region)
 
     trace_marker.region = region;
 
-    /* TODO(casey): In some circumstances, I believe this can fail due to ETW's internal buffers being
-       full. In that case, I _think_ it should be possible to mark the particular trace results as
-       invalid, but keep trying to issue the TraceEvent, succeed, and then continune without having
-       to error out of the entire run. However, I have not found a reliable repro case for this
-       yet, so I haven't yet tried to implement such a recovery case. */
     auto status = TraceEvent(tracer->TraceHandle, &trace_marker.header);
     assert(status == ERROR_SUCCESS && "Unable to insert ETW close marker");
 }
@@ -390,16 +353,9 @@ static PMC_Trace_Result get_or_wait_for_result(PMC_Tracer *tracer, PMC_Traced_Re
 {
     while(region->results.completed == false)
     {
-        /* NOTE(casey): This is a spin-lock loop on purpose, because if there was a Sleep() in here
-           or some other yield, it might cause Windows to demote this region, which we don't want.
-           Ideally, we rarely spin here, because there are enough traces in flight to ensure that,
-           whenever we check for results, there are some waiting, except perhaps at the very end of a
-           batch. */
-
+        // Spin-lock... we shouldn't be here very long...
         _mm_pause();
     }
-
-    _mm_mfence(); // NOTE(casey): This is a stronger memory barrier than necessary, but should not be harmful
 
     return region->results;
 }
