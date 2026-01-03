@@ -24,8 +24,8 @@
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
-#include "pmctrace.h"
-#include "pmctrace.cpp"
+#include "windows_events.h"
+#include "windows_events.cpp"
 #endif
 
 struct event_count {
@@ -118,22 +118,25 @@ struct event_collector {
     return apple_events.setup_performance_counters();
   }
 #elif defined(_WIN32)
-  pmc_tracer tracer {};
-  pmc_source_mapping pmc_mapping {};
-  pmc_traced_region region {};
+  PMC_Tracer tracer {};
+  PMC_Source_Mapping pmc_mapping {};
+  PMC_Traced_Region region {};
   event_collector() {
-    pmc_name_array amd_name_array =
+    const wchar_t* amd_name_array[] =
     {
         L"TotalCycles",
         L"TotalIssues",
         L"BranchInstructions",
         L"BranchMispredictions",
     };
-    pmc_mapping = MapPMCNames(&amd_name_array);
-    StartTracing(&tracer, &pmc_mapping);
+    pmc_mapping = map_pmc_names(amd_name_array);
+    start_tracing(&tracer, &pmc_mapping);
+  }
+  ~event_collector() {
+    stop_tracing(&tracer);
   }
   bool has_events() {
-    return IsValid(&pmc_mapping);
+    return true;
   }
 #else
   event_collector() {}
@@ -149,7 +152,7 @@ struct event_collector {
     if(has_events()) { diff = apple_events.get_counters(); }
 #elif defined(_WIN32)
     // cycles_at_start = __rdtsc();
-    StartCountingPMCs(&tracer, &region);
+    start_counting(&tracer, &region);
 #endif
     start_clock = std::chrono::steady_clock::now();
   }
@@ -169,13 +172,13 @@ struct event_collector {
     count.event_counts[4] = diff.branches;
 #elif defined(_WIN32)
     // const auto cycles_diff = __rdtsc() - cycles_at_start;
-    StopCountingPMCs(&tracer, &region);
-    pmc_trace_result result = GetOrWaitForResult(&tracer, &region);
-    count.event_counts[0] = result.Counters[0]; // cycles
-    count.event_counts[1] = result.Counters[1]; // instructions
-    count.event_counts[2] = result.Counters[3]; // missed branches
+    stop_counting(&tracer, &region);
+    const auto result = get_or_wait_for_result(&tracer, &region);
+    count.event_counts[0] = result.counters[0]; // cycles
+    count.event_counts[1] = result.counters[1]; // instructions
+    count.event_counts[2] = result.counters[3]; // missed branches
     count.event_counts[3] = 0; //
-    count.event_counts[4] = result.Counters[2]; // branches
+    count.event_counts[4] = result.counters[2]; // branches
 #endif
     count.elapsed = end_clock - start_clock;
     return count;

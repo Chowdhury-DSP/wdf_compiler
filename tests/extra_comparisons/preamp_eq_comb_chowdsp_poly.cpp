@@ -71,7 +71,6 @@ int main()
     std::uniform_real_distribution<float> dist { -1.0f, 1.0f };
     event_collector collector {};
 
-    double ref_time, test_time;
     {
         event_aggregate aggregate {};
         float save_out = 0.0f;
@@ -89,7 +88,6 @@ int main()
         }
         std::cout << save_out << '\n';
         pretty_print (aggregate, M, "chowdsp_wdf poly");
-        ref_time = aggregate.elapsed_ns();
     }
 
     free (data_in);

@@ -162,6 +162,7 @@ int main()
     event_collector collector {};
 
     double ref_time, test_time;
+    double ref_cycles, test_cycles;
     {
         event_aggregate aggregate {};
         float save_out = 0.0f;
@@ -180,6 +181,7 @@ int main()
         std::cout << save_out << '\n';
         pretty_print (aggregate, M, "chowdsp_wdf");
         ref_time = aggregate.elapsed_ns();
+        ref_cycles = aggregate.best.cycles();
     }
 
     {
@@ -201,8 +203,10 @@ int main()
         std::cout << save_out << '\n';
         pretty_print (aggregate, M, "wdf_compiler");
         test_time = aggregate.elapsed_ns();
+        test_cycles = aggregate.best.cycles();
     }
-    std::cout << "wdf_compiler is " << ref_time / test_time << "x faster\n";
+    std::cout << "wdf_compiler is " << ref_time / test_time << "x faster (time)\n";
+    std::cout << "wdf_compiler is " << ref_cycles / test_cycles << "x faster (cycles)\n";
 
     free (data_in);
     free (data_out);
