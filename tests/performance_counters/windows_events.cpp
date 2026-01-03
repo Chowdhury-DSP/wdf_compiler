@@ -133,11 +133,7 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
             for(u32 pmc_index = 0; pmc_index < PMC_COUNT; ++pmc_index)
                 buffer_result.counters[pmc_index] = CPU->last_sys_enter_counters[pmc_index];
             buffer_result.tsc_elapsed = CPU->last_sys_enter_tsc;
-
-            std::atomic_ref atomic_index { region->buffer.index };
-            u32 new_index = atomic_index.fetch_add(1, std::memory_order_acq_rel);
-            assert(new_index < PMC_RING_CAPACITY && "Ring buffer capacity exceeded!");
-            region->buffer.buffer[new_index] = buffer_result;
+            region->end_counters = buffer_result;
 
             region->completed = true;
         }
@@ -171,12 +167,7 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
                     for(u32 pmc_index = 0; pmc_index < PMC_COUNT; ++pmc_index)
                         buffer_result.counters[pmc_index] = PMCData[pmc_index];
                     buffer_result.tsc_elapsed = TSC;
-                    buffer_result.negate = 1;
-
-                    std::atomic_ref atomic_index { region->buffer.index };
-                    u32 new_index = atomic_index.fetch_add(1, std::memory_order_acq_rel);
-                    assert(new_index < PMC_RING_CAPACITY && "Ring buffer capacity exceeded!");
-                    region->buffer.buffer[new_index] = buffer_result;
+                    region->start_counters = buffer_result;
                 }
             }
         }
@@ -361,6 +352,14 @@ static void stop_counting(PMC_Tracer *tracer, PMC_Traced_Region *region)
     assert(status == ERROR_SUCCESS && "Unable to insert ETW close marker");
 }
 
+static u64 diff_counters(u64 start, u64 end)
+{
+    if (end >= start)
+        return end - start;
+
+    return start - end;
+}
+
 static PMC_Trace_Result get_or_wait_for_result(PMC_Tracer *tracer, PMC_Traced_Region *region)
 {
     while(region->completed == false)
@@ -370,27 +369,12 @@ static PMC_Trace_Result get_or_wait_for_result(PMC_Tracer *tracer, PMC_Traced_Re
     }
 
     PMC_Trace_Result result {};
-    std::atomic_ref atomic_index { region->buffer.index };
-    u32 buffer_index = atomic_index.load(std::memory_order_acquire);
-    printf("Buffer size: %d\n", buffer_index);
-    while(buffer_index > 0)
+    for(u32 pmc_index = 0; pmc_index < PMC_COUNT; ++pmc_index)
     {
-        buffer_index = atomic_index.fetch_sub(1, std::memory_order_acq_rel);
-        auto buffer_result = region->buffer.buffer[buffer_index];
-
-        if(buffer_result.negate)
-        {
-            for(u32 pmc_index = 0; pmc_index < PMC_COUNT; ++pmc_index)
-                result.counters[pmc_index] -= buffer_result.counters[pmc_index];
-            buffer_result.tsc_elapsed -= buffer_result.tsc_elapsed;
-        }
-        else
-        {
-            for(u32 pmc_index = 0; pmc_index < PMC_COUNT; ++pmc_index)
-                result.counters[pmc_index] += buffer_result.counters[pmc_index];
-            buffer_result.tsc_elapsed += buffer_result.tsc_elapsed;
-        }
+        result.counters[pmc_index] = diff_counters(region->start_counters.counters[pmc_index],
+                                                   region->end_counters.counters[pmc_index]);
     }
+    result.tsc_elapsed = diff_counters(region->start_counters.tsc_elapsed, region->end_counters.tsc_elapsed);
 
     return result;
 }

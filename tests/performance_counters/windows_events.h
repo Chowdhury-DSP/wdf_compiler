@@ -1,7 +1,7 @@
 // Loosely adapted from Casey Muratori's "pmctrace"
+// and Mārtiņš Možeiko's miniperf (https://gist.github.com/mmozeiko/bd5923bcd9d20b5b9946691932ec95fa)
 
 #define PMC_COUNT 4
-#define PMC_RING_CAPACITY 1024 // 1048576 // 1024 * 1024
 
 struct PMC_Source_Mapping
 {
@@ -12,18 +12,13 @@ struct PMC_Trace_Result
 {
     uint64_t counters[PMC_COUNT];
     uint64_t tsc_elapsed;
-    uint32_t negate;
-};
-
-struct PMC_Ring_Buffer
-{
-    PMC_Trace_Result buffer[PMC_RING_CAPACITY];
-    uint32_t index {};
 };
 
 struct PMC_Traced_Region
 {
-    PMC_Ring_Buffer buffer {};
+    PMC_Trace_Result start_counters;
+    PMC_Trace_Result end_counters;
+
     uint32_t take_next_sys_exit_as_start;
     uint32_t completed;
 };
