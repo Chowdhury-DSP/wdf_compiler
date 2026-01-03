@@ -129,11 +129,6 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
         else if(Opcode == Trace_Marker_Close)
         {
             // CLOSE
-            PMC_Trace_Result *results = &region->results;
-            for(u32 pmc_index = 0; pmc_index < PMC_COUNT; ++pmc_index)
-                results->counters[pmc_index] += CPU->last_sys_enter_counters[pmc_index];
-            results->tsc_elapsed += CPU->last_sys_enter_tsc;
-
             PMC_Trace_Result buffer_result;
             for(u32 pmc_index = 0; pmc_index < PMC_COUNT; ++pmc_index)
                 buffer_result.counters[pmc_index] = CPU->last_sys_enter_counters[pmc_index];
@@ -144,7 +139,7 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
             assert(new_index < PMC_RING_CAPACITY && "Ring buffer capacity exceeded!");
             region->buffer.buffer[new_index] = buffer_result;
 
-            results->completed = true;
+            region->completed = true;
         }
         else
         {
@@ -171,11 +166,6 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
                 {
                     region->take_next_sys_exit_as_start = false;
                     Win32FindPMCData(Tracer, Event, PMCData);
-
-                    PMC_Trace_Result *results = &region->results;
-                    for(u32 pmc_index = 0; pmc_index < PMC_COUNT; ++pmc_index)
-                        results->counters[pmc_index] -= PMCData[pmc_index];
-                    results->tsc_elapsed -= TSC;
 
                     PMC_Trace_Result buffer_result;
                     for(u32 pmc_index = 0; pmc_index < PMC_COUNT; ++pmc_index)
@@ -351,9 +341,7 @@ static void start_counting(PMC_Tracer *tracer, PMC_Traced_Region *region)
     trace_marker.header.Class.Type = Trace_Marker_Open;
 
     trace_marker.region = region;
-
-    region->results = {};
-    std::atomic_ref { region->buffer.index }.store(0, std::memory_order_relaxed);
+    *region = {};
 
     auto status = TraceEvent(tracer->TraceHandle, &trace_marker.header);
     assert(status == ERROR_SUCCESS && "Unable to insert ETW open marker");
@@ -375,7 +363,7 @@ static void stop_counting(PMC_Tracer *tracer, PMC_Traced_Region *region)
 
 static PMC_Trace_Result get_or_wait_for_result(PMC_Tracer *tracer, PMC_Traced_Region *region)
 {
-    while(region->results.completed == false)
+    while(region->completed == false)
     {
         // Spin-lock... we shouldn't be here very long...
         _mm_pause();
@@ -405,6 +393,4 @@ static PMC_Trace_Result get_or_wait_for_result(PMC_Tracer *tracer, PMC_Traced_Re
     }
 
     return result;
-
-    // return region->results;
 }

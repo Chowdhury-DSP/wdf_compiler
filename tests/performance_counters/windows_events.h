@@ -12,7 +12,6 @@ struct PMC_Trace_Result
 {
     uint64_t counters[PMC_COUNT];
     uint64_t tsc_elapsed;
-    uint32_t completed;
     uint32_t negate;
 };
 
@@ -25,8 +24,8 @@ struct PMC_Ring_Buffer
 struct PMC_Traced_Region
 {
     PMC_Ring_Buffer buffer {};
-    PMC_Trace_Result results;
     uint32_t take_next_sys_exit_as_start;
+    uint32_t completed;
 };
 
 struct PMC_Tracer;
