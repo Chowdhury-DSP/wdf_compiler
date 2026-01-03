@@ -100,9 +100,9 @@ static void Win32FindPMCData(PMC_Tracer *Tracer, EVENT_RECORD *Event, u64 *PMCDa
     assert(PMCDataSize == (sizeof(u64)*PMC_COUNT) && "Unexpected PMC data size");
     assert(PMCPresent == 1 && "Unexpected PMC data count");
 
-    for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
+    for(u32 pmc_index = 0; pmc_index < PMC_COUNT; ++pmc_index)
     {
-        PMCData[PMCIndex] = PMC->Counter[PMCIndex];
+        PMCData[pmc_index] = PMC->Counter[pmc_index];
     }
 }
 
@@ -130,13 +130,13 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
         {
             // CLOSE
             PMC_Trace_Result *results = &region->results;
-            for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
-                results->counters[PMCIndex] += CPU->last_sys_enter_counters[PMCIndex];
+            for(u32 pmc_index = 0; pmc_index < PMC_COUNT; ++pmc_index)
+                results->counters[pmc_index] += CPU->last_sys_enter_counters[pmc_index];
             results->tsc_elapsed += CPU->last_sys_enter_tsc;
 
             PMC_Trace_Result buffer_result;
-            for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
-                buffer_result.counters[PMCIndex] = CPU->last_sys_enter_counters[PMCIndex];
+            for(u32 pmc_index = 0; pmc_index < PMC_COUNT; ++pmc_index)
+                buffer_result.counters[pmc_index] = CPU->last_sys_enter_counters[pmc_index];
             buffer_result.tsc_elapsed = CPU->last_sys_enter_tsc;
 
             std::atomic_ref atomic_index { region->buffer.index };
@@ -173,13 +173,13 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
                     Win32FindPMCData(Tracer, Event, PMCData);
 
                     PMC_Trace_Result *results = &region->results;
-                    for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
-                        results->counters[PMCIndex] -= PMCData[PMCIndex];
+                    for(u32 pmc_index = 0; pmc_index < PMC_COUNT; ++pmc_index)
+                        results->counters[pmc_index] -= PMCData[pmc_index];
                     results->tsc_elapsed -= TSC;
 
                     PMC_Trace_Result buffer_result;
-                    for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
-                        buffer_result.counters[PMCIndex] = PMCData[PMCIndex];
+                    for(u32 pmc_index = 0; pmc_index < PMC_COUNT; ++pmc_index)
+                        buffer_result.counters[pmc_index] = PMCData[pmc_index];
                     buffer_result.tsc_elapsed = TSC;
                     buffer_result.negate = 1;
 
@@ -384,6 +384,7 @@ static PMC_Trace_Result get_or_wait_for_result(PMC_Tracer *tracer, PMC_Traced_Re
     PMC_Trace_Result result {};
     std::atomic_ref atomic_index { region->buffer.index };
     u32 buffer_index = atomic_index.load(std::memory_order_acquire);
+    printf("Buffer size: %d\n", buffer_index);
     while(buffer_index > 0)
     {
         buffer_index = atomic_index.fetch_sub(1, std::memory_order_acq_rel);
@@ -391,14 +392,14 @@ static PMC_Trace_Result get_or_wait_for_result(PMC_Tracer *tracer, PMC_Traced_Re
 
         if(buffer_result.negate)
         {
-            for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
-                result.counters[PMCIndex] -= buffer_result.counters[PMCIndex];
+            for(u32 pmc_index = 0; pmc_index < PMC_COUNT; ++pmc_index)
+                result.counters[pmc_index] -= buffer_result.counters[pmc_index];
             buffer_result.tsc_elapsed -= buffer_result.tsc_elapsed;
         }
         else
         {
-            for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
-                result.counters[PMCIndex] += buffer_result.counters[PMCIndex];
+            for(u32 pmc_index = 0; pmc_index < PMC_COUNT; ++pmc_index)
+                result.counters[pmc_index] += buffer_result.counters[pmc_index];
             buffer_result.tsc_elapsed += buffer_result.tsc_elapsed;
         }
     }
