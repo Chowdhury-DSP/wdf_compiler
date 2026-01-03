@@ -11,37 +11,23 @@ using u32 = uint32_t;
 using b32 = uint32_t;
 using u8 = uint8_t;
 
-enum trace_marker_type : u32
+enum Trace_Marker_Type : u32
 {
-    TraceMarker_None,
-
-    TraceMarker_Open,
-    TraceMarker_Close,
-
-    TraceMarker_Count,
+    Trace_Marker_Open,
+    Trace_Marker_Close,
 };
 
-struct win32_trace_description
+struct Win32_Trace_Description
 {
     EVENT_TRACE_PROPERTIES_V2 Properties;
     WCHAR Name[1024];
 };
 
-struct pmc_tracer_etw_marker_userdata
-{
-    u64 TraceKey;
-    PMC_Traced_Region *Dest;
-};
-struct pmc_tracer_etw_marker
+struct ETW_Marker
 {
     EVENT_TRACE_HEADER header;
-    pmc_tracer_etw_marker_userdata UserData;
+    PMC_Traced_Region *region;
 };
-// struct ETW_Marker
-// {
-//     EVENT_TRACE_HEADER header;
-//     PMC_Traced_Region *region;
-// };
 
 struct PMC_Tracer_CPU
 {
@@ -55,7 +41,7 @@ struct PMC_Tracer_CPU
 #define PMC_TRACE_RESULT_MASK 0xff
 struct PMC_Tracer
 {
-    win32_trace_description Win32TraceDesc;
+    Win32_Trace_Description Win32TraceDesc;
     TRACEHANDLE MarkerRegistrationHandle;
     TRACEHANDLE TraceHandle;
     TRACEHANDLE TraceSession;
@@ -133,12 +119,9 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
 
     if(GUIDsAreEqual(EventGUID, TraceMarkerCategoryGuid))
     {
-        pmc_tracer_etw_marker_userdata *Marker = (pmc_tracer_etw_marker_userdata *)Event->UserData;
-        // u64 MarkerKey = Marker->TraceKey;
-        PMC_Traced_Region *region = Marker->Dest;
-        // PMC_Traced_Region *region = (PMC_Traced_Region *)Event->UserData;
+        PMC_Traced_Region *region = *((PMC_Traced_Region **)(Event->UserData));
 
-        if(Opcode == TraceMarker_Open)
+        if(Opcode == Trace_Marker_Open)
         {
             // OPEN
 
@@ -148,7 +131,7 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
             // NOTE(casey): Mark that this region will get its starting counter values from the next SysExit event
             region->take_next_sys_exit_as_start = true;
         }
-        else if(Opcode == TraceMarker_Close)
+        else if(Opcode == Trace_Marker_Close)
         {
             // CLOSE
 
@@ -157,12 +140,8 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
             if(CPU->last_sys_enter_valid)
             {
                 // NOTE(casey): Apply the counters and TSC we saved from the preceeding SysEnter event
-
                 for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
-                {
                     results->counters[PMCIndex] += CPU->last_sys_enter_counters[PMCIndex];
-                }
-
                 results->tsc_elapsed += CPU->last_sys_enter_tsc;
                 CPU->last_sys_enter_valid = false;
             }
@@ -210,10 +189,7 @@ static void CALLBACK Win32ProcessETWEvent(EVENT_RECORD *Event)
                     region->take_next_sys_exit_as_start = false;
                     Win32FindPMCData(Tracer, Event, PMCData);
                     for(u32 PMCIndex = 0; PMCIndex < PMC_COUNT; ++PMCIndex)
-                    {
                         results->counters[PMCIndex] -= PMCData[PMCIndex];
-                    }
-
                     results->tsc_elapsed -= TSC;
                 }
             }
@@ -309,7 +285,7 @@ static void Win32CreateTrace(PMC_Tracer *Tracer, PMC_Source_Mapping *SourceMappi
 
     EVENT_TRACE_PROPERTIES_V2 *Props = &Tracer->Win32TraceDesc.Properties;
     Props->Wnode.BufferSize = sizeof(Tracer->Win32TraceDesc);
-    Props->LoggerNameOffset = offsetof(win32_trace_description, Name);
+    Props->LoggerNameOffset = offsetof(Win32_Trace_Description, Name);
 
     // NOTE(casey): Attempt to stop any existing orphaned trace from a previous run
     ControlTraceW(0, TraceName, (EVENT_TRACE_PROPERTIES *)Props, EVENT_TRACE_CONTROL_STOP);
@@ -377,13 +353,13 @@ static void stop_tracing(PMC_Tracer *Tracer)
 
 static void start_counting(PMC_Tracer *tracer, PMC_Traced_Region *region)
 {
-    pmc_tracer_etw_marker trace_marker = {};
+    ETW_Marker trace_marker = {};
     trace_marker.header.Size = sizeof(trace_marker);
     trace_marker.header.Flags = WNODE_FLAG_TRACED_GUID;
     trace_marker.header.Guid = TraceMarkerCategoryGuid;
-    trace_marker.header.Class.Type = TraceMarker_Open;
+    trace_marker.header.Class.Type = Trace_Marker_Open;
 
-    trace_marker.UserData.Dest = region;
+    trace_marker.region = region;
 
     region->results = {};
 
@@ -393,13 +369,13 @@ static void start_counting(PMC_Tracer *tracer, PMC_Traced_Region *region)
 
 static void stop_counting(PMC_Tracer *tracer, PMC_Traced_Region *region)
 {
-    pmc_tracer_etw_marker trace_marker = {};
+    ETW_Marker trace_marker = {};
     trace_marker.header.Size = sizeof(trace_marker);
     trace_marker.header.Flags = WNODE_FLAG_TRACED_GUID;
     trace_marker.header.Guid = TraceMarkerCategoryGuid;
-    trace_marker.header.Class.Type = TraceMarker_Close;
+    trace_marker.header.Class.Type = Trace_Marker_Close;
 
-    trace_marker.UserData.Dest = region;
+    trace_marker.region = region;
 
     /* TODO(casey): In some circumstances, I believe this can fail due to ETW's internal buffers being
        full. In that case, I _think_ it should be possible to mark the particular trace results as
