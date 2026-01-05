@@ -20,3 +20,5 @@ wdf_compiler
 xsimd/
 armadillo/
 rt-wdf/
+
+notes/*.pdf
