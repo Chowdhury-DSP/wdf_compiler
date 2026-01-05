@@ -6,12 +6,13 @@ Process :: #import "Process";
 #load "scratch.jai";
 
 Args :: struct {
-    verbose   : bool = false;     @"?Verbose"
-    version   : bool = false;     @"?Version"
-    lang      : string = "cpp";   @"?Language of generated code. Currently supports cpp (default) and jai."
-    dtype     : string = "float"; @"?Data type to use for generated code. (Default: float)"
-    align     : int = 16;         @"?Default data alignment to use for generated code. (Default: 16)"
-    no_reduce : bool = false;     @"?Perform reductions on the circuit where possible (Default: true)"
+    verbose      : bool = false;     @"?Verbose"
+    version      : bool = false;     @"?Version"
+    lang         : string = "cpp";   @"?Language of generated code. Currently supports cpp (default) and jai."
+    dtype        : string = "float"; @"?Data type to use for generated code. (Default: float)"
+    align        : int = 16;         @"?Default data alignment to use for generated code. (Default: 16)"
+    no_reduce    : bool = false;     @"?Skip circuit element reductions (Default: false)"
+    one_multiply : bool = false;     @"?Use 1-multiply junctions for series adaptors and others (Default: false)"
 }
 argument_flags :: CLI.Default_Argument_Flags;
 global_args: Args;
@@ -579,14 +580,14 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                 array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
                                                             tprint("-state.%_z", token.name),
                                                             tprint("% reflected", token.name)));
-                array_add(*down_tree_statements, tprint("state.%1_z -= impedances.%1_T_over_T_plus_2RC * (%1_a + state.%1_z); // %1 state update", token.name));
-                array_add(*required_impedances, tprint("%_T_over_T_plus_2RC", token.name));
+                array_add(*down_tree_statements, tprint("state.%1_z = -%1_a + impedances.%1_2RC_over_T_plus_2RC * (%1_a + state.%1_z); // %1 state update", token.name));
+                array_add(*required_impedances, tprint("%_2RC_over_T_plus_2RC", token.name));
             case .Resistor_Capacitor_Parallel;
                 array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
-                                                            tprint("impedances.%1_twoRC_over_twoRC_plus_T * state.%1_z", token.name),
+                                                            tprint("impedances.%1_2RC_over_2RC_plus_T * state.%1_z", token.name),
                                                             tprint("% reflected", token.name)));
                 array_add(*down_tree_statements, tprint("state.%1_z = %1_b + %1_a - state.%1_z; // %1 state update", token.name));
-                array_add(*required_impedances, tprint("%_twoRC_over_twoRC_plus_T", token.name));
+                array_add(*required_impedances, tprint("%_2RC_over_2RC_plus_T", token.name));
             case .Resistive_Voltage_Source;
                 if ! is_input(token, inputs) { token.input = tprint("impedances.%1_V", token.name); }
                 input := ifx token.invert then tprint("-(%)", token.input) else token.input;
@@ -624,9 +625,15 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                 array_add(*down_tree_statements, write_define(tprint("%_a", child0_token.name),
                                                               tprint("%2_b - impedances.%1_pr * (%1_a - %1_b)", token.name, child0_token.name),
                                                               tprint("% incident", child0_token.name)));
-                array_add(*down_tree_statements, write_define(tprint("%_a", child1_token.name),
-                                                              tprint("-(%1_a + %2_a)", token.name, child0_token.name),
-                                                              tprint("% incident", child1_token.name)));
+                if global_args.one_multiply {
+                    array_add(*down_tree_statements, write_define(tprint("%_a", child1_token.name),
+                                                                tprint("-(%1_a + %2_a)", token.name, child0_token.name),
+                                                                tprint("% incident", child1_token.name)));
+                } else {
+                    array_add(*down_tree_statements, write_define(tprint("%_a", child1_token.name),
+                                                                  tprint("-%1_a - %2_b + impedances.%1_pr * (%1_a - %1_b)", token.name, child0_token.name),
+                                                                  tprint("% incident", child1_token.name)));
+                }
                 array_add(*required_impedances, tprint("%_pr", token.name));
             case .Parallel;
                 child0_token := tokens[token.children[0]];
@@ -851,13 +858,13 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
             case .Resistor_Capacitor_Series;
                 for name,idx : token.param_names { write_param_named(*params_vars, token, name, idx); }
                 array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
-                array_add(*impedance_vars, write_struct_field(tprint("%1_T_over_T_plus_2RC", token.name)));
+                array_add(*impedance_vars, write_struct_field(tprint("%1_2RC_over_T_plus_2RC", token.name)));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistor_Capacitor_Parallel;
                 for name,idx : token.param_names { write_param_named(*params_vars, token, name, idx); }
                 array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
-                array_add(*impedance_vars, write_struct_field(tprint("%1_twoRC_over_twoRC_plus_T", token.name)));
+                array_add(*impedance_vars, write_struct_field(tprint("%1_2RC_over_2RC_plus_T", token.name)));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Ideal_Voltage_Source;
@@ -1120,7 +1127,7 @@ generate_updater :: (tokens: [] Token,
                 array_add(*impedance_updates, write_define(tprint("%1_cap_value", token.name), param_calc(token, token.param_calc_info[1])));
                 add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("(T / (2 * %1_cap_value)) + %1_res_value", token.name), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
-                array_add(*impedance_updates, tprint("impedances.%1_T_over_T_plus_2RC = T / (2 * %1_cap_value * %1_res_value + T);\n", token.name));
+                array_add(*impedance_updates, tprint("impedances.%1_2RC_over_T_plus_2RC = (2 * %1_cap_value * %1_res_value) / (2 * %1_cap_value * %1_res_value + T);\n", token.name));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistor_Capacitor_Parallel;
@@ -1130,7 +1137,7 @@ generate_updater :: (tokens: [] Token,
                 array_add(*impedance_updates, write_define(tprint("%1_2RC", token.name), tprint("2 * %1_cap_value * %1_res_value;", token.name)));
                 add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("%1_res_value * T / (%1_2RC + T)", token.name), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
-                array_add(*impedance_updates, tprint("impedances.%1_twoRC_over_twoRC_plus_T = %1_2RC / (%1_2RC + T);\n", token.name));
+                array_add(*impedance_updates, tprint("impedances.%1_2RC_over_2RC_plus_T = %1_2RC / (%1_2RC + T);\n", token.name));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Ideal_Voltage_Source;

@@ -1,0 +1,158 @@
+1- Multiply
+
+RC Lowpass test
+Max Error: 2.26498e-06
+loaded db: a14 (Apple A14/M1)
+-0.259572
+      chowdsp_wdf      7.65 ns/sample
+                      19.01 instructions/sample
+                      22.64 cycles/sample
+                       1.16 branches/sample
+                       0.00 branch miss/sample
+                       0.84 instructions/cycle
+0.0581979
+     wdf_compiler      6.51 ns/sample
+                      14.83 instructions/sample
+                      19.53 cycles/sample
+                       1.13 branches/sample
+                       0.00 branch miss/sample
+                       0.76 instructions/cycle
+wdf_compiler is 1.17549x faster (time)
+wdf_compiler is 1.15933x faster (cycles)
+
+                   0123456789          0123456789          0123456789          01234567
+Index     0123456789          0123456789          0123456789          0123456789
+
+[0,0]     DeeeeeER  .    .    .    .    .    .    .    .    .    .    .    .    .    . .   vmovss	xmm1, dword ptr [rdi]
+[0,1]     D------R  .    .    .    .    .    .    .    .    .    .    .    .    .    . .   vxorps	xmm2, xmm2, xmm2
+[0,2]     D=====eeeeER   .    .    .    .    .    .    .    .    .    .    .    .    . .   vaddss	xmm3, xmm1, xmm2
+[0,3]     D=====eeeeeeeeeER   .    .    .    .    .    .    .    .    .    .    .    . .   vfmadd132ss	xmm0, xmm3, dword ptr [rip + .LCPI0_0]
+[0,4]     D==============eeeeER    .    .    .    .    .    .    .    .    .    .    . .   vaddss	xmm3, xmm3, xmm0
+[0,5]     .D=============eeeeeeeeeER    .    .    .    .    .    .    .    .    .    . .   vfnmadd132ss	xmm3, xmm2, dword ptr [rsi]
+[0,6]     .D======================eeeeER.    .    .    .    .    .    .    .    .    . .   vaddss	xmm0, xmm0, xmm3
+[0,7]     .DeeeeeeE--------------------R.    .    .    .    .    .    .    .    .    . .   vbroadcastss	xmm2, dword ptr [rip + .LCPI0_1]
+[0,8]     .D==========================eER    .    .    .    .    .    .    .    .    . .   vxorps	xmm2, xmm0, xmm2
+[0,9]     . D==========================eER   .    .    .    .    .    .    .    .    . .   vmovss	dword ptr [rdi], xmm2
+[0,10]    . D=========================eeeeER .    .    .    .    .    .    .    .    . .   vsubss	xmm0, xmm1, xmm0
+[0,11]    . D=========================eeeeeeeeeER .    .    .    .    .    .    .    . .   vmulss	xmm0, xmm0, dword ptr [rip + .LCPI0_2]
+[0,12]    .  DeeeeeeeE--------------------------R .    .    .    .    .    .    .    . .   ret
+[1,0]     .  DeeeeeE----------------------------R .    .    .    .    .    .    .    . .   vmovss	xmm1, dword ptr [rdi]
+[1,1]     .  D----------------------------------R .    .    .    .    .    .    .    . .   vxorps	xmm2, xmm2, xmm2
+[1,2]     .  D=====eeeeE------------------------R .    .    .    .    .    .    .    . .   vaddss	xmm3, xmm1, xmm2
+[1,3]     .   D===========================eeeeeeeeeER  .    .    .    .    .    .    . .   vfmadd132ss	xmm0, xmm3, dword ptr [rip + .LCPI0_0]
+[1,4]     .   D====================================eeeeER   .    .    .    .    .    . .   vaddss	xmm3, xmm3, xmm0
+[1,5]     .   D====================================eeeeeeeeeER   .    .    .    .    . .   vfnmadd132ss	xmm3, xmm2, dword ptr [rsi]
+[1,6]     .   D=============================================eeeeER    .    .    .    . .   vaddss	xmm0, xmm0, xmm3
+[1,7]     .    DeeeeeeE------------------------------------------R    .    .    .    . .   vbroadcastss	xmm2, dword ptr [rip + .LCPI0_1]
+[1,8]     .    D================================================eER   .    .    .    . .   vxorps	xmm2, xmm0, xmm2
+[1,9]     .    D=================================================eER  .    .    .    . .   vmovss	dword ptr [rdi], xmm2
+[1,10]    .    D================================================eeeeER.    .    .    . .   vsubss	xmm0, xmm1, xmm0
+[1,11]    .    .D===============================================eeeeeeeeeER.    .    . .   vmulss	xmm0, xmm0, dword ptr [rip + .LCPI0_2]
+[1,12]    .    .DeeeeeeeE-------------------------------------------------R.    .    . .   ret
+[2,0]     .    .DeeeeeE---------------------------------------------------R.    .    . .   vmovss	xmm1, dword ptr [rdi]
+[2,1]     .    . D--------------------------------------------------------R.    .    . .   vxorps	xmm2, xmm2, xmm2
+[2,2]     .    . D====eeeeE-----------------------------------------------R.    .    . .   vaddss	xmm3, xmm1, xmm2
+[2,3]     .    . D==================================================eeeeeeeeeER .    . .   vfmadd132ss	xmm0, xmm3, dword ptr [rip + .LCPI0_0]
+[2,4]     .    . D===========================================================eeeeER  . .   vaddss	xmm3, xmm3, xmm0
+[2,5]     .    .  D==========================================================eeeeeeeeeER   vfnmadd132ss	xmm3, xmm2, dword ptr [rsi]
+Truncated display due to cycle limit
+
+     [0]    [1]    [2]    [3]
+0.     10    1.0    1.0    104.0     vmovss	xmm1, dword ptr [rdi]
+1.     10    0.0    0.0    109.6     vxorps	xmm2, xmm2, xmm2
+2.     10    5.6    0.0    100.4     vaddss	xmm3, xmm1, xmm2
+3.     10    104.6  0.0    0.0       vfmadd132ss	xmm0, xmm3, dword ptr [rip + .LCPI0_0]
+4.     10    113.6  0.0    0.0       vaddss	xmm3, xmm3, xmm0
+5.     10    113.1  0.0    0.0       vfnmadd132ss	xmm3, xmm2, dword ptr [rsi]
+6.     10    121.6  0.0    0.0       vaddss	xmm0, xmm0, xmm3
+7.     10    1.0    1.0    117.8     vbroadcastss	xmm2, dword ptr [rip + .LCPI0_1]
+8.     10    124.6  0.0    0.0       vxorps	xmm2, xmm0, xmm2
+9.     10    124.0  0.0    0.0       vmovss	dword ptr [rdi], xmm2
+10.    10    122.9  0.0    0.0       vsubss	xmm0, xmm1, xmm0
+11.    10    120.7  0.0    0.0       vmulss	xmm0, xmm0, dword ptr [rip + .LCPI0_2]
+12.    10    1.0    1.0    120.5     ret
+      10    73.4   0.2    42.5      <total>
+
+
+2-multiply:
+
+RC Lowpass test
+Max Error: 2.14577e-06
+loaded db: a14 (Apple A14/M1)
+0.0657266
+      chowdsp_wdf      7.65 ns/sample
+                      18.76 instructions/sample
+                      22.53 cycles/sample
+                       1.12 branches/sample
+                       0.00 branch miss/sample
+                       0.83 instructions/cycle
+0.0924579
+     wdf_compiler      5.01 ns/sample
+                      13.59 instructions/sample
+                      15.09 cycles/sample
+                       1.09 branches/sample
+                       0.00 branch miss/sample
+                       0.90 instructions/cycle
+wdf_compiler is 1.52594x faster (time)
+wdf_compiler is 1.49344x faster (cycles)
+
+                   0123456789          0123456789          0123456789          012345678
+Index     0123456789          0123456789          0123456789          0123456789
+
+[0,0]     DeeeeeER  .    .    .    .    .    .    .    .    .    .    .    .    .    .  .   vmovss	xmm1, dword ptr [rdi]
+[0,1]     D------R  .    .    .    .    .    .    .    .    .    .    .    .    .    .  .   vxorps	xmm2, xmm2, xmm2
+[0,2]     D=====eeeeER   .    .    .    .    .    .    .    .    .    .    .    .    .  .   vaddss	xmm2, xmm1, xmm2
+[0,3]     DeeeeeeE---R   .    .    .    .    .    .    .    .    .    .    .    .    .  .   vbroadcastss	xmm3, dword ptr [rip + .LCPI0_0]
+[0,4]     D=========eER  .    .    .    .    .    .    .    .    .    .    .    .    .  .   vxorps	xmm3, xmm2, xmm3
+[0,5]     .D====eeeeeeeeeER   .    .    .    .    .    .    .    .    .    .    .    .  .   vfmadd132ss	xmm0, xmm2, dword ptr [rip + .LCPI0_1]
+[0,6]     .D=============eeeeER    .    .    .    .    .    .    .    .    .    .    .  .   vsubss	xmm0, xmm3, xmm0
+[0,7]     .D=============eeeeeeeeeER    .    .    .    .    .    .    .    .    .    .  .   vfmadd132ss	xmm0, xmm1, dword ptr [rsi + 4]
+[0,8]     . D=====================eER   .    .    .    .    .    .    .    .    .    .  .   vmovss	dword ptr [rdi], xmm0
+[0,9]     . D=====================eeeeER.    .    .    .    .    .    .    .    .    .  .   vaddss	xmm0, xmm1, xmm0
+[0,10]    . D=====================eeeeeeeeeER.    .    .    .    .    .    .    .    .  .   vmulss	xmm0, xmm0, dword ptr [rip + .LCPI0_2]
+[0,11]    .  DeeeeeeeE----------------------R.    .    .    .    .    .    .    .    .  .   ret
+[1,0]     .  DeeeeeE------------------------R.    .    .    .    .    .    .    .    .  .   vmovss	xmm1, dword ptr [rdi]
+[1,1]     .  D------------------------------R.    .    .    .    .    .    .    .    .  .   vxorps	xmm2, xmm2, xmm2
+[1,2]     .  D=====eeeeE--------------------R.    .    .    .    .    .    .    .    .  .   vaddss	xmm2, xmm1, xmm2
+[1,3]     .   DeeeeeeE----------------------R.    .    .    .    .    .    .    .    .  .   vbroadcastss	xmm3, dword ptr [rip + .LCPI0_0]
+[1,4]     .   D========eE-------------------R.    .    .    .    .    .    .    .    .  .   vxorps	xmm3, xmm2, xmm3
+[1,5]     .   D=======================eeeeeeeeeER .    .    .    .    .    .    .    .  .   vfmadd132ss	xmm0, xmm2, dword ptr [rip + .LCPI0_1]
+[1,6]     .   D================================eeeeER  .    .    .    .    .    .    .  .   vsubss	xmm0, xmm3, xmm0
+[1,7]     .    D===============================eeeeeeeeeER  .    .    .    .    .    .  .   vfmadd132ss	xmm0, xmm1, dword ptr [rsi + 4]
+[1,8]     .    D========================================eER .    .    .    .    .    .  .   vmovss	dword ptr [rdi], xmm0
+[1,9]     .    D========================================eeeeER   .    .    .    .    .  .   vaddss	xmm0, xmm1, xmm0
+[1,10]    .    .D=======================================eeeeeeeeeER   .    .    .    .  .   vmulss	xmm0, xmm0, dword ptr [rip + .LCPI0_2]
+[1,11]    .    .DeeeeeeeE-----------------------------------------R   .    .    .    .  .   ret
+[2,0]     .    .DeeeeeE-------------------------------------------R   .    .    .    .  .   vmovss	xmm1, dword ptr [rdi]
+[2,1]     .    . D------------------------------------------------R   .    .    .    .  .   vxorps	xmm2, xmm2, xmm2
+[2,2]     .    . D====eeeeE---------------------------------------R   .    .    .    .  .   vaddss	xmm2, xmm1, xmm2
+[2,3]     .    . DeeeeeeE-----------------------------------------R   .    .    .    .  .   vbroadcastss	xmm3, dword ptr [rip + .LCPI0_0]
+[2,4]     .    . D========eE--------------------------------------R   .    .    .    .  .   vxorps	xmm3, xmm2, xmm3
+[2,5]     .    . D==========================================eeeeeeeeeER    .    .    .  .   vfmadd132ss	xmm0, xmm2, dword ptr [rip + .LCPI0_1]
+[2,6]     .    .  D==================================================eeeeER.    .    .  .   vsubss	xmm0, xmm3, xmm0
+[2,7]     .    .  D==================================================eeeeeeeeeER.    .  .   vfmadd132ss	xmm0, xmm1, dword ptr [rsi + 4]
+[2,8]     .    .  D===========================================================eER    .  .   vmovss	dword ptr [rdi], xmm0
+[2,9]     .    .  D===========================================================eeeeER .  .   vaddss	xmm0, xmm1, xmm0
+[2,10]    .    .   D==========================================================eeeeeeeeeER   vmulss	xmm0, xmm0, dword ptr [rip + .LCPI0_2]
+[2,11]    .    .   DeeeeeeeE------------------------------------------------------------R   ret
+[3,0]     .    .   DeeeeeE--------------------------------------------------------------R   vmovss	xmm1, dword ptr [rdi]
+[3,1]     .    .    D-------------------------------------------------------------------R   vxorps	xmm2, xmm2, xmm2
+[3,2]     .    .    D=====eeeeE---------------------------------------------------------R   vaddss	xmm2, xmm1, xmm2
+[3,3]     .    .    DeeeeeeE------------------------------------------------------------R   vbroadcastss	xmm3, dword ptr [rip + .LCPI0_0]
+[3,4]     .    .    D=========eE--------------------------------------------------------R   vxorps	xmm3, xmm2, xmm3
+Truncated display due to cycle limit
+
+     [0]    [1]    [2]    [3]
+0.     10    1.1    1.1    89.9      vmovss	xmm1, dword ptr [rdi]
+1.     10    0.0    0.0    95.2      vxorps	xmm2, xmm2, xmm2
+2.     10    5.5    0.2    86.1      vaddss	xmm2, xmm1, xmm2
+3.     10    1.0    1.0    88.5      vbroadcastss	xmm3, dword ptr [rip + .LCPI0_0]
+4.     10    9.4    0.0    85.2      vxorps	xmm3, xmm2, xmm3
+5.     10    90.5   0.0    0.0       vfmadd132ss	xmm0, xmm2, dword ptr [rip + .LCPI0_1]
+6.     10    98.7   0.0    0.0       vsubss	xmm0, xmm3, xmm0
+7.     10    98.6   0.0    0.0       vfmadd132ss	xmm0, xmm1, dword ptr [rsi + 4]
+8.     10    107.5  0.0    0.0       vmovss	dword ptr [rdi], xmm0
+9.     10    107.5  0.0    0.0       vaddss	xmm0, xmm1, xmm0
+10.    10    106.6  0.0    0.0       vmulss	xmm0, xmm0, dword ptr [rip + .LCPI0_2]
+11.    10    1.0    1.0    107.5     ret
+      10    52.3   0.3    46.0      <total>
