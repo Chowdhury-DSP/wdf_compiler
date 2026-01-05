@@ -1,5 +1,25 @@
 1- Multiply
 
+RC Lowpass test
+Max Error: 2.26498e-06
+loaded db: a14 (Apple A14/M1)
+-0.259572
+      chowdsp_wdf      7.65 ns/sample
+                      19.01 instructions/sample
+                      22.64 cycles/sample
+                       1.16 branches/sample
+                       0.00 branch miss/sample
+                       0.84 instructions/cycle
+0.0581979
+     wdf_compiler      6.51 ns/sample
+                      14.83 instructions/sample
+                      19.53 cycles/sample
+                       1.13 branches/sample
+                       0.00 branch miss/sample
+                       0.76 instructions/cycle
+wdf_compiler is 1.17549x faster (time)
+wdf_compiler is 1.15933x faster (cycles)
+
                    0123456789          0123456789          0123456789          01234567
 Index     0123456789          0123456789          0123456789          0123456789
 
@@ -55,6 +75,26 @@ Truncated display due to cycle limit
 
 
 2-multiply:
+
+RC Lowpass test
+Max Error: 2.14577e-06
+loaded db: a14 (Apple A14/M1)
+0.0657266
+      chowdsp_wdf      7.65 ns/sample
+                      18.76 instructions/sample
+                      22.53 cycles/sample
+                       1.12 branches/sample
+                       0.00 branch miss/sample
+                       0.83 instructions/cycle
+0.0924579
+     wdf_compiler      5.01 ns/sample
+                      13.59 instructions/sample
+                      15.09 cycles/sample
+                       1.09 branches/sample
+                       0.00 branch miss/sample
+                       0.90 instructions/cycle
+wdf_compiler is 1.52594x faster (time)
+wdf_compiler is 1.49344x faster (cycles)
 
                    0123456789          0123456789          0123456789          012345678
 Index     0123456789          0123456789          0123456789          0123456789

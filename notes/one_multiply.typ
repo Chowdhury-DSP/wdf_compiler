@@ -37,8 +37,8 @@ b_1 = -R_1/R_p a_0 + R_2/R_p a_1 - R_1/R_p a_2 \
 b_1 = -R_1/R_p a_0 + R_2/R_p a_1 - R_1/R_p a_2
     + R_1/R_p a_1 - R_1/R_p a_1 \
 b_1 = -R_1/R_p (a_0 + a_1 + a_2) + R_2/R_p a_1 + R_1/R_p a_1 \
-b_1 = a_1 -R_1/R_p (a_0 + a_1 + a_2)
-b_1 = a_1 -R_1/R_p (a_0 - b_0)
+b_1 = a_1 - R_1/R_p (a_0 + a_1 + a_2)
+b_1 = a_1 - R_1/R_p (a_0 - b_0)
 $
 
 So the full 1-multiply series adaptor is:
@@ -94,9 +94,17 @@ $
 
 == Resistor-Capacitor Series
 
+Original:
 $
 a_1 -> 0, a_2 -> a_c[n-1] \
 R_1/R_p = R/(T/(2 C) + R) = (2 R C) / (T + 2 R C) \
+b_0 = -a_1 - a_2 = -a_c[n-1] \
+b_1 = a_r = -R_1/R_p (a_0 - b_0)
+b_2 = a_c = -a_0 + R_1/R_p (a_0 - b_0)
+$
+
+2-multiply
+$
 b_0 = -a_1 - a_2 = -a_c[n-1] \
 b_1 = -R_1/R_p (a_0 - b_0) = -R_1/R_p (a_0 + a_c[n-1]) \
 b_2 = -a_0 - R_1/R_p (b_0 - a_0)
