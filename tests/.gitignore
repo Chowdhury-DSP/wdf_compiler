@@ -9,3 +9,4 @@
 !performance_counters/*
 performance_estimates/*
 !performance_estimates/*.jai
+!extra_comparisons/*.h
