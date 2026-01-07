@@ -12,7 +12,7 @@
 
 int main()
 {
-    std::cout << "RC Lowpass test (Faust)\n";
+    std::cout << "Diode Clipper test (Faust)\n";
 
     static constexpr float fs = 48000.0;
     mydsp ref {};

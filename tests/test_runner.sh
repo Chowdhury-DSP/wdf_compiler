@@ -86,16 +86,16 @@ test () {
 }
 
 if [[ "$*" = *bench* ]]; then
-   # cpp_test rc_lowpass
-   # cpp_test rc_lowpass_double
-   # cpp_test rc_lowpass_simd
-   # cpp_test preamp_eq_comb
+   cpp_test rc_lowpass
+   cpp_test rc_lowpass_double
+   cpp_test rc_lowpass_simd
+   cpp_test preamp_eq_comb
    cpp_test diode_clipper
-   # cpp_test simple_triode
+   cpp_test simple_triode
    cpp_test baxandall_eq
-   # cpp_test pulse_shaper
-   # cpp_test reductions_circuit
-   # cpp_test reductions_circuit2
+   cpp_test pulse_shaper
+   cpp_test reductions_circuit
+   cpp_test reductions_circuit2
 else
    test rc_lowpass cpp jai
    test rc_lowpass_double cpp jai
