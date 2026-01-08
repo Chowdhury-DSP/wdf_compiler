@@ -141,7 +141,7 @@ struct Reference_WDF : public wdfTree
 
 int main()
 {
-    std::cout << "RC Lowpass test (RT-WDF)\n";
+    std::cout << "Baxandall EQ test (RT-WDF)\n";
 
     static constexpr float fs = 48000.0;
     Reference_WDF ref { fs };

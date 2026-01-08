@@ -20,7 +20,7 @@ fi
 
 flags="--std=c++20 -O3 -I${SCRIPT_DIR}/../xsimd/include -Ilibs/rt-wdf/Libs -Ilibs/armadillo/include"
 if [[ "$OSTYPE" == "win32" || "$OSTYPE" == "msys" ]]; then
-    flags="${flags}"
+    flags="${flags} -I$HOME/Code/Faust/include"
 else
     flags="${flags} -lstdc++ -I/opt/homebrew/include"
 fi
