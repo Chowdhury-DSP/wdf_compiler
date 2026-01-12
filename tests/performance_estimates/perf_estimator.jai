@@ -89,7 +89,7 @@ generate_op_info_table :: (cpu_type: CPU_Type) -> Op_Info_Table {
 
     return table;
 }
-op_info_table :: #run generate_op_info_table(.M1);
+op_info_table :: #run generate_op_info_table(.ZEN4);
 
 print_ops :: (ops_table: [] int) {
     ops_str := "Operations: [";
@@ -167,7 +167,9 @@ main :: () {
 }
 
 // @TODO: re-run poly and RT-WDF numbers...
-// MacOS
+// M1
 // ./perf_estimator ../rc_lowpass/rc_lowpass.wdf wdf_compiler,14.94 chowdsp_wdf,22.09 rt-wdf,72.07 faust,19.04
 // ./perf_estimator ../preamp_eq/preamp_eq.wdf wdf_compiler,58.02 chowdsp_wdf,66.33 rt-wdf,346.18 faust,73.30
-// ./perf_estimator ../baxandall_eq/baxandall_eq.wdf wdf_compiler,36.44 chowdsp_wdf,65.55 rt-wdf,588.16 faust,59.23
+// Zen4
+// ./perf_estimator ../rc_lowpass/rc_lowpass.wdf wdf_compiler,19.04 chowdsp_wdf,31.73 rt-wdf,99.85 faust,15.03
+// ./perf_estimator ../preamp_eq/preamp_eq.wdf wdf_compiler,70.58 chowdsp_wdf,95.77 rt-wdf,505.42 faust,80.29

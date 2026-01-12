@@ -32,11 +32,11 @@ cpp_test () {
     ./${test}.exe
 }
 
-# cpp_test rc_lowpass_chowdsp_poly
-# cpp_test preamp_eq_comb_chowdsp_poly
-# cpp_test diode_clipper_chowdsp_poly
-# cpp_test simple_triode_chowdsp_poly
-# cpp_test baxandall_eq_chowdsp_poly
+cpp_test rc_lowpass_chowdsp_poly
+cpp_test preamp_eq_comb_chowdsp_poly
+cpp_test diode_clipper_chowdsp_poly
+cpp_test simple_triode_chowdsp_poly
+cpp_test baxandall_eq_chowdsp_poly
 
 cpp_test rc_lowpass_rt_wdf
 cpp_test preamp_eq_rt_wdf
@@ -44,6 +44,7 @@ cpp_test simple_triode_rt_wdf
 cpp_test baxandall_eq_rt_wdf
 
 cpp_test rc_lowpass_faust
+cpp_test rc_lowpass_double_faust
 cpp_test preamp_eq_faust
 cpp_test diode_clipper_faust
 cpp_test baxandall_eq_faust
