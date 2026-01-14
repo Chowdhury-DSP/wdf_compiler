@@ -124,7 +124,7 @@ The following tables show the output of the performance benchmarks for `wdf_comp
 
 `wdf_compiler` has been successfully used for several prototype and professional projects, including:
 - [`wdf_compiler_plugin`](https://github.com/jatinchowdhury18/wdf_compiler_plugin): An audio plugin for prototyping WDF circuit models, with hot reloading.
-- [Tekno](https://babyaud.io/tekno): A drum machine plugin containing several WDF circuit models. `wdf_compiler` was able to improve the performance of these circui models by 20-50%.
+- [Tekno](https://babyaud.io/tekno): A drum machine plugin containing several WDF circuit models. `wdf_compiler` was able to improve the performance of these circuit models by 20-50%.
 
 ## License
 
