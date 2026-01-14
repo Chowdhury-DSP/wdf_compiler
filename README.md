@@ -75,6 +75,8 @@ To run the `wdf_compiler` performance benchmarks, run:
 The following tables show the output of the performance benchmarks for `wdf_compiler` version 1.0.0. Along with `wdf_compiler`, the benchmarks compare these other WDF libraries: [`chowdsp_wdf`](https://github.com/Chowdhury-DSP/chowdsp_wdf), [`wdmodels`](https://faustlibraries.grame.fr/libs/wdmodels/), and [`RT-WDF`](https://github.com/RT-WDF/rt-wdf_lib).
 
 **CPU: Apple M1**
+![](./tests/performance_counters/plots/chart_m1.png)
+
 | Circuit          | Framework          | ns/sample | ops/sample | cycles/sample | ops/cycle |
 |------------------|--------------------|-----------|------------|---------------|-----------|
 | RC Lowpass       | `RT-WDF`           | 22.54     | 251.02     | 72.07         | 3.48      |
@@ -98,6 +100,8 @@ The following tables show the output of the performance benchmarks for `wdf_comp
 
 
 **CPU: AMD Ryzen Zen 4**
+![](./tests/performance_counters/plots/chart_zen4.png)
+
 | Circuit          | Framework          | ns/sample | ops/sample | cycles/sample | ops/cycle |
 |------------------|--------------------|-----------|------------|---------------|-----------|
 | RC Lowpass       | `RT-WDF`           | 20.31     | 268.06     | 99.85         | 2.68      |
