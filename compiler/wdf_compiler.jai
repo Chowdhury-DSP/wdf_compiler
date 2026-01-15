@@ -19,7 +19,7 @@ global_args: Args;
 
 get_compiler_version :: () -> string {
     result, output, err, timed_out := Process.run_command("git", "rev-parse", "--short", "HEAD", capture_and_return_output=true);
-    return tprint("0.1.0.%", String.trim(output));
+    return tprint("1.0.0.%", String.trim(output));
 }
 
 COMPILER_VERSION :: #run get_compiler_version();
