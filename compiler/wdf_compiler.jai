@@ -384,7 +384,46 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
     has_state := token.custom_info.state_type.count > 0;
     has_vars := token.custom_info.vars_type.count > 0;
 
-    if num_children == 1 {
+    if num_children == 0 {
+        up_args := "";
+        up_statement := "";
+        down_args := "";
+        if global_args.lang == "jai" {
+            if has_vars {
+                up_args = tprint("%1*impedances.%2_vars, ", up_args, token.name);
+                down_args = tprint("%1*impedances.%2_vars, ", down_args, token.name);
+            }
+            if has_state {
+                up_args = tprint("%*state.%2_state, ", up_args, token.name);
+                down_args = tprint("%*state.%2_state, ", down_args, token.name);
+            }
+            up_statement = tprint("%1_b := ", token.name);
+        } else {
+            if has_vars {
+                up_args = tprint("%1impedances.%2_vars, ", up_args, token.name);
+                down_args = tprint("%1impedances.%2_vars, ", down_args, token.name);
+            }
+            if has_state {
+                up_args = tprint("%state.%2_state, ", up_args, token.name);
+                down_args = tprint("%state.%2_state, ", down_args, token.name);
+            }
+            up_statement = tprint("const auto %1_b = ", token.name);
+        }
+        if up_args.count > 0 { up_args.count -= 2; }
+        up_statement = tprint("%1 %2(%3); // %4 reflected",
+                              up_statement,
+                              token.custom_info.reflected_name,
+                              up_args,
+                              token.name);
+        array_add(up_tree_statements, up_statement);
+
+        down_args = tprint("%1%2_a", down_args, token.name);
+        down_statement := tprint("%1(%2); // %3 incident",
+                                 token.custom_info.incident_name,
+                                 down_args,
+                                 token.name);
+        array_add(down_tree_statements, down_statement);
+    } else if num_children == 1 {
         array_add(up_tree_statements, tprint("// %1 reflected", token.name));
         array_add(down_tree_statements, tprint("// %1 incident", token.name));
         error_assert (false, "NOT IMPLEMENTED (generate process for custom non-root node with exactly 1 child");
@@ -968,7 +1007,24 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
 
             case .Custom;
                 if token.children.count > 0 { continue; }
-                error_assert (false, "NOT IMPLEMENTED (generate circuit vars for custom leaf node)");
+                if (token.custom_info.params_type.count > 0) {
+                    array_add(*params_vars,
+                              tprint(ifx global_args.lang == "jai" then "%2_params: %1;" else "%1 %2_params {};",
+                                     token.custom_info.params_type,
+                                     token.name));
+                }
+                if (token.custom_info.state_type.count > 0) {
+                    array_add(*state_vars,
+                              tprint(ifx global_args.lang == "jai" then "%2_state: %1;" else "%1 %2_state {};",
+                                     token.custom_info.state_type,
+                                     token.name));
+                }
+                if (token.custom_info.vars_type.count > 0) {
+                    array_add(*impedance_vars,
+                              tprint(ifx global_args.lang == "jai" then "%2_vars: %1;" else "%1 %2_vars {};",
+                                     token.custom_info.vars_type,
+                                     token.name));
+                }
         }
     }
 
@@ -1134,7 +1190,7 @@ generate_updater :: (tokens: [] Token,
                 array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
                 array_add(*impedance_updates, write_define(tprint("%1_res_value", token.name), param_calc(token, token.param_calc_info[0])));
                 array_add(*impedance_updates, write_define(tprint("%1_cap_value", token.name), param_calc(token, token.param_calc_info[1])));
-                array_add(*impedance_updates, write_define(tprint("%1_2RC", token.name), tprint("2 * %1_cap_value * %1_res_value;", token.name)));
+                array_add(*impedance_updates, write_define(tprint("%1_2RC", token.name), tprint("2 * %1_cap_value * %1_res_value", token.name)));
                 add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("%1_res_value * T / (%1_2RC + T)", token.name), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
                 array_add(*impedance_updates, tprint("impedances.%1_2RC_over_2RC_plus_T = %1_2RC / (%1_2RC + T);\n", token.name));
@@ -1221,7 +1277,32 @@ generate_updater :: (tokens: [] Token,
 
             case .Custom;
                 if token.children.count > 0 { continue; }
-                error_assert (false, "NOT IMPLEMENTED (generate impedance updates for custom leaf node)");
+                has_params := token.custom_info.params_type.count > 0;
+                has_state := token.custom_info.state_type.count > 0;
+                has_vars := token.custom_info.vars_type.count > 0;
+
+                array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
+                custom_update := "";
+                if global_args.lang == "jai" {
+                    custom_update = tprint("%1_R_calc := ", token.name);
+                } else {
+                    custom_update = tprint("[[maybe_unused]] const auto %1_R_calc = ", token.name);
+                }
+
+                custom_update = tprint("%1%2(", custom_update, token.custom_info.updater_name);
+                if has_vars {
+                    custom_update = tprint(ifx global_args.lang == "jai" then "%1*impedances.%2_vars, " else "%1impedances.%2_vars, ",
+                                           custom_update,
+                                           token.name);
+                }
+                if has_params {
+                    custom_update = tprint("%1params.%2_params, ", custom_update, token.name);
+                }
+                custom_update = tprint("%1fs);", custom_update);
+                array_add(*impedance_updates, custom_update);
+
+                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("%1_R_calc", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1 / %1_R", token.name), required_impedances.*, *available_values);
         }
     }
 
