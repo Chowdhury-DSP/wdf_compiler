@@ -21,4 +21,5 @@ xsimd/
 armadillo/
 rt-wdf/
 
+demo/
 notes/*.pdf
