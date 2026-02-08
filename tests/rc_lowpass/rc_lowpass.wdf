@@ -1,8 +1,8 @@
 circuit:
 IVs(Vin);
     Series(S1);
-        R(R1, 1k);
         C(C1, 1u);
+        R(R1, 1k);
 
 inputs:
 Vin
