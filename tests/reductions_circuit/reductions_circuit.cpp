@@ -67,7 +67,14 @@ struct Reference_WDF
     // Load
     chowdsp::wdft::ResistorT<float> Rl { 100.0e3f };
     chowdsp::wdft::WDFSeriesT<float, decltype (Rl), decltype (S8)> Sl { Rl, S8 };
-    chowdsp::wdft::IdealVoltageSourceT<float, decltype (Sl)> Vin { Sl };
+
+    chowdsp::wdft::ResistorT<float> Rv2 { 5.0e3f };
+    chowdsp::wdft::WDFSeriesT<float, decltype (Rv2), decltype (Sl)> Sv2 { Rv2, Sl };
+
+    chowdsp::wdft::ResistorT<float> Rv1 { 10.0e3f };
+    chowdsp::wdft::WDFSeriesT<float, decltype (Rv1), decltype (Sv2)> Sv1 { Rv1, Sv2 };
+
+    chowdsp::wdft::IdealVoltageSourceT<float, decltype (Sv1)> Vin { Sv1 };
 
     void prepare (float fs)
     {
@@ -76,8 +83,8 @@ struct Reference_WDF
     float process (float V)
     {
         Vin.setVoltage (V);
-        Vin.incident (Sl.reflected());
-        Sl.incident (Vin.reflected());
+        Vin.incident (Sv1.reflected());
+        Sv1.incident (Vin.reflected());
         return chowdsp::wdft::voltage<float> (Rl);
     }
 };

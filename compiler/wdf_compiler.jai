@@ -578,12 +578,13 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                                                                   tprint("% incident", child_token.name)));
                 case .Root_Resistive_Voltage_Source;
                     if ! is_input(token, inputs) { token.input = tprint("impedances.%1_V", token.name); }
+                    input := ifx token.invert then tprint("-(%)", token.input) else token.input;
                     child_token := tokens[token.children[0]];
                     array_add(*up_tree_statements, write_define(tprint("%_a", token.name),
                                                                 tprint("%_b", child_token.name),
                                                                 tprint("% incident", token.name)));
                     array_add(*down_tree_statements, write_define(tprint("%_b", token.name),
-                                                                  tprint("impedances.%1_ca * %1_a - impedances.%1_ce * %2", token.name, token.input),
+                                                                  tprint("impedances.%1_ca * %1_a + impedances.%1_ce * %2", token.name, input),
                                                                   tprint("%1 reflected", token.name)));
                     array_add(*down_tree_statements, write_define(tprint("%_a", child_token.name),
                                                                   tprint("%_b", token.name),
@@ -1988,6 +1989,7 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
                                 param_calc_info = param_calc_info,
                                 input = token.input,
                                 children = children,
+                                invert = true,
                             };
 
                             tokens.*[child_idx].parent = idx;
@@ -2003,6 +2005,70 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
 
                         if (grandchild1.type == .Resistor && ! is_grandchild1_output) {
                             root_rvs(*tokens, idx, grandchild1.index, grandchild0.index);
+                            reductions_count += 1;
+                        }
+                    }
+
+                case .Root_Resistive_Voltage_Source;
+                    child := tokens[token.children[0]];
+                    if (child.type == .Series) {
+                        grandchild0 := tokens[child.children[0]];
+                        grandchild1 := tokens[child.children[1]];
+
+                        is_grandchild0_output := false;
+                        is_grandchild1_output := false;
+                        for output : outputs {
+                            output_info := String.split(output, ":");
+                            is_grandchild0_output |= grandchild0.name == output_info[1];
+                            is_grandchild1_output |= grandchild1.name == output_info[1];
+                        }
+
+                        root_rvs_add_r :: (tokens: *[] Token, idx: s64, r_idx: s64, child_idx: s64) {
+                            token := tokens.*[idx];
+                            res := tokens.*[r_idx];
+
+                            new_args := join_arrays (token.args, res.args);
+                            param_names := join_arrays (token.param_names, res.param_names);
+                            update_param_name_idxs(*res.param_calc_info[0], token.param_names.count);
+
+                            children: [..] s64;
+                            array_add(*children, child_idx);
+
+                            param_calc_info: [] Token.Param_Calc_Info;
+                            array_resize(*param_calc_info, 2);
+                            param_calc_info[1] = .{
+                                calc = .Sum,
+                                child_left = *token.param_calc_info[1],
+                                child_right = *res.param_calc_info[0],
+                            };
+
+                            tokens.*[idx] = Token.{
+                                name = token.name,
+                                type = .Root_Resistive_Voltage_Source,
+                                args = new_args,
+                                parent = token.parent,
+                                tree_depth = token.tree_depth,
+                                index = idx,
+                                param_names = param_names,
+                                param_calc_info = param_calc_info,
+                                input = token.input,
+                                children = children,
+                                invert = !token.invert,
+                            };
+
+                            tokens.*[child_idx].parent = idx;
+                            remove_token(tokens, r_idx);
+                            remove_token(tokens, token.children[0]);
+                            for *token : tokens.* { if token.tree_depth > 1 { token.tree_depth -= 1; } }
+                        }
+
+                        if (grandchild0.type == .Resistor && ! is_grandchild0_output) {
+                            root_rvs_add_r(*tokens, idx, grandchild0.index, grandchild1.index);
+                            reductions_count += 1;
+                        }
+
+                        if (grandchild1.type == .Resistor && ! is_grandchild1_output) {
+                            root_rvs_add_r(*tokens, idx, grandchild1.index, grandchild0.index);
                             reductions_count += 1;
                         }
                     }
