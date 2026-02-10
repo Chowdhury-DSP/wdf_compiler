@@ -20,6 +20,7 @@ Token_Type :: enum {
     Capacitive_Voltage_Source;
     Resistive_Capacitive_Voltage_Source;
     Root_Resistive_Voltage_Source;
+    Root_Capacitive_Voltage_Source;
     Custom;
 }
 
@@ -176,6 +177,9 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             case "Root_RVs";
                 new_token.type = .Root_Resistive_Voltage_Source;
                 num_children = 1;
+            case "Root_CVs";
+                new_token.type = .Root_Capacitive_Voltage_Source;
+                num_children = 1;
             case "Custom";
                 new_token.type = .Custom;
             case; error_assert(false, tprint("Unknown token type: %", tag));
@@ -234,6 +238,7 @@ parse_circuit :: (circuit_str: string) -> [] Token {
                     new_token.args[1] = res_arg;
                 }
 
+            case .Root_Capacitive_Voltage_Source; #through;
             case .Capacitive_Voltage_Source;
                 param_names := make_array(string, 2);
                 param_names[0] = tprint("%_v_value", new_token.name);
@@ -241,10 +246,10 @@ parse_circuit :: (circuit_str: string) -> [] Token {
                 new_token.param_names = param_names;
 
                 if new_token.args.count == 1 {
-                    res_arg := new_token.args[0];
+                    cap_arg := new_token.args[0];
                     resize_array(*new_token.args, 2);
                     new_token.args[0] = "?";
-                    new_token.args[1] = res_arg;
+                    new_token.args[1] = cap_arg;
                 }
 
             case .Resistive_Capacitive_Voltage_Source;

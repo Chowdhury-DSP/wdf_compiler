@@ -536,6 +536,7 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
             case .Capacitive_Voltage_Source; #through;
             case .Resistive_Capacitive_Voltage_Source; #through;
             case .Root_Resistive_Voltage_Source; #through;
+            case .Root_Capacitive_Voltage_Source; #through;
             case .Resistive_Current_Source;
                 input_token.input = input;
             case;
@@ -586,6 +587,25 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                     array_add(*down_tree_statements, write_define(tprint("%_b", token.name),
                                                                   tprint("impedances.%1_ca * %1_a + impedances.%1_ce * %2", token.name, input),
                                                                   tprint("%1 reflected", token.name)));
+                    array_add(*down_tree_statements, write_define(tprint("%_a", child_token.name),
+                                                                  tprint("%_b", token.name),
+                                                                  tprint("% incident", child_token.name)));
+                    array_add(*required_impedances, tprint("%_ca", token.name));
+                    array_add(*required_impedances, tprint("%_ce", token.name));
+                case .Root_Capacitive_Voltage_Source;
+                    if ! is_input(token, inputs) { token.input = tprint("impedances.%1_V", token.name); }
+                    input := ifx token.invert then tprint("-(%)", token.input) else token.input;
+                    child_token := tokens[token.children[0]];
+                    array_add(*up_tree_statements, write_define(tprint("%_a", token.name),
+                                                                tprint("%_b", child_token.name),
+                                                                tprint("% incident", token.name)));
+                    array_add(*down_tree_statements, write_define(tprint("%_a0a1", token.name),
+                                                                  tprint("2 * (%2 + state.%1_z) + %1_a", token.name, input),
+                                                                  tprint("%1 reflected", token.name)));
+                    array_add(*down_tree_statements, write_define(tprint("%_b", token.name),
+                                                                  tprint("impedances.%1_ca * %1_a - impedances.%1_ce * %1_a0a1", token.name),
+                                                                  tprint("%1 reflected", token.name)));
+                    array_add(*down_tree_statements, tprint("state.%1_z += -%1_b - %1_a0a1; // %1_z state update", token.name));
                     array_add(*down_tree_statements, write_define(tprint("%_a", child_token.name),
                                                                   tprint("%_b", token.name),
                                                                   tprint("% incident", child_token.name)));
@@ -1002,6 +1022,28 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 }
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
+            case .Root_Capacitive_Voltage_Source;
+                is_input_source := is_input(token, inputs);
+                if ! is_input_source {
+                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    if is_known {
+                        array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
+                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
+                    } else {
+                        array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
+                    }
+                }
+
+                for name,idx : token.param_names {
+                    if idx == 0 { continue; } // @TODO: handle this if we allow combined inputs
+                    write_param_named(*params_vars, token, name, idx);
+                }
+
+                array_add(*impedance_vars, write_struct_field(tprint("%1_ca", token.name)));
+                array_add(*impedance_vars, write_struct_field(tprint("%1_ce", token.name)));
+
+                array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
+
             case .Resistive_Capacitive_Voltage_Source;
                 is_input_source := is_input(token, inputs);
                 if ! is_input_source {
@@ -1295,6 +1337,21 @@ generate_updater :: (tokens: [] Token,
                 add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("2 * %1_cap_value * fs", token.name), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("1 / %1_G", token.name), required_impedances.*, *available_values);
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
+
+            case .Root_Capacitive_Voltage_Source;
+                if ! is_input(token, inputs) {
+                    is_known := is_param_defined(token, 0);
+                    if ! is_known {
+                        array_add(*root_impedance_updates, tprint("// Computing voltage for: %1;", token.name));
+                        array_add(*root_impedance_updates, tprint("impedances.%1_V = params.%1_v_value;\n", token.name));
+                    }
+                }
+
+                child_token := tokens[token.children[0]];
+                array_add(*root_impedance_updates, tprint("// Computing impedance for: %1;", token.name));
+                array_add(*root_impedance_updates, write_define(tprint("%1_cap_value", token.name), param_calc(token, token.param_calc_info[1])));
+                array_add(*root_impedance_updates, tprint("impedances.%1_ca = T / (T + 2 * %2_R * %1_cap_value);", token.name, child_token.name));
+                array_add(*root_impedance_updates, tprint("impedances.%1_ce = (2 * %2_R * %1_cap_value) / (T + 2 * %2_R * %1_cap_value);\n", token.name, child_token.name));
 
             case .Resistive_Capacitive_Voltage_Source;
                 if ! is_input(token, inputs) {
@@ -1964,7 +2021,7 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
                             is_grandchild1_output |= grandchild1.name == output_info[1];
                         }
 
-                        root_rvs :: (tokens: *[] Token, idx: s64, r_idx: s64, child_idx: s64) {
+                        root_r_or_cvs :: (tokens: *[] Token, idx: s64, r_idx: s64, child_idx: s64, type: Token_Type) {
                             token := tokens.*[idx];
                             res := tokens.*[r_idx];
                             new_args := join_arrays (token.args, res.args);
@@ -1980,7 +2037,7 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
 
                             tokens.*[idx] = Token.{
                                 name = token.name,
-                                type = .Root_Resistive_Voltage_Source,
+                                type = type,
                                 args = new_args,
                                 parent = token.parent,
                                 tree_depth = token.tree_depth,
@@ -1989,7 +2046,7 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
                                 param_calc_info = param_calc_info,
                                 input = token.input,
                                 children = children,
-                                invert = true,
+                                invert = type == .Root_Resistive_Voltage_Source,
                             };
 
                             tokens.*[child_idx].parent = idx;
@@ -1999,12 +2056,22 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
                         }
 
                         if (grandchild0.type == .Resistor && ! is_grandchild0_output) {
-                            root_rvs(*tokens, idx, grandchild0.index, grandchild1.index);
+                            root_r_or_cvs(*tokens, idx, grandchild0.index, grandchild1.index, .Root_Resistive_Voltage_Source);
                             reductions_count += 1;
                         }
 
                         if (grandchild1.type == .Resistor && ! is_grandchild1_output) {
-                            root_rvs(*tokens, idx, grandchild1.index, grandchild0.index);
+                            root_r_or_cvs(*tokens, idx, grandchild1.index, grandchild0.index, .Root_Resistive_Voltage_Source);
+                            reductions_count += 1;
+                        }
+
+                        if (grandchild0.type == .Capacitor && ! is_grandchild0_output) {
+                            root_r_or_cvs(*tokens, idx, grandchild0.index, grandchild1.index, .Root_Capacitive_Voltage_Source);
+                            reductions_count += 1;
+                        }
+
+                        if (grandchild1.type == .Capacitor && ! is_grandchild1_output) {
+                            root_r_or_cvs(*tokens, idx, grandchild1.index, grandchild0.index, .Root_Capacitive_Voltage_Source);
                             reductions_count += 1;
                         }
                     }
