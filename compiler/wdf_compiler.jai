@@ -594,7 +594,6 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                     array_add(*required_impedances, tprint("%_ce", token.name));
                 case .Root_Capacitive_Voltage_Source;
                     if ! is_input(token, inputs) { token.input = tprint("impedances.%1_V", token.name); }
-                    // token.invert = true;
                     input := ifx token.invert then tprint("-(%)", token.input) else token.input;
                     child_token := tokens[token.children[0]];
                     array_add(*up_tree_statements, write_define(tprint("%_a", token.name),
