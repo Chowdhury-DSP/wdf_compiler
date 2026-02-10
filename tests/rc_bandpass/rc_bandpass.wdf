@@ -1,12 +1,10 @@
 circuit:
-IVs(Vin);
-    Series(S1);
-        C(C1, 1u);
-        Parallel(P1);
-            R(R1, 1k);
-            Series(S2);
-                R(R2, 1k);
-                C(C2, 1u);
+Root_CVs(Vin, 1u);
+    Parallel(P1);
+        R(R1, 1k);
+        Series(S2);
+            R(R2, 1k);
+            C(C2, 1u);
 
 
 inputs:
