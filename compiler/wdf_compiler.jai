@@ -2022,7 +2022,7 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
                             is_grandchild1_output |= grandchild1.name == output_info[1];
                         }
 
-                        root_rvs :: (tokens: *[] Token, idx: s64, r_idx: s64, child_idx: s64) {
+                        root_r_or_cvs :: (tokens: *[] Token, idx: s64, r_idx: s64, child_idx: s64, type: Token_Type) {
                             token := tokens.*[idx];
                             res := tokens.*[r_idx];
                             new_args := join_arrays (token.args, res.args);
@@ -2038,7 +2038,7 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
 
                             tokens.*[idx] = Token.{
                                 name = token.name,
-                                type = .Root_Resistive_Voltage_Source,
+                                type = type,
                                 args = new_args,
                                 parent = token.parent,
                                 tree_depth = token.tree_depth,
@@ -2047,7 +2047,7 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
                                 param_calc_info = param_calc_info,
                                 input = token.input,
                                 children = children,
-                                invert = true,
+                                invert = type == .Root_Resistive_Voltage_Source,
                             };
 
                             tokens.*[child_idx].parent = idx;
@@ -2057,12 +2057,22 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
                         }
 
                         if (grandchild0.type == .Resistor && ! is_grandchild0_output) {
-                            root_rvs(*tokens, idx, grandchild0.index, grandchild1.index);
+                            root_r_or_cvs(*tokens, idx, grandchild0.index, grandchild1.index, .Root_Resistive_Voltage_Source);
                             reductions_count += 1;
                         }
 
                         if (grandchild1.type == .Resistor && ! is_grandchild1_output) {
-                            root_rvs(*tokens, idx, grandchild1.index, grandchild0.index);
+                            root_r_or_cvs(*tokens, idx, grandchild1.index, grandchild0.index, .Root_Resistive_Voltage_Source);
+                            reductions_count += 1;
+                        }
+
+                        if (grandchild0.type == .Capacitor && ! is_grandchild0_output) {
+                            root_r_or_cvs(*tokens, idx, grandchild0.index, grandchild1.index, .Root_Capacitive_Voltage_Source);
+                            reductions_count += 1;
+                        }
+
+                        if (grandchild1.type == .Capacitor && ! is_grandchild1_output) {
+                            root_r_or_cvs(*tokens, idx, grandchild1.index, grandchild0.index, .Root_Capacitive_Voltage_Source);
                             reductions_count += 1;
                         }
                     }
