@@ -1491,6 +1491,8 @@ generate_updater :: (tokens: [] Token,
                 custom_update := "";
                 if global_args.lang == "jai" {
                     custom_update = tprint("%1_R_calc := ", token.name);
+                } else if global_args.lang == "c" {
+                    custom_update = tprint("const %2 %1_R_calc = ", token.name, global_args.dtype);
                 } else {
                     custom_update = tprint("[[maybe_unused]] const auto %1_R_calc = ", token.name);
                 }
@@ -1554,6 +1556,8 @@ generate_updater :: (tokens: [] Token,
                 if token != root_token {
                     if global_args.lang == "jai" {
                         custom_update = tprint("%1_R_calc := ", token.name);
+                    } else if global_args.lang == "c" {
+                        custom_update = tprint("const %2 %1_R_calc = ", token.name, global_args.dtype);
                     } else {
                         custom_update = tprint("[[maybe_unused]] const auto %1_R_calc = ", token.name);
                     }
