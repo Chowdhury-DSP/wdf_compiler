@@ -45,6 +45,8 @@ int main()
         .Vin_res_value = 1.0e3f,
         .DP_params = {
             .Is = 1.0e-9f,
+            .Vt = 25.85e-3f,
+            .nabla = 1.0f,
         },
     };
     Impedances impedances {};

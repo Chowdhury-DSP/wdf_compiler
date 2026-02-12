@@ -301,34 +301,48 @@ generate_method :: (name: string,
     return builder_to_string(*builder);
 }
 
-// @TODO_C
 generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_statements : *[..] string) {
     num_children := token.children.count;
     has_state := token.custom_info.state_type.count > 0;
     has_vars := token.custom_info.vars_type.count > 0;
+
+    impedances_str := "impedances.";
+    state_str := "state.";
+    if global_args.lang == "c" {
+        impedances_str = "impedances->";
+        state_str = "state->";
+    }
+
     if num_children == 1 {
         child_token := tokens[token.children[0]];
         args := "";
         if has_vars {
-            // @TODO_C
             args = tprint(ifx global_args.lang == "jai" then "%1*impedances.%2_vars, "
-                                                        else "%1impedances.%2_vars, ",
+                                                        else tprint("\%1&(%\%2_vars), ", impedances_str),
                           args,
                           token.name);
         }
         if has_state {
             args = tprint(ifx global_args.lang == "jai" then "%1*state.%2_state, "
-                                                        else "%1state.%2_state, ",
+                                                        else tprint("\%1&(%\%2_state), ", state_str),
                           args,
                           token.name);
         }
-        array_add(down_tree_statements, tprint(ifx global_args.lang == "jai" then "%2_a := %4(%3%2_b); // %2 incident"
-                                                                             else "const auto %2_a = %4(%3%2_b); // %2 incident",
+        statement := "";
+        if global_args.lang == "cpp" {
+            statement = "const auto %2_a = %4(%3%2_b); // %2 incident";
+        } else if global_args.lang == "c" {
+            statement = tprint("const %1 \%2_a = \%4(\%3\%2_b); // \%2 incident", global_args.dtype);
+        } else if global_args.lang == "jai" {
+            statement = "%2_a := %4(%3%2_b); // %2 incident";
+        }
+        array_add(down_tree_statements, tprint(statement,
                                                token.name,
                                                child_token.name,
                                                args,
                                                token.custom_info.compute_name));
     } else {
+        // @TODO_C
         if global_args.lang == "jai" {
             // declare inputs
             statement := tprint("%1_ins := %2.[", token.name, global_args.dtype);
@@ -380,8 +394,8 @@ generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_state
                                global_args.align);
 
             args := "";
-            if has_vars { args = tprint("%1impedances.%2_vars, ", args, token.name); }
-            if has_state { args = tprint("%1state.%2_state, ", args, token.name); }
+            if has_vars { args = tprint("%1&%3%2_vars, ", args, token.name, impedances_str); }
+            if has_state { args = tprint("%1&%3%2_state, ", args, token.name, state_str); }
             args = tprint("%1%2_ins, %2_outs", args, token.name);
             statement = tprint("%1    %2(%3); // %4 compute\n", statement, token.custom_info.compute_name, args, token.name);
 
@@ -417,12 +431,12 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
             up_statement = tprint("%1_b := ", token.name);
         } else {
             if has_vars {
-                up_args = tprint("%1impedances.%2_vars, ", up_args, token.name);
-                down_args = tprint("%1impedances.%2_vars, ", down_args, token.name);
+                up_args = tprint("%1&(impedances.%2_vars), ", up_args, token.name);
+                down_args = tprint("%1&(impedances.%2_vars), ", down_args, token.name);
             }
             if has_state {
-                up_args = tprint("%state.%2_state, ", up_args, token.name);
-                down_args = tprint("%state.%2_state, ", down_args, token.name);
+                up_args = tprint("%&(state.%2_state), ", up_args, token.name);
+                down_args = tprint("%&(state.%2_state), ", down_args, token.name);
             }
             up_statement = tprint("const auto %1_b = ", token.name);
         }
@@ -496,8 +510,8 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
 
             // finish up statement
             up_args := "";
-            if has_vars { up_args = tprint("%1impedances.%2_vars, ", up_args, token.name); }
-            if has_state { up_args = tprint("%state.%2_state, ", up_args, token.name); }
+            if has_vars { up_args = tprint("%1&(impedances.%2_vars), ", up_args, token.name); }
+            if has_state { up_args = tprint("%1&(state.%2_state), ", up_args, token.name); }
             up_args = tprint("%1%2_ins", up_args, token.name);
             up_statement = tprint("%1    const auto %4_b = %2(%3); // %4 reflected", up_statement, token.custom_info.reflected_name, up_args, token.name);
             array_add(up_tree_statements, up_statement);
@@ -1118,23 +1132,23 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Custom;
-                // @TODO_C
+                // @TODO_C?
                 if token.children.count > 0 { continue; }
                 if (token.custom_info.params_type.count > 0) {
                     array_add(*params_vars,
-                              tprint(ifx global_args.lang == "jai" then "%2_params: %1;" else "%1 %2_params {};",
+                              tprint(ifx global_args.lang == "jai" then "%2_params: %1;" else "struct %1 %2_params;",
                                      token.custom_info.params_type,
                                      token.name));
                 }
                 if (token.custom_info.state_type.count > 0) {
                     array_add(*state_vars,
-                              tprint(ifx global_args.lang == "jai" then "%2_state: %1;" else "%1 %2_state {};",
+                              tprint(ifx global_args.lang == "jai" then "%2_state: %1;" else "struct %1 %2_state;",
                                      token.custom_info.state_type,
                                      token.name));
                 }
                 if (token.custom_info.vars_type.count > 0) {
                     array_add(*impedance_vars,
-                              tprint(ifx global_args.lang == "jai" then "%2_vars: %1;" else "%1 %2_vars {};",
+                              tprint(ifx global_args.lang == "jai" then "%2_vars: %1;" else "struct %1 %2_vars;",
                                      token.custom_info.vars_type,
                                      token.name));
                 }
@@ -1153,19 +1167,19 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
             case .Custom;
                 if (token.custom_info.params_type.count > 0) {
                     array_add(*params_vars,
-                              tprint(ifx global_args.lang == "jai" then "%2_params: %1;" else "%1 %2_params {};",
+                              tprint(ifx global_args.lang == "jai" then "%2_params: %1;" else "struct %1 %2_params;",
                                      token.custom_info.params_type,
                                      token.name));
                 }
                 if (token.custom_info.state_type.count > 0) {
                     array_add(*state_vars,
-                              tprint(ifx global_args.lang == "jai" then "%2_state: %1;" else "%1 %2_state {};",
+                              tprint(ifx global_args.lang == "jai" then "%2_state: %1;" else "struct %1 %2_state;",
                                      token.custom_info.state_type,
                                      token.name));
                 }
                 if (token.custom_info.vars_type.count > 0) {
                     array_add(*impedance_vars,
-                              tprint(ifx global_args.lang == "jai" then "%2_vars: %1;" else "%1 %2_vars {};",
+                              tprint(ifx global_args.lang == "jai" then "%2_vars: %1;" else "struct %1 %2_vars;",
                                      token.custom_info.vars_type,
                                      token.name));
                 }
@@ -1454,12 +1468,15 @@ generate_updater :: (tokens: [] Token,
 
                 custom_update = tprint("%1%2(", custom_update, token.custom_info.updater_name);
                 if has_vars {
-                    custom_update = tprint(ifx global_args.lang == "jai" then "%1*impedances.%2_vars, " else "%1impedances.%2_vars, ",
+                    custom_update = tprint(ifx global_args.lang == "jai" then "%1*impedances.%2_vars, "
+                                                                         else tprint("\%1&(%\%2_vars), ", impedances_str),
                                            custom_update,
                                            token.name);
                 }
                 if has_params {
-                    custom_update = tprint("%1params.%2_params, ", custom_update, token.name);
+                    custom_update = tprint(ifx global_args.lang == "jai" then "%1params.%2_params, " else "%1&(params.%2_params), ",
+                                           custom_update,
+                                           token.name);
                 }
                 custom_update = tprint("%1fs);", custom_update);
                 array_add(*impedance_updates, custom_update);
@@ -1515,12 +1532,16 @@ generate_updater :: (tokens: [] Token,
 
                 custom_update = tprint("%1%2(", custom_update, token.custom_info.updater_name);
                 if has_vars {
-                    custom_update = tprint(ifx global_args.lang == "jai" then "%1*impedances.%2_vars, " else "%1impedances.%2_vars, ",
+                    custom_update = tprint(ifx global_args.lang == "jai" then "%1*impedances.%2_vars, "
+                                                                         else tprint("\%1&(%\%2_vars), ", impedances_str),
                                            custom_update,
                                            token.name);
                 }
                 if has_params {
-                    custom_update = tprint("%1params.%2_params, ", custom_update, token.name);
+                    custom_update = tprint(ifx global_args.lang == "jai" then "%1params.%2_params, "
+                                                                         else "%1&(params.%2_params), ",
+                                        custom_update,
+                                        token.name);
                 }
                 for child : token.children {
                     // @TODO: I don't think I have a test case for these `needs_value` calls yet?

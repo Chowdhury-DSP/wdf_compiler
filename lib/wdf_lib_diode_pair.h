@@ -16,9 +16,9 @@ namespace wdf_lib::diode_pair
 {
 struct Diode_Pair_Params
 {
-    float Is = 1.0e-9f; // saturation current
-    float Vt = 25.85e-3f; // thermal voltage
-    float nabla = 1.0f;
+    float Is; // = 1.0e-9f; // saturation current
+    float Vt; // = 25.85e-3f; // thermal voltage
+    float nabla; // = 1.0f;
 };
 
 struct Diode_Pair_Vars
@@ -28,24 +28,24 @@ struct Diode_Pair_Vars
     float logR_Is_over_vt;
 };
 
-static inline void update_vars (Diode_Pair_Vars& vars,
-                                const Diode_Pair_Params& params,
+static inline void update_vars (Diode_Pair_Vars* vars,
+                                const Diode_Pair_Params* params,
                                 float child_R,
-                                [[maybe_unused]] float child_G)
+                                float /*child_G*/)
 {
-    const auto vt_adj = params.nabla * params.Vt;
-    vars.vt_2 = 2.0f * vt_adj;
-    vars.vt_recip = 1.0f / vt_adj;
-    vars.logR_Is_over_vt = std::log (child_R * params.Is * vars.vt_recip);
+    const auto vt_adj = params->nabla * params->Vt;
+    vars->vt_2 = 2.0f * vt_adj;
+    vars->vt_recip = 1.0f / vt_adj;
+    vars->logR_Is_over_vt = std::log (child_R * params->Is * vars->vt_recip);
 }
 
-static inline float root_compute (const Diode_Pair_Vars& vars, float a)
+static inline float root_compute (const Diode_Pair_Vars* vars, float a)
 {
     // See eqn (39) from reference paper
     const auto lambda = a >= 0.0f ? 1.0f : 0.0f;
-    const auto lambda_a_over_vt = lambda * a * vars.vt_recip;
-    const auto b = a - vars.vt_2 * lambda * (wdf_lib::Omega::omega4 (vars.logR_Is_over_vt + lambda_a_over_vt)
-                                           - wdf_lib::Omega::omega4 (vars.logR_Is_over_vt - lambda_a_over_vt));
+    const auto lambda_a_over_vt = lambda * a * vars->vt_recip;
+    const auto b = a - vars->vt_2 * lambda * (wdf_lib::Omega::omega4 (vars->logR_Is_over_vt + lambda_a_over_vt)
+                                            - wdf_lib::Omega::omega4 (vars->logR_Is_over_vt - lambda_a_over_vt));
     return b;
 }
 }
