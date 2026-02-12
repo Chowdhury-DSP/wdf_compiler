@@ -118,7 +118,15 @@ int main()
     ref.prepare (fs);
 
     Impedances impedances {};
-    calc_impedances (impedances, fs);
+    calc_impedances (impedances,
+                     fs,
+                     {
+                         .Triode_params = {
+                             .kp = 1.014e-5f,
+                             .kpg = 1.076e-5f,
+                             .kp2 = 5.498e-8f,
+                         }
+                     });
     State state {
         .Cp_z = -118.959396f,
     };

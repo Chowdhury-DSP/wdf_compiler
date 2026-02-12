@@ -2,7 +2,7 @@ circuit:
 IVs(Vin);
     Series(S1);
         C(Ca, 1u);
-        Custom(R, 5, prefix=baxandall_r::, jai_prefix=, params=R_Params, vars=R_Vars, state=R_State, updater=update_vars, incident=incident, reflected=reflected);
+        Custom(R, 5, cpp_prefix=baxandall_r::, params=R_Params, vars=R_Vars, state=R_State, updater=update_vars, incident=incident, reflected=reflected);
             RCSeries(S4, ?, 6.4n);
             Parallel(P1);
                 R(Rl, 1M);
@@ -22,5 +22,6 @@ outputs:
 V:Rl
 
 meta:
-include:"custom_baxandall_rtype.h"
+include_cpp:"custom_baxandall_rtype.h"
+include_c:"custom_baxandall_rtype_c.h"
 load:"custom_baxandall_rtype.jai"
