@@ -420,11 +420,21 @@ generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_state
     }
 }
 
-// @TODO_C
 generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements : *[..] string, up_tree_statements : *[..] string) {
     num_children := token.children.count;
     has_state := token.custom_info.state_type.count > 0;
     has_vars := token.custom_info.vars_type.count > 0;
+
+    impedances_str := "impedances.";
+    state_str := "state.";
+    align_str := tprint("alignas (%)", global_args.align);
+    if global_args.lang == "c" {
+        impedances_str = "impedances->";
+        state_str = "state->";
+        align_str = tprint("_Alignas (%)", global_args.align);
+    } else if global_args.lang == "jai" {
+        align_str = tprint("#align %", global_args.align);
+    }
 
     if num_children == 0 {
         up_args := "";
@@ -432,22 +442,22 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
         down_args := "";
         if global_args.lang == "jai" {
             if has_vars {
-                up_args = tprint("%1*impedances.%2_vars, ", up_args, token.name);
-                down_args = tprint("%1*impedances.%2_vars, ", down_args, token.name);
+                up_args = tprint("%1*%3%2_vars, ", up_args, token.name, impedances_str);
+                down_args = tprint("%1*%3%2_vars, ", down_args, token.name, impedances_str);
             }
             if has_state {
-                up_args = tprint("%*state.%2_state, ", up_args, token.name);
-                down_args = tprint("%*state.%2_state, ", down_args, token.name);
+                up_args = tprint("%*%3%2_state, ", up_args, token.name, state_str);
+                down_args = tprint("%*%3%2_state, ", down_args, token.name, state_str);
             }
             up_statement = tprint("%1_b := ", token.name);
         } else {
             if has_vars {
-                up_args = tprint("%1&(impedances.%2_vars), ", up_args, token.name);
-                down_args = tprint("%1&(impedances.%2_vars), ", down_args, token.name);
+                up_args = tprint("%1&(%3%2_vars), ", up_args, token.name, impedances_str);
+                down_args = tprint("%1&(%3%2_vars), ", down_args, token.name, impedances_str);
             }
             if has_state {
-                up_args = tprint("%&(state.%2_state), ", up_args, token.name);
-                down_args = tprint("%&(state.%2_state), ", down_args, token.name);
+                up_args = tprint("%&(%3%2_state), ", up_args, token.name, state_str);
+                down_args = tprint("%&(%3%2_state), ", down_args, token.name, state_str);
             }
             up_statement = tprint("const auto %1_b = ", token.name);
         }
@@ -477,7 +487,7 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
                 up_statement = tprint("%1%2_b, ", up_statement, tokens[child_idx].name);
             }
             up_statement.count -= 2;
-            up_statement = tprint("%1] #align %3; // %2 inputs\n", up_statement, token.name, global_args.align);
+            up_statement = tprint("%1] %3; // %2 inputs\n", up_statement, token.name, align_str);
 
             // finish up statement
             up_args := "";
@@ -488,11 +498,11 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
             array_add(up_tree_statements, up_statement);
 
             // declare outputs
-            down_statement := tprint("%1_outs: [%2] %3 = --- #align %4; // %2 outputs \n",
+            down_statement := tprint("%1_outs: [%2] %3 = --- %4; // %2 outputs \n",
                                      token.name,
                                      num_children,
                                      global_args.dtype,
-                                     global_args.align);
+                                     align_str);
 
             down_args := "";
             if has_vars { down_args = tprint("%1*impedances.%2_vars, ", down_args, token.name); }
@@ -508,11 +518,11 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
             array_add(down_tree_statements, down_statement);
         } else {
             // declare inputs
-            up_statement := tprint("alignas (%4) const %3 %1_ins[%2] { ",
+            up_statement := tprint("%4 const %3 %1_ins[%2] = { ",
                                    token.name,
                                    num_children,
                                    global_args.dtype,
-                                   global_args.align);
+                                   align_str);
             for child_idx : token.children {
                 up_statement = tprint("%1%2_b, ", up_statement, tokens[child_idx].name);
             }
@@ -521,28 +531,28 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
 
             // finish up statement
             up_args := "";
-            if has_vars { up_args = tprint("%1&(impedances.%2_vars), ", up_args, token.name); }
-            if has_state { up_args = tprint("%1&(state.%2_state), ", up_args, token.name); }
+            if has_vars { up_args = tprint("%1&(%3%2_vars), ", up_args, token.name, impedances_str); }
+            if has_state { up_args = tprint("%1&(%3%2_state), ", up_args, token.name, state_str); }
             up_args = tprint("%1%2_ins", up_args, token.name);
-            up_statement = tprint("%1    const auto %4_b = %2(%3); // %4 reflected", up_statement, token.custom_info.reflected_name, up_args, token.name);
+            up_statement = tprint("%1    const %5 %4_b = %2(%3); // %4 reflected", up_statement, token.custom_info.reflected_name, up_args, token.name, global_args.dtype);
             array_add(up_tree_statements, up_statement);
 
             // declare outputs
-            down_statement := tprint("alignas (%4) %3 %1_outs[%2]; // %2 outputs \n",
+            down_statement := tprint("%4 %3 %1_outs[%2]; // %2 outputs \n",
                                      token.name,
                                      num_children,
                                      global_args.dtype,
-                                     global_args.align);
+                                     align_str);
 
             down_args := "";
-            if has_vars { down_args = tprint("%1impedances.%2_vars, ", down_args, token.name); }
-            if has_state { down_args = tprint("%state.%2_state, ", down_args, token.name); }
+            if has_vars { down_args = tprint("%1&(%3%2_vars), ", down_args, token.name, impedances_str); }
+            if has_state { down_args = tprint("%1&(%3%2_state), ", down_args, token.name, state_str); }
             down_args = tprint("%1%2_a, %2_ins, %2_outs", down_args, token.name);
             down_statement = tprint("%1    %2(%3); // %4 compute\n", down_statement, token.custom_info.incident_name, down_args, token.name);
 
             // unwrap outputs
             for child_idx : token.children {
-                down_statement = tprint("%1    const auto %2_a = %3_outs[%4];\n", down_statement, tokens[child_idx].name, token.name, it_index);
+                down_statement = tprint("%1    const %5 %2_a = %3_outs[%4];\n", down_statement, tokens[child_idx].name, token.name, it_index, global_args.dtype);
             }
             down_statement.count -= 1;
             array_add(down_tree_statements, down_statement);

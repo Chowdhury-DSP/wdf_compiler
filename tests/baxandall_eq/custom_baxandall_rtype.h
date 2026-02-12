@@ -22,8 +22,8 @@ struct R_State
     float b_up {};
 };
 
-static inline float update_vars (R_Vars& vars,
-                                [[maybe_unused]] const R_Params& params,
+static inline float update_vars (R_Vars* vars,
+                                [[maybe_unused]] const R_Params* params,
                                 float Ra,
                                 float Ga,
                                 float Rb,
@@ -45,19 +45,19 @@ static inline float update_vars (R_Vars& vars,
     for (int c = 0; c < num_ports; ++c)
     {
         for (int r = 0; r < num_ports; ++r)
-            vars.S[r * num_ports_padded + c] = S_transpose[c][r];
+            vars->S[r * num_ports_padded + c] = S_transpose[c][r];
     }
 
     const auto Rf = ((Ra * Rb + (Ra + Rb) * Rc) * Rd + (Ra * Rb + (Ra + Rb) * Rc + (Ra + Rb) * Rd) * Re) / (Ra * Rb + (Ra + Rb) * Rc + (Ra + Rc) * Rd + (Rb + Rc + Rd) * Re);
     return Rf;
 }
 
-static inline float reflected (const R_Vars& vars, const R_State& state, const float* a_in)
+static inline float reflected (const R_Vars* vars, const R_State* state, const float* a_in)
 {
-    return state.b_up;
+    return state->b_up;
 }
 
-static inline void incident (const R_Vars& vars, R_State& state, float a_up, const float* a_in, float* b_out)
+static inline void incident (const R_Vars* vars, R_State* state, float a_up, const float* a_in, float* b_out)
 {
     alignas (16) float a[num_ports];
     alignas (16) float b[num_ports_padded];
@@ -75,13 +75,13 @@ static inline void incident (const R_Vars& vars, R_State& state, float a_up, con
         }
     }
 
-    wdf_lib::aligned_matmul<num_ports, num_ports_padded> (vars.S, a, b);
+    wdf_lib::aligned_matmul<num_ports, num_ports_padded> (vars->S, a, b);
 
     for (int i = 0, j = 0; i < num_ports; ++i)
     {
         if (i == up_port)
         {
-            state.b_up = b[i];
+            state->b_up = b[i];
         }
         else
         {

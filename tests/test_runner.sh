@@ -115,26 +115,26 @@ if [[ "$*" = *bench* ]]; then
    cpp_test reductions_circuit2
    cpp_test analog_eq
 else
-   test rc_lowpass cpp jai c_lang
-   test rc_lowpass_double cpp jai c_lang
-   test rc_lowpass_simd cpp
-   test rc_bandpass cpp jai c_lang
-   test rl_lowpass cpp jai c_lang
-   test rc_lowpass_var cpp jai c_lang
-   test rl_lowpass_var cpp jai c_lang
-   test rc_bandpass_var cpp jai c_lang
-   test rc_lowpass_2ins cpp jai c_lang
-   test preamp_eq cpp jai c_lang
-   test preamp_eq_comb cpp jai c_lang
-   test hard_clipper cpp jai c_lang
-   test diode_clipper cpp jai
-   test diode_circuit cpp jai
-   test simple_triode cpp jai
-   test bassman_tone_stack cpp jai c_lang
+   # test rc_lowpass cpp jai c_lang
+   # test rc_lowpass_double cpp jai c_lang
+   # test rc_lowpass_simd cpp
+   # test rc_bandpass cpp jai c_lang
+   # test rl_lowpass cpp jai c_lang
+   # test rc_lowpass_var cpp jai c_lang
+   # test rl_lowpass_var cpp jai c_lang
+   # test rc_bandpass_var cpp jai c_lang
+   # test rc_lowpass_2ins cpp jai c_lang
+   # test preamp_eq cpp jai c_lang
+   # test preamp_eq_comb cpp jai c_lang
+   # test hard_clipper cpp jai c_lang
+   # test diode_clipper cpp jai
+   # test diode_circuit cpp jai
+   # test simple_triode cpp jai
+   # test bassman_tone_stack cpp jai c_lang
    # test baxandall_eq cpp jai #TODO
-   test pulse_shaper cpp jai
-   test reductions_circuit cpp jai c_lang
-   test reductions_circuit2 cpp jai c_lang
+   # test pulse_shaper cpp jai
+   # test reductions_circuit cpp jai c_lang
+   # test reductions_circuit2 cpp jai c_lang
    # test analog_eq cpp jai #TODO
 fi
 

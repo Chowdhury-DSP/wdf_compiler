@@ -14,19 +14,19 @@ struct L_State
     float z {};
 };
 
-static inline float update_vars (const L_Params& params,
+static inline float update_vars (const L_Params* params,
                                  float fs)
 {
-    return 2.0f * params.value * fs;
+    return 2.0f * params->value * fs;
 }
 
-static inline float reflected (const L_State& state)
+static inline float reflected (const L_State* state)
 {
-    return -state.z;
+    return -state->z;
 }
 
-static inline void incident (L_State& state, float a)
+static inline void incident (L_State* state, float a)
 {
-    state.z = a / (std::sqrt (a * a + 1.0f));
+    state->z = a / (std::sqrt (a * a + 1.0f));
 }
 }
