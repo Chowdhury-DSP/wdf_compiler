@@ -1,3 +1,5 @@
+#define _USE_MATH_DEFINES 1
+
 #include "analog_eq.h"
 
 #if RUN_BENCH

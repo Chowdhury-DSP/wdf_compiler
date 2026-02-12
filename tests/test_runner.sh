@@ -69,7 +69,7 @@ c_test () {
    fi
 
    $wdf_compiler "${test}.wdf" "${test}_c.h" ${wdf_compiler_flags}
-   clang ${test}.c -Wno-c2x-extensions -I../../lib -o ${test}_c.exe
+   clang ${test}.c -D_CRT_SECURE_NO_WARNINGS -Wno-c2x-extensions -I../../lib -o ${test}_c.exe
    "./${test}_c.exe"
 }
 
