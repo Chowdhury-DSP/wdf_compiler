@@ -97,8 +97,8 @@ test () {
    # The C++ test needs to run first,
    # since it generates the reference data.
    if [[ "$*" = *cpp* ]]; then cpp_test $test; fi
-   if [[ "$*" = *c_lang* ]]; then c_test $test; fi
    if [[ "$*" = *jai* ]]; then jai_test $test; fi
+   if [[ "$*" = *c_lang* ]]; then c_test $test; fi
 }
 
 if [[ "$*" = *bench* ]]; then
@@ -115,27 +115,27 @@ if [[ "$*" = *bench* ]]; then
    cpp_test reductions_circuit2
    cpp_test analog_eq
 else
-   test rc_lowpass cpp c_lang jai
-   test rc_lowpass_double cpp c_lang jai
+   test rc_lowpass cpp jai c_lang
+   test rc_lowpass_double cpp jai c_lang
    test rc_lowpass_simd cpp
-   # test rc_bandpass cpp jai
-   # test rl_lowpass cpp jai
-   # test rc_lowpass_var cpp jai
-   # test rl_lowpass_var cpp jai
-   # test rc_bandpass_var cpp jai
-   # test rc_lowpass_2ins cpp jai
-   # test preamp_eq cpp jai
-   # test preamp_eq_comb cpp jai
-   # test hard_clipper cpp jai
-   # test diode_clipper cpp jai
-   # test diode_circuit cpp jai
-   # test simple_triode cpp jai
-   # test bassman_tone_stack cpp jai
-   # test baxandall_eq cpp jai
-   # test pulse_shaper cpp jai
-   # test reductions_circuit cpp jai
-   # test reductions_circuit2 cpp jai
-   # test analog_eq cpp jai
+   test rc_bandpass cpp jai c_lang
+   test rl_lowpass cpp jai c_lang
+   test rc_lowpass_var cpp jai c_lang
+   test rl_lowpass_var cpp jai c_lang
+   test rc_bandpass_var cpp jai c_lang
+   test rc_lowpass_2ins cpp jai c_lang
+   test preamp_eq cpp jai
+   test preamp_eq_comb cpp jai
+   test hard_clipper cpp jai
+   test diode_clipper cpp jai
+   test diode_circuit cpp jai
+   test simple_triode cpp jai
+   test bassman_tone_stack cpp jai
+   test baxandall_eq cpp jai
+   test pulse_shaper cpp jai
+   test reductions_circuit cpp jai
+   test reductions_circuit2 cpp jai
+   test analog_eq cpp jai
 fi
 
 if [[ "$*" = *bad_configs* ]]; then

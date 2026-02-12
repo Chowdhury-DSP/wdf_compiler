@@ -853,7 +853,8 @@ is_input :: (token: *Token, inputs: [] string) -> bool {
 }
 
 // returns true if the param value is defined in the config (i.e. known at compile-time)
-is_param_defined :: (token: *Token, idx := 0) -> bool {
+is_param_defined :: (token: *Token, idx := 0, allow_c := false) -> bool {
+    if global_args.lang == "c" && ! allow_c { return false; }
     is_defined_arg := idx < token.args.count;
     if is_defined_arg { is_defined_arg &= token.args[idx] != "?"; }
     return is_defined_arg;
@@ -872,8 +873,7 @@ write_constexpr_var :: (name: string, value: string) -> string {
             return tprint("%1 : %3 : %2;", name, value, global_args.dtype);
         case "c";
             dtype := global_args.dtype;
-            return tprint("const %3 %1; // = %2", name, value, global_args.dtype);
-            // @TODO_C: we need to know if this is in a struct or local?
+            return tprint("%3 %1; // = %2", name, value, global_args.dtype);
     }
     return .{};
 }
@@ -890,7 +890,7 @@ write_struct_field :: (name: string) -> string {
 }
 
 write_param_named :: (params_vars : *[..] string, token: *Token, name: string, idx := 0) -> bool {
-    is_defined_arg := is_param_defined(token, idx);
+    is_defined_arg := is_param_defined(token, idx, true);
     if is_defined_arg {
         array_add(params_vars,
                   write_constexpr_var(name,
