@@ -8,7 +8,6 @@
 #include <arm_neon.h>
 #endif
 
-#include <cstdio>
 #include <utility>
 
 namespace wdf_lib

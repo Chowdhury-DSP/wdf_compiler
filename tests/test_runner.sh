@@ -69,7 +69,7 @@ c_test () {
    fi
 
    $wdf_compiler "${test}.wdf" "${test}_c.h" ${wdf_compiler_flags}
-   clang ${test}.c -Wno-c2x-extensions -o ${test}_c.exe
+   clang ${test}.c -Wno-c2x-extensions -I../../lib -o ${test}_c.exe
    "./${test}_c.exe"
 }
 
@@ -130,7 +130,7 @@ else
    test diode_clipper cpp jai
    test diode_circuit cpp jai
    test simple_triode cpp jai
-   # test bassman_tone_stack cpp jai #TODO
+   test bassman_tone_stack cpp jai c_lang
    # test baxandall_eq cpp jai #TODO
    test pulse_shaper cpp jai
    test reductions_circuit cpp jai c_lang

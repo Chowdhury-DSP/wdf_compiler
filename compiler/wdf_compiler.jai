@@ -179,6 +179,10 @@ parse_meta_info :: (meta_info_str: string) -> Meta_Info {
                 array_add(*meta_info.impedance_updaters, value);
             case "include";
                 array_add(*meta_info.extra_includes, value);
+            case "include_cpp";
+                if global_args.lang == "cpp" { array_add(*meta_info.extra_includes, value); }
+            case "include_c";
+                if global_args.lang == "c" { array_add(*meta_info.extra_includes, value); }
             case "load";
                 array_add(*meta_info.extra_loads, value);
         }
@@ -236,8 +240,7 @@ get_return_type :: (return_types : [] string) -> string {
     }
 
     if global_args.lang == "c" && return_types.count > 1 {
-        // @TODO_C...
-        assert (false);
+        return_type = "void";
     }
 
     return return_type;
@@ -308,9 +311,13 @@ generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_state
 
     impedances_str := "impedances.";
     state_str := "state.";
+    align_str := tprint("alignas (%)", global_args.align);
     if global_args.lang == "c" {
         impedances_str = "impedances->";
         state_str = "state->";
+        align_str = tprint("_Alignas (%)", global_args.align);
+    } else if global_args.lang == "jai" {
+        align_str = tprint("#align %", global_args.align);
     }
 
     if num_children == 1 {
@@ -342,7 +349,6 @@ generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_state
                                                args,
                                                token.custom_info.compute_name));
     } else {
-        // @TODO_C
         if global_args.lang == "jai" {
             // declare inputs
             statement := tprint("%1_ins := %2.[", token.name, global_args.dtype);
@@ -350,15 +356,15 @@ generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_state
                 statement = tprint("%1%2_b, ", statement, tokens[child_idx].name);
             }
             statement.count -= 2;
-            statement = tprint("%1] #align %3; // %2 inputs\n", statement, token.name, global_args.align);
+            statement = tprint("%1] %3; // %2 inputs\n", statement, token.name, align_str);
 
             // declare outputs
-            statement = tprint("%1    %2_outs: [%3] %4 = --- #align %5; // %2 outputs \n",
+            statement = tprint("%1    %2_outs: [%3] %4 = --- %5; // %2 outputs \n",
                                statement,
                                token.name,
                                num_children,
                                global_args.dtype,
-                               global_args.align);
+                               align_str);
 
             args := "";
             if has_vars { args = tprint("%1*impedances.%2_vars, ", args, token.name); }
@@ -374,11 +380,11 @@ generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_state
             array_add(down_tree_statements, statement);
         } else {
             // declare inputs
-            statement := tprint("alignas (%4) const %3 %1_ins[%2] { ",
+            statement := tprint("%4 const %3 %1_ins[%2] = { ",
                                 token.name,
                                 num_children,
                                 global_args.dtype,
-                                global_args.align);
+                                align_str);
             for child_idx : token.children {
                 statement = tprint("%1%2_b, ", statement, tokens[child_idx].name);
             }
@@ -386,12 +392,12 @@ generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_state
             statement = tprint("%1 }; // % inputs\n", statement, token.name);
 
             // declare outputs
-            statement = tprint("%    alignas (%5) %4 %2_outs[%3]; // %2 outputs \n",
+            statement = tprint("%    %5 %4 %2_outs[%3]; // %2 outputs \n",
                                statement,
                                token.name,
                                num_children,
                                global_args.dtype,
-                               global_args.align);
+                               align_str);
 
             args := "";
             if has_vars { args = tprint("%1&%3%2_vars, ", args, token.name, impedances_str); }
@@ -401,7 +407,12 @@ generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_state
 
             // unwrap outputs
             for child_idx : token.children {
-                statement = tprint("%1    const auto %2_a = %3_outs[%4];\n", statement, tokens[child_idx].name, token.name, it_index);
+                statement = tprint("%1    const %5 %2_a = %3_outs[%4];\n",
+                                   statement,
+                                   tokens[child_idx].name,
+                                   token.name,
+                                   it_index,
+                                   global_args.dtype);
             }
             statement.count -= 1;
             array_add(down_tree_statements, statement);
@@ -831,8 +842,11 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
     if return_vars.count == 1 {
         array_add(*code_statements, tprint("return %;", return_vars[0]));
         array_add(*return_types, global_args.dtype);
+    } else if global_args.lang == "c" {
+        for var : return_vars {
+            array_add(*code_statements, tprint("*out_%1 = %1;", var));
+        }
     } else {
-        // @TODO_C
         return_statement := ifx global_args.lang == "jai" then "return "
                                                           else "return std::make_tuple(";
         for var : return_vars {
@@ -843,6 +857,12 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
         return_statement = tprint(ifx global_args.lang == "jai" then "%;" else "%);",
                                   return_statement);
         array_add(*code_statements, return_statement);
+    }
+
+    if global_args.lang == "c" && outputs.count > 1 {
+        for var : return_vars {
+            array_add(*input_args, Method_Arg.{name=tprint("out_%", var), type=global_args.dtype, is_reference=true});
+        }
     }
 
     method_code := generate_method("process",
@@ -1132,7 +1152,6 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Custom;
-                // @TODO_C?
                 if token.children.count > 0 { continue; }
                 if (token.custom_info.params_type.count > 0) {
                     array_add(*params_vars,

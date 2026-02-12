@@ -88,6 +88,8 @@ parse_custom_token_args :: (args: [] string) -> *Token.Custom_Token_Info {
             if key == {
                 case "cpp_prefix";
                     if global_args.lang == "cpp" { name_prefix = value; }
+                case "c_prefix";
+                    if global_args.lang == "c" { name_prefix = value; }
                 case "jai_prefix";
                     if global_args.lang == "jai" { name_prefix = value; }
             }
