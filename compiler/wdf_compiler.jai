@@ -1236,11 +1236,14 @@ generate_updater :: (tokens: [] Token,
         left_calc := param_calc(token, param_calc_info.child_left);
         right_calc := param_calc(token, param_calc_info.child_right);
 
+        calc_prefix := "";
+        if global_args.lang == "c" { calc_prefix = "wdf_compiler_"; }
+
         if #complete param_calc_info.calc == {
             case .Sum;
-                return tprint("sum(%1, %2)", left_calc, right_calc);
+                return tprint("%3sum(%1, %2)", left_calc, right_calc, calc_prefix);
             case .Reciprocal_Sum;
-                return tprint("recip_sum(%1, %2)", left_calc, right_calc);
+                return tprint("%3recip_sum(%1, %2)", left_calc, right_calc, calc_prefix);
         }
     }
 
@@ -1249,7 +1252,6 @@ generate_updater :: (tokens: [] Token,
     root_impedance_updates : [..] string;
     impedance_update_todos : [..] *Token;
 
-    // @TODO_C
     if global_args.lang == {
         case "cpp";
             array_add(*impedance_updates, "[[maybe_unused]] static constexpr auto sum = [] (auto a, auto b) { return a + b; };");
@@ -1257,6 +1259,9 @@ generate_updater :: (tokens: [] Token,
         case "jai";
             array_add(*impedance_updates, "sum :: (a: $T, b: T) -> T { return a + b; }");
             array_add(*impedance_updates, "recip_sum :: (a: $T, b: T) -> T { return (a * b) / (a + b); }");
+        case "c";
+            array_add(*impedance_updates, "#define wdf_compiler_sum(a, b) ((a) + (b))");
+            array_add(*impedance_updates, "#define wdf_compiler_recip_sum(a, b) (((a) * (b)) / ((a) + (b)))");
     }
     array_add(*impedance_updates, ""); // line break
     array_add(*impedance_updates, write_define("T", "1 / fs"));

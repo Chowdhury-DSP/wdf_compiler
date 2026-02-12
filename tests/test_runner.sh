@@ -133,8 +133,8 @@ else
    test bassman_tone_stack cpp jai
    test baxandall_eq cpp jai
    test pulse_shaper cpp jai
-   test reductions_circuit cpp jai
-   test reductions_circuit2 cpp jai
+   test reductions_circuit cpp jai c_lang
+   test reductions_circuit2 cpp jai c_lang
    test analog_eq cpp jai
 fi
 
