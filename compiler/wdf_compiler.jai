@@ -509,6 +509,16 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
                 down_args = tprint("%*%3%2_state, ", down_args, token.name, state_str);
             }
             up_statement = tprint("%1_b := ", token.name);
+        } else if global_args.lang == "rust" {
+            if has_vars {
+                up_args = tprint("%1&%3%2_vars, ", up_args, token.name, impedances_str);
+                down_args = tprint("%1&%3%2_vars, ", down_args, token.name, impedances_str);
+            }
+            if has_state {
+                up_args = tprint("%&mut %3%2_state, ", up_args, token.name, state_str);
+                down_args = tprint("%&mut %3%2_state, ", down_args, token.name, state_str);
+            }
+            up_statement = tprint("let %1_b = ", token.name);
         } else {
             if has_vars {
                 up_args = tprint("%1&(%3%2_vars), ", up_args, token.name, impedances_str);
@@ -518,7 +528,7 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
                 up_args = tprint("%&(%3%2_state), ", up_args, token.name, state_str);
                 down_args = tprint("%&(%3%2_state), ", down_args, token.name, state_str);
             }
-            up_statement = tprint("const auto %1_b = ", token.name);
+            up_statement = tprint("const %2 %1_b = ", token.name, global_args.dtype);
         }
         if up_args.count > 0 { up_args.count -= 2; }
         up_statement = tprint("%1 %2(%3); // %4 reflected",
@@ -572,6 +582,42 @@ generate_custom_process :: (token: Token, tokens: [] Token, down_tree_statements
             // unwrap outputs
             for child_idx : token.children {
                 down_statement = tprint("%1    %2_a := %3_outs[%4];\n", down_statement, tokens[child_idx].name, token.name, it_index);
+            }
+            down_statement.count -= 1;
+            array_add(down_tree_statements, down_statement);
+        } else if global_args.lang == "rust" {
+            // @TODO: handle alignment
+            // declare inputs
+            up_statement := tprint("let %1_ins : [%2; %3] = [", token.name, global_args.dtype, num_children);
+            for child_idx : token.children {
+                up_statement = tprint("%1%2_b, ", up_statement, tokens[child_idx].name);
+            }
+            up_statement.count -= 2;
+            up_statement = tprint("%1]; // %2 inputs\n", up_statement, token.name);
+
+            // finish up statement
+            up_args := "";
+            if has_vars { up_args = tprint("%1&impedances.%2_vars, ", up_args, token.name); }
+            if has_state { up_args = tprint("%&mut state.%2_state, ", up_args, token.name); }
+            up_args = tprint("%1&%2_ins", up_args, token.name);
+            up_statement = tprint("%1    let %4_b = %2(%3); // %4 reflected", up_statement, token.custom_info.reflected_name, up_args, token.name);
+            array_add(up_tree_statements, up_statement);
+
+            // declare outputs
+            down_statement := tprint("let mut %1_outs : [%3; %2] = [0 as %3; %2]; // %2 outputs \n",
+                                     token.name,
+                                     num_children,
+                                     global_args.dtype);
+
+            down_args := "";
+            if has_vars { down_args = tprint("%1&impedances.%2_vars, ", down_args, token.name); }
+            if has_state { down_args = tprint("%&mut state.%2_state, ", down_args, token.name); }
+            down_args = tprint("%1%2_a, &%2_ins, &mut %2_outs", down_args, token.name);
+            down_statement = tprint("%1    %2(%3); // %4 compute\n", down_statement, token.custom_info.incident_name, down_args, token.name);
+
+            // unwrap outputs
+            for child_idx : token.children {
+                down_statement = tprint("%1    let %2_a = %3_outs[%4];\n", down_statement, tokens[child_idx].name, token.name, it_index);
             }
             down_statement.count -= 1;
             array_add(down_tree_statements, down_statement);
