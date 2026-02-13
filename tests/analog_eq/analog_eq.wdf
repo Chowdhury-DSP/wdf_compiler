@@ -11,8 +11,8 @@ IVs(Vin);
                         R(R_treble_boost_bw, ?);
                         Series(Streble_boost_1);
                             C(C_treble_boost, ?);
-                            Custom(L_treble_boost, 0, prefix=nl_inductor::, jai_prefix=, params=L_Params, vars=, state=L_State, updater=update_vars, incident=incident, reflected=reflected);
-            Custom(R, 6, prefix=analog_eq_r::, jai_prefix=, params=R_Params, vars=R_Vars, state=R_State, updater=update_vars, incident=incident, reflected=reflected);
+                            Custom(L_treble_boost, 0, prefix=nl_inductor::, rust_prefix=custom_nonlinear_inductor::, jai_prefix=, params=L_Params, vars=, state=L_State, updater=update_vars, incident=incident, reflected=reflected);
+            Custom(R, 6, prefix=analog_eq_r::, rust_prefix=custom_analog_eq_rtype::, jai_prefix=, params=R_Params, vars=R_Vars, state=R_State, updater=update_vars, incident=incident, reflected=reflected);
                 Series(Sb);
                     R(Rlc, 1k);
                     Parallel(Pb);
@@ -41,4 +41,6 @@ include:"custom_analog_eq_rtype.h"
 include:"custom_nonlinear_inductor.h"
 load:"custom_analog_eq_rtype.jai"
 load:"custom_nonlinear_inductor.jai"
+use:crate::custom_analog_eq_rtype
+use:crate::custom_nonlinear_inductor
 namespace:analog_eq

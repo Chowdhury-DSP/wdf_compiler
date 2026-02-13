@@ -1,11 +1,14 @@
 */*.h
 */*.jai
+*/*.rs
 */*.bin
 */*_test
 
 !*/custom_*.h
 !*/custom_*.jai
 !*/*_test.jai
+!*/custom_*.rs
+!*/*_test.rs
 !performance_counters/*
 performance_estimates/*
 !performance_estimates/*.jai
