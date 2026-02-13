@@ -151,7 +151,7 @@ else
    test pulse_shaper cpp jai
    test reductions_circuit cpp jai c_lang rust
    test reductions_circuit2 cpp jai c_lang rust
-   test analog_eq cpp jai
+   test analog_eq cpp jai rust
 fi
 
 if [[ "$*" = *bad_configs* ]]; then

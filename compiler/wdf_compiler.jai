@@ -1627,6 +1627,8 @@ generate_updater :: (tokens: [] Token,
                 custom_update := "";
                 if global_args.lang == "jai" {
                     custom_update = tprint("%1_R_calc := ", token.name);
+                } else if global_args.lang == "rust" {
+                    custom_update = tprint("let %1_R_calc : %2 = ", token.name, global_args.dtype);
                 } else if global_args.lang == "c" {
                     custom_update = tprint("const %2 %1_R_calc = ", token.name, global_args.dtype);
                 } else {
@@ -1636,12 +1638,14 @@ generate_updater :: (tokens: [] Token,
                 custom_update = tprint("%1%2(", custom_update, token.custom_info.updater_name);
                 if has_vars {
                     custom_update = tprint(ifx global_args.lang == "jai" then "%1*impedances.%2_vars, "
-                                                                         else tprint("\%1&(%\%2_vars), ", impedances_str),
+                                           else ifx global_args.lang == "rust" then "%1&mut impedances.%2_vars, "
+                                           else tprint("\%1&(%\%2_vars), ", impedances_str),
                                            custom_update,
                                            token.name);
                 }
                 if has_params {
-                    custom_update = tprint(ifx global_args.lang == "jai" then "%1params.%2_params, " else "%1&(params.%2_params), ",
+                    custom_update = tprint(ifx global_args.lang == "jai" || global_args.lang == "rust" then "%1params.%2_params, "
+                                           else "%1&(params.%2_params), ",
                                            custom_update,
                                            token.name);
                 }
@@ -1710,8 +1714,7 @@ generate_updater :: (tokens: [] Token,
                                            token.name);
                 }
                 if has_params {
-                    custom_update = tprint(ifx global_args.lang == "jai" then "%1params.%2_params, "
-                                           else ifx global_args.lang == "rust" then "%1params.%2_params, "
+                    custom_update = tprint(ifx global_args.lang == "jai" || global_args.lang == "rust" then "%1params.%2_params, "
                                            else "%1&(params.%2_params), ",
                                         custom_update,
                                         token.name);
