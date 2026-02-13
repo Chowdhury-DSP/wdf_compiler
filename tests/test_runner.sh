@@ -142,7 +142,7 @@ else
    test rc_lowpass_2ins cpp jai c_lang rust
    test preamp_eq cpp jai c_lang rust
    test preamp_eq_comb cpp jai c_lang rust
-   test hard_clipper cpp jai c_lang
+   test hard_clipper cpp jai c_lang rust
    test diode_clipper cpp jai
    test diode_circuit cpp jai
    test simple_triode cpp jai

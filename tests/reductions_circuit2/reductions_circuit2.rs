@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.0.0.c475d34.
+// Auto-generated with wdf_compiler version 1.0.0.630eddd.
 // Command: wdf_compiler reductions_circuit2.wdf reductions_circuit2.rs -lang rust
 
 #[derive(Default,Copy,Clone)]

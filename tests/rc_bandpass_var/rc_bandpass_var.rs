@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.0.0.c475d34.
+// Auto-generated with wdf_compiler version 1.0.0.630eddd.
 // Command: wdf_compiler rc_bandpass_var.wdf rc_bandpass_var.rs -lang rust
 
 #[derive(Default,Copy,Clone)]

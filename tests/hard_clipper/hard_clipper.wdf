@@ -1,5 +1,5 @@
 circuit:
-Custom(HC, 1, params=HC_Params, vars=HC_Vars, updater=update_vars, compute=root_compute);
+Custom(HC, 1, rust_prefix=custom_hard_clipper::, params=HC_Params, vars=HC_Vars, updater=update_vars, compute=root_compute);
     Parallel(P1);
         C(C1);
         RVs(Vin, ?);
@@ -13,3 +13,4 @@ V:C1
 meta:
 include:"custom_hard_clipper.h"
 load:"custom_hard_clipper.jai"
+use:crate::custom_hard_clipper

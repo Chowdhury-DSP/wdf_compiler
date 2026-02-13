@@ -92,6 +92,8 @@ parse_custom_token_args :: (args: [] string) -> *Token.Custom_Token_Info {
                     if global_args.lang == "c" { name_prefix = value; }
                 case "jai_prefix";
                     if global_args.lang == "jai" { name_prefix = value; }
+                case "rust_prefix";
+                    if global_args.lang == "rust" { name_prefix = value; }
             }
         }
     }

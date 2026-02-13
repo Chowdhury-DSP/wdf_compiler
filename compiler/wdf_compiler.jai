@@ -118,6 +118,14 @@ start_gen_code :: (meta_info: Meta_Info) -> string {
             }
             print_to_builder(*builder, "\n%", builder_to_string(*loads_builder));
         }
+    } else if global_args.lang == "rust" {
+        if meta_info.extra_uses.count > 0 {
+            uses_builder: String_Builder;
+            for use : meta_info.extra_uses {
+                print_to_builder(*uses_builder, "use %;\n", use);
+            }
+            print_to_builder(*builder, "\n%", builder_to_string(*uses_builder));
+        }
     } else {
         if meta_info.extra_includes.count > 0 {
             includes_builder: String_Builder;
@@ -128,7 +136,6 @@ start_gen_code :: (meta_info: Meta_Info) -> string {
         }
     }
 
-    // @TODO_RUST: support module name?
     if global_args.lang == "cpp" {
         if (meta_info.namespace.count > 0) {
             print_to_builder(*builder, "\nnamespace %\n{\n", meta_info.namespace);
@@ -144,7 +151,6 @@ end_gen_code :: (meta_info: Meta_Info) -> string {
     start_scratch();
     builder: String_Builder;
 
-    // @TODO_RUST: support module name?
     if global_args.lang == "cpp" {
         if (meta_info.namespace.count > 0) {
             print_to_builder(*builder, "} // namespace %\n\n", meta_info.namespace);
@@ -159,6 +165,7 @@ Meta_Info :: struct {
     impedance_updaters : [..] string;
     extra_includes : [..] string;
     extra_loads : [..] string;
+    extra_uses : [..] string;
 }
 
 parse_meta_info :: (meta_info_str: string) -> Meta_Info {
@@ -187,9 +194,10 @@ parse_meta_info :: (meta_info_str: string) -> Meta_Info {
                 if global_args.lang == "cpp" { array_add(*meta_info.extra_includes, value); }
             case "include_c";
                 if global_args.lang == "c" { array_add(*meta_info.extra_includes, value); }
-            // @TODO_RUST: support loading other modules?
             case "load";
                 array_add(*meta_info.extra_loads, value);
+            case "use";
+                array_add(*meta_info.extra_uses, value);
         }
     }
 
@@ -359,6 +367,8 @@ generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_state
             statement = tprint("const %1 \%2_a = \%4(\%3\%2_b); // \%2 incident", global_args.dtype);
         } else if global_args.lang == "jai" {
             statement = "%2_a := %4(%3%2_b); // %2 incident";
+        } else if global_args.lang == "rust" {
+            statement = "let %2_a = %4(%3%2_b); // %2 incident";
         }
         array_add(down_tree_statements, tprint(statement,
                                                token.name,
@@ -1192,23 +1202,28 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Custom;
-                // @TODO_RUST
                 if token.children.count > 0 { continue; }
                 if (token.custom_info.params_type.count > 0) {
                     array_add(*params_vars,
-                              tprint(ifx global_args.lang == "jai" then "%2_params: %1;" else "struct %1 %2_params;",
+                              tprint(ifx global_args.lang == "jai" then "%2_params: %1;"
+                                     else ifx global_args.lang == "rust" then "pub %2_params: %1,"
+                                     else "struct %1 %2_params;",
                                      token.custom_info.params_type,
                                      token.name));
                 }
                 if (token.custom_info.state_type.count > 0) {
                     array_add(*state_vars,
-                              tprint(ifx global_args.lang == "jai" then "%2_state: %1;" else "struct %1 %2_state;",
+                              tprint(ifx global_args.lang == "jai" then "%2_state: %1;"
+                                     else ifx global_args.lang == "rust" then "pub %2_state: %1,"
+                                     else "struct %1 %2_state;",
                                      token.custom_info.state_type,
                                      token.name));
                 }
                 if (token.custom_info.vars_type.count > 0) {
                     array_add(*impedance_vars,
-                              tprint(ifx global_args.lang == "jai" then "%2_vars: %1;" else "struct %1 %2_vars;",
+                              tprint(ifx global_args.lang == "jai" then "%2_vars: %1;"
+                                     else ifx global_args.lang == "rust" then "pub %2_vars: %1,"
+                                     else "struct %1 %2_vars;",
                                      token.custom_info.vars_type,
                                      token.name));
                 }
@@ -1225,22 +1240,27 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
             case .Parallel;
                 array_add(*impedance_vars, write_struct_field(tprint("%1_pr", token.name)));
             case .Custom;
-                // @TODO_RUST
                 if (token.custom_info.params_type.count > 0) {
                     array_add(*params_vars,
-                              tprint(ifx global_args.lang == "jai" then "%2_params: %1;" else "struct %1 %2_params;",
+                              tprint(ifx global_args.lang == "jai" then "%2_params: %1;"
+                                     else ifx global_args.lang == "rust" then "pub %2_params: %1,"
+                                     else "struct %1 %2_params;",
                                      token.custom_info.params_type,
                                      token.name));
                 }
                 if (token.custom_info.state_type.count > 0) {
                     array_add(*state_vars,
-                              tprint(ifx global_args.lang == "jai" then "%2_state: %1;" else "struct %1 %2_state;",
+                              tprint(ifx global_args.lang == "jai" then "%2_state: %1;"
+                                     else ifx global_args.lang == "rust" then "pub %2_state: %1,"
+                                     else "struct %1 %2_state;",
                                      token.custom_info.state_type,
                                      token.name));
                 }
                 if (token.custom_info.vars_type.count > 0) {
                     array_add(*impedance_vars,
-                              tprint(ifx global_args.lang == "jai" then "%2_vars: %1;" else "struct %1 %2_vars;",
+                              tprint(ifx global_args.lang == "jai" then "%2_vars: %1;"
+                                     else ifx global_args.lang == "rust" then "pub %2_vars: %1,"
+                                     else "struct %1 %2_vars;",
                                      token.custom_info.vars_type,
                                      token.name));
                 }
@@ -1593,6 +1613,8 @@ generate_updater :: (tokens: [] Token,
                 if token != root_token {
                     if global_args.lang == "jai" {
                         custom_update = tprint("%1_R_calc := ", token.name);
+                    } else if global_args.lang == "rust" {
+                        custom_update = tprint("let %1_R_calc = ", token.name);
                     } else if global_args.lang == "c" {
                         custom_update = tprint("const %2 %1_R_calc = ", token.name, global_args.dtype);
                     } else {
@@ -1603,13 +1625,15 @@ generate_updater :: (tokens: [] Token,
                 custom_update = tprint("%1%2(", custom_update, token.custom_info.updater_name);
                 if has_vars {
                     custom_update = tprint(ifx global_args.lang == "jai" then "%1*impedances.%2_vars, "
-                                                                         else tprint("\%1&(%\%2_vars), ", impedances_str),
+                                           else ifx global_args.lang == "rust" then "%1&mut impedances.%2_vars, "
+                                           else tprint("\%1&(%\%2_vars), ", impedances_str),
                                            custom_update,
                                            token.name);
                 }
                 if has_params {
                     custom_update = tprint(ifx global_args.lang == "jai" then "%1params.%2_params, "
-                                                                         else "%1&(params.%2_params), ",
+                                           else ifx global_args.lang == "rust" then "%1params.%2_params, "
+                                           else "%1&(params.%2_params), ",
                                         custom_update,
                                         token.name);
                 }

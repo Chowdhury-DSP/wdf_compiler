@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.0.0.c475d34.
+// Auto-generated with wdf_compiler version 1.0.0.630eddd.
 // Command: wdf_compiler rc_lowpass_double.wdf rc_lowpass_double.rs -lang rust -dtype f64
 
 #[derive(Default,Copy,Clone)]
