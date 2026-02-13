@@ -247,12 +247,15 @@ get_return_type :: (return_types : [] string) -> string {
             return_type = type;
             continue;
         }
-        // @TODO_RUST: does this work in rust?
         return_type = tprint("%1, %2", return_type, type);
     }
 
     if global_args.lang == "cpp" && return_types.count > 1 {
         return_type = tprint("std::tuple<%>", return_type);
+    }
+
+    if global_args.lang == "rust" && return_types.count > 1 {
+        return_type = tprint("(%)", return_type);
     }
 
     if global_args.lang == "c" && return_types.count > 1 {
@@ -402,6 +405,35 @@ generate_custom_process_root :: (token: Token, tokens: [] Token, down_tree_state
             // unwrap outputs
             for child_idx : token.children {
                 statement = tprint("%1    %2_a := %3_outs[%4];\n", statement, tokens[child_idx].name, token.name, it_index);
+            }
+            statement.count -= 1;
+            array_add(down_tree_statements, statement);
+        } else if global_args.lang == "rust" {
+            // @TODO: I'm not sure the best way to make the input/output arrays aligned?
+            // declare inputs
+            statement := tprint("let %1_ins : [%2; %3] = [", token.name, global_args.dtype, num_children);
+            for child_idx : token.children {
+                statement = tprint("%1%2_b, ", statement, tokens[child_idx].name);
+            }
+            statement.count -= 2;
+            statement = tprint("%1]; // %2 inputs\n", statement, token.name);
+
+            // declare outputs
+            statement = tprint("%1    let mut %2_outs : [%4; %3] = [0 as %4; %3]; // %2 outputs \n",
+                               statement,
+                               token.name,
+                               num_children,
+                               global_args.dtype);
+
+            args := "";
+            if has_vars { args = tprint("%1&impedances.%2_vars, ", args, token.name); }
+            if has_state { args = tprint("%1&mut state.%2_state, ", args, token.name); }
+            args = tprint("%1&%2_ins, &mut %2_outs", args, token.name);
+            statement = tprint("%1    %2(%3); // %4 compute\n", statement, token.custom_info.compute_name, args, token.name);
+
+            // unwrap outputs
+            for child_idx : token.children {
+                statement = tprint("%1    let %2_a = %3_outs[%4];\n", statement, tokens[child_idx].name, token.name, it_index);
             }
             statement.count -= 1;
             array_add(down_tree_statements, statement);
@@ -891,13 +923,14 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
         }
     } else {
         return_statement := ifx global_args.lang == "cpp" then "return std::make_tuple("
-                                                          else "return ";
+                            else ifx global_args.lang == "rust" then "return ("
+                            else "return ";
         for var : return_vars {
             return_statement = tprint("%1%2, ", return_statement, var);
             array_add(*return_types, global_args.dtype);
         }
         return_statement.count -= 2;
-        return_statement = tprint(ifx global_args.lang == "cpp" then "%);" else "%;",
+        return_statement = tprint(ifx global_args.lang == "cpp" || global_args.lang == "rust" then "%);" else "%;",
                                   return_statement);
         array_add(*code_statements, return_statement);
     }

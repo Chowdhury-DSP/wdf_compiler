@@ -146,8 +146,8 @@ else
    test diode_clipper cpp jai
    test diode_circuit cpp jai
    test simple_triode cpp jai
-   test bassman_tone_stack cpp jai c_lang
-   test baxandall_eq cpp jai c_lang
+   test bassman_tone_stack cpp jai c_lang rust
+   test baxandall_eq cpp jai c_lang #TODO
    test pulse_shaper cpp jai
    test reductions_circuit cpp jai c_lang rust
    test reductions_circuit2 cpp jai c_lang rust
