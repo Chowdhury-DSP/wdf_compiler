@@ -206,7 +206,7 @@ generate_struct :: (impedance_vars: [] string, name: string) -> string {
     if global_args.lang == "jai" {
         print_to_builder(*builder, "% :: struct {\n", name);
     } else if global_args.lang == "rust" {
-        print_to_builder(*builder, "#[derive(Default)]\npub struct % {\n", name);
+        print_to_builder(*builder, "#[derive(Default,Copy,Clone)]\npub struct % {\n", name);
     } else {
         print_to_builder(*builder, "struct % {\n", name);
     }
@@ -267,7 +267,7 @@ generate_method :: (name: string,
     if global_args.lang == "jai" {
         print_to_builder(*builder, "% :: (", name);
     } else if global_args.lang == "rust" {
-        print_to_builder(*builder, "pub fn %(", name);
+        print_to_builder(*builder, "#[allow(unused)]\npub fn %(", name);
     } else if global_args.lang == "cpp" {
         print_to_builder(*builder, "inline %1 %2(", return_type, name); // @TODO: do we always want these methods to be marked inline?
     } else if global_args.lang == "c" {
@@ -713,7 +713,9 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
         if token.type == {
             case .Resistor;
                 array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
-                                                            ifx global_args.lang == "jai" then tprint("cast(%) 0", global_args.dtype) else "0",
+                                                            ifx global_args.lang == "jai" then tprint("cast(%) 0", global_args.dtype)
+                                                            else ifx global_args.lang == "rust" then tprint("0 as %", global_args.dtype)
+                                                            else "0",
                                                             tprint("% reflected", token.name)));
             case .Capacitor;
                 array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
@@ -860,7 +862,7 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
             case "I";
                 return_var := tprint("i_%", output_token.name);
                 array_add(*code_statements, write_define(return_var,
-                                                         tprint("(%1_a - %1_b) * (%2.0 * %3%1_G)", output_token.name, half_literal, impedances_str),
+                                                         tprint("(%1_a - %1_b) * (%2 * %3%1_G)", output_token.name, half_literal, impedances_str),
                                                          tprint("% current", output_token.name)));
                 array_add(*return_vars, return_var);
                 array_add(*required_impedances, tprint("%_G", output_token.name));
@@ -919,7 +921,7 @@ is_input :: (token: *Token, inputs: [] string) -> bool {
 
 // returns true if the param value is defined in the config (i.e. known at compile-time)
 is_param_defined :: (token: *Token, idx := 0, allow_c := false) -> bool {
-    if global_args.lang == "c" && ! allow_c { return false; }
+    if (global_args.lang == "c" || global_args.lang == "rust") && ! allow_c { return false; }
     is_defined_arg := idx < token.args.count;
     if is_defined_arg { is_defined_arg &= token.args[idx] != "?"; }
     return is_defined_arg;
@@ -1293,9 +1295,9 @@ generate_updater :: (tokens: [] Token,
         if ! found {
             array_add(required, name);
             if global_args.lang == "c" {
-                array_add(updates, write_define(name, tprint("impedances->%1;", name)));
+                array_add(updates, write_define(name, tprint("impedances->%1", name)));
             } else {
-                array_add(updates, write_define(name, tprint("impedances.%1;", name)));
+                array_add(updates, write_define(name, tprint("impedances.%1", name)));
             }
         }
     }
@@ -1327,8 +1329,6 @@ generate_updater :: (tokens: [] Token,
     root_impedance_updates : [..] string;
     impedance_update_todos : [..] *Token;
 
-    if global_args.lang == "rust" { array_add(*impedance_updates, "#[allow(unused_variables)]"); }
-
     if global_args.lang == {
         case "cpp";
             array_add(*impedance_updates, "[[maybe_unused]] static constexpr auto sum = [] (auto a, auto b) { return a + b; };");
@@ -1339,6 +1339,9 @@ generate_updater :: (tokens: [] Token,
         case "c";
             array_add(*impedance_updates, "#define wdf_compiler_sum(a, b) ((a) + (b))");
             array_add(*impedance_updates, "#define wdf_compiler_recip_sum(a, b) (((a) * (b)) / ((a) + (b)))");
+        case "rust";
+            array_add(*impedance_updates, tprint ("fn sum(a: %1, b: %1) -> %1 { a + b }", global_args.dtype));
+            array_add(*impedance_updates, tprint ("fn recip_sum(a: %1, b: %1) -> %1 { (a * b) / (a + b) }", global_args.dtype));
     }
     array_add(*impedance_updates, ""); // line break
     array_add(*impedance_updates, write_define("T", "1.0 / fs"));
