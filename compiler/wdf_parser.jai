@@ -22,6 +22,7 @@ Token_Type :: enum {
     Resistive_Capacitive_Voltage_Source;
     Root_Resistive_Voltage_Source;
     Root_Capacitive_Voltage_Source;
+    Root_Capacitive_Voltage_Source_par_Resistor;
     Custom;
 }
 
@@ -188,6 +189,9 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             case "Root_CVs";
                 new_token.type = .Root_Capacitive_Voltage_Source;
                 num_children = 1;
+            case "Root_CVs_par_R";
+                new_token.type = .Root_Capacitive_Voltage_Source_par_Resistor;
+                num_children = 1;
             case "Custom";
                 new_token.type = .Custom;
             case; error_assert(false, tprint("Unknown token type: %", tag));
@@ -272,6 +276,24 @@ parse_circuit :: (circuit_str: string) -> [] Token {
 
             case .Resistive_Capacitive_Voltage_Source;
                 error_assert(new_token.args.count >= 2, "RCVs requires at least 2 arguments");
+
+                param_names := make_array(string, 3);
+                param_names[0] = tprint("%_v_value", new_token.name);
+                param_names[1] = tprint("%_res_value", new_token.name);
+                param_names[2] = tprint("%_cap_value", new_token.name);
+                new_token.param_names = param_names;
+
+                if new_token.args.count == 2 {
+                    res_arg := new_token.args[0];
+                    cap_arg := new_token.args[1];
+                    resize_array(*new_token.args, 3);
+                    new_token.args[0] = "?";
+                    new_token.args[1] = res_arg;
+                    new_token.args[2] = cap_arg;
+                }
+
+            case .Root_Capacitive_Voltage_Source_par_Resistor;
+                error_assert(new_token.args.count >= 2, "Root_CVs_par_R requires at least 2 arguments");
 
                 param_names := make_array(string, 3);
                 param_names[0] = tprint("%_v_value", new_token.name);

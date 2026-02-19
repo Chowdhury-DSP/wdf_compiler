@@ -55,3 +55,36 @@ a_t[n] = 2 (v_s[n] + b_1[n-1]) + a_2[n] \
 b_2[n] = R_c/(R_c + R_2) a_2[n] - R_2/(R_c + R_2) a_t[n] \
 b_1[n] += -b_2[n] - a_t[n] \
 $
+
+== Ideal Voltage Source in Series with Capacitor in Parallel with Resistor
+
+From above:
+$
+a_t[n] = 2 (v_s[n] + z_(cvs)[n-1]) + a_(cvs)[n] \
+b_(cvs)[n] = R_c/(R_c + R_2) a_(cvs)[n] - R_2/(R_c + R_2) a_t[n] \
+z_(cvs)[n] += -b_(cvs)[n] - a_t[n] \
+$
+
+Recall the 3-port parallel adaptor:
+$
+G_p = G_1 + G_2 \
+b_0 = G_1/G_p a_1 + G_2/G_p a_2 \
+b_1 = a_0 - G_2/G_p a_1 + G_2/G_p a_2 \
+b_2 = a_0 + G_2/G_p a_1 - G_2/G_p a_2
+$
+
+Now assume port 0 is the unterminated CVs, and port 1 is a resistor.
+Then we can define the following: $a_0 = b_(cvs), b_0 = a_(cvs), a_1 = 0, b_1 = a_(res), G_1 = 1/R$.
+Basically, wewant to compute $b_2$, given $a_2$.
+
+Computing input:
+$
+b_0 = a_(cvs) = G_1/G_p a_1 + G_2/G_p a_2 \
+a_(cvs) = G_2/G_p a_2 \
+$
+
+$
+b_2 = a_0 + G_2/G_p a_1 - G_2/G_p a_2 \
+b_2 = b_(cvs) - G_2/G_p a_2 \
+b_2 = b_(cvs) - a_(cvs) \
+$
