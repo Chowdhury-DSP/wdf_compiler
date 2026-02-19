@@ -798,8 +798,14 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                                                                 tprint("%_b", child_token.name),
                                                                 tprint("% incident", token.name)));
                     // @TODO_LANG
+                    close_statement := tprint("%2%1_closed != 0 ? -%1_a : %1_a", token.name, impedances_str);
+                    if global_args.lang == "jai" {
+                        close_statement = tprint("ifx %2%1_closed != 0 then -%1_a else %1_a", token.name, impedances_str);
+                    } else if global_args.lang == "rust" {
+                        close_statement = tprint("if %2%1_closed != (0 as %3) { -%1_a } else { %1_a }", token.name, impedances_str, global_args.dtype);
+                    }
                     array_add(*down_tree_statements, write_define(tprint("%_b", token.name),
-                                                                  tprint("%2%1_closed != 0 ? -%1_a : %1_a", token.name, impedances_str),
+                                                                  close_statement,
                                                                   tprint("%1 reflected", token.name)));
                     array_add(*down_tree_statements, write_define(tprint("%_a", child_token.name),
                                                                   tprint("%_b", token.name),
