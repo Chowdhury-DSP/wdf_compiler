@@ -15,6 +15,7 @@ Token_Type :: enum {
     Series;
     Parallel;
     Inverter;
+    Switch;
     Resistor_Capacitor_Series;
     Resistor_Capacitor_Parallel;
     Capacitive_Voltage_Source;
@@ -169,6 +170,9 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             case "IIs";
                 new_token.type = .Ideal_Current_Source;
                 num_children = 1;
+            case "Switch";
+                new_token.type = .Switch;
+                num_children = 1;
             case "Series";
                 new_token.type = .Series;
                 num_children = 2;
@@ -221,6 +225,16 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             case .Ideal_Voltage_Source;
                 param_names := make_array(string, 1);
                 param_names[0] = tprint("%_v_value", new_token.name);
+                new_token.param_names = param_names;
+
+                if new_token.args.count == 0 {
+                    resize_array(*new_token.args, 1);
+                    new_token.args[0] = "?";
+                }
+
+            case .Switch;
+                param_names := make_array(string, 1);
+                param_names[0] = tprint("%_closed", new_token.name);
                 new_token.param_names = param_names;
 
                 if new_token.args.count == 0 {

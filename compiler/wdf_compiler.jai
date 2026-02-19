@@ -792,6 +792,24 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                                                                   tprint("%_b", token.name),
                                                                   tprint("% incident", child_token.name)));
                     array_add(*required_impedances, tprint("%_R", child_token.name));
+                case .Switch;
+                    child_token := tokens[token.children[0]];
+                    array_add(*up_tree_statements, write_define(tprint("%_a", token.name),
+                                                                tprint("%_b", child_token.name),
+                                                                tprint("% incident", token.name)));
+                    // @TODO_LANG
+                    close_statement := tprint("%2%1_closed != 0 ? -%1_a : %1_a", token.name, impedances_str);
+                    if global_args.lang == "jai" {
+                        close_statement = tprint("ifx %2%1_closed != 0 then -%1_a else %1_a", token.name, impedances_str);
+                    } else if global_args.lang == "rust" {
+                        close_statement = tprint("if %2%1_closed != (0 as %3) { -%1_a } else { %1_a }", token.name, impedances_str, global_args.dtype);
+                    }
+                    array_add(*down_tree_statements, write_define(tprint("%_b", token.name),
+                                                                  close_statement,
+                                                                  tprint("%1 reflected", token.name)));
+                    array_add(*down_tree_statements, write_define(tprint("%_a", child_token.name),
+                                                                  tprint("%_b", token.name),
+                                                                  tprint("% incident", child_token.name)));
                 case .Custom;
                     generate_custom_process_root(token, tokens, *down_tree_statements);
             }
@@ -1161,6 +1179,15 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                     }
                 }
 
+            case .Switch;
+                is_known := write_param(*params_vars, token, 0, "closed");
+                if is_known {
+                    array_add(*impedance_vars, write_constexpr_var(tprint("%_closed", token.name),
+                                                                   get_constexpr_var("Params", tprint("%1_closed", token.name))));
+                } else {
+                    array_add(*impedance_vars, write_struct_field(tprint("%_closed", token.name)));
+                }
+
             case .Resistive_Voltage_Source;
                 is_input_source := is_input(token, inputs);
                 if ! is_input_source {
@@ -1524,6 +1551,13 @@ generate_updater :: (tokens: [] Token,
                         array_add(*root_impedance_updates, tprint("// Computing current for: %1;", token.name));
                         array_add(*root_impedance_updates, tprint("%2%1_I = params.%1_i_value;\n", token.name, impedances_str));
                     }
+                }
+
+            case .Switch;
+                is_known := is_param_defined(token, 0);
+                if ! is_known {
+                    array_add(*root_impedance_updates, tprint("// Computing state for: %1;", token.name));
+                    array_add(*root_impedance_updates, tprint("%2%1_closed = params.%1_closed;\n", token.name, impedances_str));
                 }
 
             case .Resistive_Voltage_Source;
