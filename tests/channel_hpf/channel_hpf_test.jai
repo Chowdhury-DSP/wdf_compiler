@@ -10,7 +10,7 @@ main :: () {
     fs : float32 : 48000.0;
 
     params := Params.{
-        Sw1_value = 1.0,
+        Sw1_closed = 1.0,
     };
     impedances: Impedances;
     calc_impedances(*impedances, fs, params);
@@ -28,7 +28,7 @@ main :: () {
         max_error = max (error, max_error);
     }
 
-    params.Sw1_value = 0.0;
+    params.Sw1_closed = 0.0;
     calc_impedances (*impedances, fs, params);
     for 0..99
     {

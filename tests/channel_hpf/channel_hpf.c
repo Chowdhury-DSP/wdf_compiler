@@ -30,7 +30,7 @@ int main()
     const float fs = 48000.0f;
 
     struct Params params = {
-        .Sw1_value = 1.0f,
+        .Sw1_closed = 1.0f,
         .R8_value = 1.0e+04,
         .Lh_value = 3.0e+00,
         .Ll_value = 7.0e+00,
@@ -50,7 +50,7 @@ int main()
         max_error = fmaxf (error, max_error);
     }
 
-    params.Sw1_value = 0.0f;
+    params.Sw1_closed = 0.0f;
     calc_impedances (&impedances, fs, params);
     for (size_t n = 0; n < count / 2; ++n)
     {

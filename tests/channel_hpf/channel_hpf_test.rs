@@ -31,7 +31,7 @@ fn main() {
     let fs : f32 = 48000.0;
 
     let mut params = channel_hpf::Params {
-        Sw1_value : 1.0,
+        Sw1_closed : 1.0,
         R8_value : 1.0e+04,
         Lh_value : 3.0e+00,
         Ll_value : 7.0e+00,
@@ -50,7 +50,7 @@ fn main() {
         max_error = f32::max(error, max_error);
     }
 
-    params.Sw1_value = 0.0;
+    params.Sw1_closed = 0.0;
     channel_hpf::calc_impedances (&mut impedances, fs, params);
     for i in 0..ref_output.len()/2 {
         let test_output = channel_hpf::process(&mut state, & impedances, if i == 0 { 1.0 } else { 0.0 });

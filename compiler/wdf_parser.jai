@@ -234,7 +234,7 @@ parse_circuit :: (circuit_str: string) -> [] Token {
 
             case .Switch;
                 param_names := make_array(string, 1);
-                param_names[0] = tprint("%_value", new_token.name);
+                param_names[0] = tprint("%_closed", new_token.name);
                 new_token.param_names = param_names;
 
                 if new_token.args.count == 0 {

@@ -1180,10 +1180,10 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 }
 
             case .Switch;
-                is_known := write_param(*params_vars, token, 0, "value");
+                is_known := write_param(*params_vars, token, 0, "closed");
                 if is_known {
                     array_add(*impedance_vars, write_constexpr_var(tprint("%_closed", token.name),
-                                                                   get_constexpr_var("Params", tprint("%1_value", token.name))));
+                                                                   get_constexpr_var("Params", tprint("%1_closed", token.name))));
                 } else {
                     array_add(*impedance_vars, write_struct_field(tprint("%_closed", token.name)));
                 }
@@ -1557,7 +1557,7 @@ generate_updater :: (tokens: [] Token,
                 is_known := is_param_defined(token, 0);
                 if ! is_known {
                     array_add(*root_impedance_updates, tprint("// Computing state for: %1;", token.name));
-                    array_add(*root_impedance_updates, tprint("%2%1_closed = params.%1_value;\n", token.name, impedances_str));
+                    array_add(*root_impedance_updates, tprint("%2%1_closed = params.%1_closed;\n", token.name, impedances_str));
                 }
 
             case .Resistive_Voltage_Source;

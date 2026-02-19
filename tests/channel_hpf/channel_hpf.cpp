@@ -57,7 +57,7 @@ int main()
     ref.Sw1.setClosed (true);
 
     Impedances impedances {};
-    calc_impedances (impedances, fs, { .Sw1_value = 1.0f });
+    calc_impedances (impedances, fs, { .Sw1_closed = 1.0f });
     State state {};
 
     static constexpr int N = 100;
@@ -72,7 +72,7 @@ int main()
     }
 
     ref.Sw1.setClosed (false);
-    calc_impedances (impedances, fs, { .Sw1_value = 0.0f });
+    calc_impedances (impedances, fs, { .Sw1_closed = 0.0f });
 
     for (int i = 0; i < N; ++i)
     {
