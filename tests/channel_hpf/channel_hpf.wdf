@@ -1,0 +1,20 @@
+circuit:
+Switch(Sw1);
+    Parallel(P1);
+        Parallel(P2);
+            R(R8, 10k);
+            L(Lh, 3);
+        Series(S1);
+            L(Ll, 7);
+            Parallel(P3);
+                CVs(C17_Vin, 470n);
+                Series(S2);
+                    C(C18, 470n);
+                    R(R9, 5.1k);
+
+
+inputs:
+C17_Vin
+
+outputs:
+V:R9
