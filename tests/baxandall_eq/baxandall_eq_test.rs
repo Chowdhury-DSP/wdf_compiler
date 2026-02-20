@@ -8,6 +8,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use std::convert::TryInto;
 use std::process;
+use std::time::Instant;
 
 fn get_data(path: &Path) -> Vec<f32> {
     let mut file = File::open(path).unwrap();
@@ -62,5 +63,49 @@ fn main() {
     if max_error > 1.0e-4 {
         println!("Error is too large... failing test!");
         process::exit(1);
+    }
+
+    #[cfg(RUN_BENCH)]
+    {
+        println!("Running bench...");
+        const M: usize = 10_000_000;
+        const N_ITER: usize = 4;
+
+        let mut data_in = vec![0.0f32; M];
+        let mut data_out = vec![0.0f32; M];
+
+        fn lcg_rand(seed: &mut u64) -> f32 {
+            *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let x = (*seed >> 32) as u32;
+            (x as f32 / u32::MAX as f32) * 2.0 - 1.0
+        }
+
+        let mut seed = 123456789u64;
+        let mut time_accum: u128 = 0;
+        let mut save_out: f32 = 0.0;
+        for _ in 0..N_ITER {
+            // Fill input with random floats in [-1, 1]
+            for x in &mut data_in {
+                *x = lcg_rand(&mut seed);
+            }
+
+            let start = Instant::now();
+
+            for n in 0..M {
+                data_out[n] = baxandall_eq::process(&mut state, &impedances, data_in[n]);
+            }
+
+            let elapsed = start.elapsed();
+            time_accum += elapsed.as_nanos();
+
+            save_out += data_out[M - 1];
+        }
+
+        println!("{}", save_out);
+
+        let ns_per_sample =
+            (time_accum as f64) / (N_ITER as f64) / (M as f64);
+
+        println!("{:.6} ns/sample", ns_per_sample);
     }
 }

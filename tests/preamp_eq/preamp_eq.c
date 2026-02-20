@@ -2,6 +2,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "preamp_eq_c.h"
 
@@ -58,6 +59,41 @@ int main()
         printf("Error is too large... failing test!\n");
         return 1;
     }
+
+#if RUN_BENCH
+    #define M 10000000
+    #define n_iter 4
+
+    float* data_in = (float*) malloc (M * sizeof (float));
+    float* data_out = (float*) malloc (M * sizeof (float));
+
+    long long time_accum = 0LL;
+    float save_out = 0;
+    for (int iter = 0; iter < n_iter; ++iter)
+    {
+        for (int n = 0; n < M; ++n)
+            data_in[n] = 2.0f * ((float)rand() / (float)RAND_MAX) - 1.0f;
+
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        long long start = (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+
+        for (int n = 0; n < M; ++n)
+            data_out[n] = process (&state, &impedances, data_in[n]);
+
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        long long end = (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+        time_accum += end - start;
+        save_out += data_out[M-1];
+    }
+
+    printf ("%f\n", save_out);
+    double ns_per_sample = ((double) time_accum) / n_iter / M;
+    printf ("%f ns/sample\n", ns_per_sample);
+
+    free (data_in);
+    free (data_out);
+#endif
 
     return 0;
 };
