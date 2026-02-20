@@ -1,6 +1,7 @@
 #import "Basic";
 #import "File";
 #import "Math";
+#import "Random";
 #load "preamp_eq.jai";
 
 main :: () {
@@ -30,5 +31,38 @@ main :: () {
     {
         print("Error is too large... failing test!\n");
         exit(1);
+    }
+
+    cli_args := get_command_line_arguments();
+    if cli_args.count > 1 && cli_args[1] == "run_bench" {
+        print("Running bench...\n");
+
+        M :: 10_000_000;
+        n_iter :: 4;
+
+        data_in : [..] float;
+        array_resize(*data_in, M);
+        data_out : [..] float;
+        array_resize(*data_out, M);
+
+        time_accum : Apollo_Time = .{};
+        save_out := 0.0;
+        for 0..n_iter-1 {
+            for 0..M-1 {
+                data_in[it] = random_get_zero_to_one() * 2.0 - 1.0;
+            }
+
+            start := current_time_monotonic();
+            for 0..M-1 {
+                data_out[it] = process(*state, *impedances, data_in[it]);
+            }
+            end := current_time_monotonic();
+            save_out += data_out[M-1];
+            time_accum += (end - start);
+        }
+        ns_per_sample := (cast(float) to_nanoseconds(time_accum)) / n_iter / M;
+
+        context.print_style.default_format_float.mode = .SHORTEST;
+        print("% ns/sample\n", ns_per_sample);
     }
 }

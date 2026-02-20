@@ -89,7 +89,7 @@ generate_op_info_table :: (cpu_type: CPU_Type) -> Op_Info_Table {
 
     return table;
 }
-op_info_table :: #run generate_op_info_table(.ZEN4);
+op_info_table :: #run generate_op_info_table(.M1);
 
 print_ops :: (ops_table: [] int) {
     ops_str := "Operations: [";

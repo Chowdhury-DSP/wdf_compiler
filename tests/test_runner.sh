@@ -18,12 +18,17 @@ fi
 if [ ! -d "${SCRIPT_DIR}/xsimd" ]; then
     git clone https://github.com/xtensor-stack/xsimd "${SCRIPT_DIR}/xsimd"
 fi
-if [[ "$*" = *bench* ]]; then
+if [[ "$*" = *bench* || "$*" = *lang-perf* ]]; then
     echo "Running bench tests..."
-    bench_flags="-DRUN_BENCH=1 -O3 -I${SCRIPT_DIR}/xsimd/include"
-    echo "Extra flags: $bench_flags"
-else
-    bench_flags=""
+    cpp_bench_flags="-DRUN_BENCH=1 -O3 -I${SCRIPT_DIR}/xsimd/include"
+    echo "Extra flags: $cpp_bench_flags"
+fi
+if [[ "$*" = *lang-perf* ]]; then
+    echo "Running JAI perf tests..."
+    jai_compile_bench_flags="-release"
+    jai_run_bench_flags="run_bench"
+    c_bench_flags="-DRUN_BENCH=1 -O3"
+    rust_bench_flags="-O --cfg RUN_BENCH"
 fi
 
 if [[ "$OSTYPE" == "win32" || "$OSTYPE" == "msys" ]]; then
@@ -50,7 +55,7 @@ cpp_test () {
    fi
 
    $wdf_compiler "${test}.wdf" "${test}.h" ${wdf_compiler_flags}
-   $cpp_compiler "${test}.cpp" ${bench_flags} -I../../lib --std=c++20 ${cpp_compiler_flags} -o "${test}.exe"
+   $cpp_compiler "${test}.cpp" ${cpp_bench_flags} -I../../lib --std=c++20 ${cpp_compiler_flags} -o "${test}.exe"
    if [[ "$OSTYPE" == "darwin"* ]]; then
       echo ${sudo_pass} | sudo -S "./${test}.exe"
    else
@@ -69,7 +74,7 @@ c_test () {
    fi
 
    $wdf_compiler "${test}.wdf" "${test}_c.h" ${wdf_compiler_flags}
-   clang ${test}.c -D_CRT_SECURE_NO_WARNINGS -Wno-c2x-extensions -I../../lib -o ${test}_c.exe
+   clang ${test}.c ${c_bench_flags} -D_CRT_SECURE_NO_WARNINGS -Wno-c2x-extensions -I../../lib -o ${test}_c.exe
    "./${test}_c.exe"
 }
 
@@ -84,11 +89,11 @@ jai_test () {
    fi
 
    $wdf_compiler "${test}.wdf" "${test}.jai" ${wdf_compiler_flags}
-   jai -quiet "${test}_test.jai"
+   jai ${jai_compile_bench_flags} -quiet "${test}_test.jai"
    if [[ "$OSTYPE" == "win32" || "$OSTYPE" == "msys" ]]; then
-      "./${test}_test.exe"
+      "./${test}_test.exe" ${jai_run_bench_flags}
    else
-      "./${test}_test"
+      "./${test}_test" ${jai_run_bench_flags}
    fi
 }
 
@@ -103,7 +108,7 @@ rust_test () {
    fi
 
    $wdf_compiler "${test}.wdf" "${test}.rs" ${wdf_compiler_flags}
-   rustc ${test}_test.rs -o ${test}_rust.exe
+   rustc ${rust_bench_flags} ${test}_test.rs -o ${test}_rust.exe
    "./${test}_rust.exe"
 }
 
@@ -118,18 +123,35 @@ test () {
 }
 
 if [[ "$*" = *bench* ]]; then
-   cpp_test rc_lowpass
+   # cpp_test rc_lowpass
    cpp_test rc_lowpass_double
    cpp_test rc_lowpass_simd
-   cpp_test rc_bandpass
-   cpp_test preamp_eq_comb
-   cpp_test diode_clipper
-   cpp_test simple_triode
-   cpp_test baxandall_eq
-   cpp_test pulse_shaper
-   cpp_test reductions_circuit
-   cpp_test reductions_circuit2
-   cpp_test analog_eq
+   # cpp_test rc_bandpass
+   # cpp_test preamp_eq
+   # cpp_test diode_clipper
+   # cpp_test simple_triode
+   # cpp_test baxandall_eq
+   # cpp_test pulse_shaper
+   # cpp_test reductions_circuit
+   # cpp_test reductions_circuit2
+   # cpp_test analog_eq
+elif [[ "$*" = *lang-perf* ]]; then
+    # The C++ test needs to run first,
+    # since it generates the reference data.
+    cpp_test rc_lowpass
+    jai_test rc_lowpass
+    c_test rc_lowpass
+    rust_test rc_lowpass
+
+    cpp_test preamp_eq
+    jai_test preamp_eq
+    c_test preamp_eq
+    rust_test preamp_eq
+
+    cpp_test baxandall_eq
+    jai_test baxandall_eq
+    c_test baxandall_eq
+    rust_test baxandall_eq
 else
    test rc_lowpass cpp jai c_lang rust
    test rc_lowpass_double cpp jai c_lang rust
