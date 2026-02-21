@@ -17,6 +17,7 @@ Token_Type :: enum {
     Inverter;
     Switch;
     Resistor_Capacitor_Series;
+    Resistor_Inductor_Series;
     Resistor_Capacitor_Parallel;
     Capacitive_Voltage_Source;
     Resistive_Capacitive_Voltage_Source;
@@ -164,6 +165,7 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             case "RCVs"; new_token.type = .Resistive_Capacitive_Voltage_Source;
             case "RIs"; new_token.type = .Resistive_Current_Source;
             case "RCSeries"; new_token.type = .Resistor_Capacitor_Series;
+            case "RLSeries"; new_token.type = .Resistor_Inductor_Series;
             case "RCParallel"; new_token.type = .Resistor_Capacitor_Parallel;
             case "IVs";
                 new_token.type = .Ideal_Voltage_Source;
@@ -224,6 +226,12 @@ parse_circuit :: (circuit_str: string) -> [] Token {
                 param_names := make_array(string, 2);
                 param_names[0] = tprint("%_res_value", new_token.name);
                 param_names[1] = tprint("%_cap_value", new_token.name);
+                new_token.param_names = param_names;
+
+            case .Resistor_Inductor_Series;
+                param_names := make_array(string, 2);
+                param_names[0] = tprint("%_res_value", new_token.name);
+                param_names[1] = tprint("%_ind_value", new_token.name);
                 new_token.param_names = param_names;
 
             case .Ideal_Voltage_Source;

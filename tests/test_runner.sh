@@ -123,18 +123,18 @@ test () {
 }
 
 if [[ "$*" = *bench* ]]; then
-   # cpp_test rc_lowpass
+   cpp_test rc_lowpass
    cpp_test rc_lowpass_double
    cpp_test rc_lowpass_simd
-   # cpp_test rc_bandpass
-   # cpp_test preamp_eq
-   # cpp_test diode_clipper
-   # cpp_test simple_triode
-   # cpp_test baxandall_eq
-   # cpp_test pulse_shaper
-   # cpp_test reductions_circuit
-   # cpp_test reductions_circuit2
-   # cpp_test analog_eq
+   cpp_test rc_bandpass
+   cpp_test preamp_eq
+   cpp_test diode_clipper
+   cpp_test simple_triode
+   cpp_test baxandall_eq
+   cpp_test pulse_shaper
+   cpp_test reductions_circuit
+   cpp_test reductions_circuit2
+   cpp_test analog_eq
 elif [[ "$*" = *lang-perf* ]]; then
     # The C++ test needs to run first,
     # since it generates the reference data.

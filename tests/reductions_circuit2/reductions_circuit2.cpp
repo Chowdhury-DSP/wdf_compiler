@@ -36,7 +36,17 @@ struct Reference_WDF
 
     chowdsp::wdft::ResistiveCapacitiveVoltageSourceT<float> Rl { 100.0e3f, 10.0e-6f };
     chowdsp::wdft::WDFSeriesT<float, decltype (Rl), decltype (S3)> Sl { Rl, S3 };
-    chowdsp::wdft::IdealVoltageSourceT<float, decltype (Sl)> Vb { Sl };
+
+    chowdsp::wdft::ResistorT<float> Rl1 { 1.0e3f };
+    chowdsp::wdft::InductorT<float> L1 { 0.2f };
+    chowdsp::wdft::WDFSeriesT<float, decltype (Rl1), decltype (L1)> Sll { Rl1, L1 };
+
+    chowdsp::wdft::ResistorT<float> Rl2 { 10.0e3f };
+    chowdsp::wdft::WDFSeriesT<float, decltype (Sll), decltype (Rl2)> Sr { Sll, Rl2 };
+
+    chowdsp::wdft::WDFSeriesT<float, decltype (Sr), decltype (Sl)> Pr { Sr, Sl };
+
+    chowdsp::wdft::IdealVoltageSourceT<float, decltype (Pr)> Vb { Pr };
 
     void prepare (float fs)
     {
@@ -48,8 +58,8 @@ struct Reference_WDF
     float process (float V)
     {
         Vin.setVoltage (V);
-        Vb.incident (Sl.reflected());
-        Sl.incident (Vb.reflected());
+        Vb.incident (Pr.reflected());
+        Pr.incident (Vb.reflected());
         return chowdsp::wdft::voltage<float> (Rl);
     }
 };
@@ -96,7 +106,7 @@ int main()
     ofp.close();
 
 #if RUN_BENCH
-    static constexpr int M = 100'000'000;
+    static constexpr int M = 10'000'000;
     static constexpr int n_iter = 4;
 
     auto* data_in = (float*) malloc (M * sizeof (float));

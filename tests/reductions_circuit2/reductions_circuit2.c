@@ -31,6 +31,9 @@ int main()
 
     struct Params params = {
         .Vb_v_value = 1.5e+00f,
+        .Rl1_value = 1.0e+03f,
+        .L1_value = 2.0e-01f,
+        .Rl2_value = 1.0e+04f,
         .Rp_value = 4.0e+03f,
         .S4_v_value = 1.2e+00f,
         .Vcc_cap_value = 1.0e-6f,
