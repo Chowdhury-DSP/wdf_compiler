@@ -42,8 +42,19 @@ struct Reference_WDF
     chowdsp::wdft::WDFSeriesT<float, decltype (Rl1), decltype (L1)> Sll { Rl1, L1 };
 
     chowdsp::wdft::ResistorT<float> Rl2 { 10.0e3f };
-    chowdsp::wdft::WDFSeriesT<float, decltype (Sll), decltype (Rl2)> Sr { Sll, Rl2 };
+    chowdsp::wdft::WDFSeriesT<float, decltype (Sll), decltype (Rl2)> Sr2 { Sll, Rl2 };
 
+    chowdsp::wdft::InductorT<float> L2 { 1.2f };
+    chowdsp::wdft::CapacitorT<float> Cr { 1.0e-9f };
+    chowdsp::wdft::WDFSeriesT<float, decltype (L2), decltype (Cr)> Slc { L2, Cr };
+
+    chowdsp::wdft::ResistorT<float> Rl3 { 5.0e3f };
+    chowdsp::wdft::WDFSeriesT<float, decltype (Slc), decltype (Rl3)> Sr4 { Slc, Rl3 };
+
+    chowdsp::wdft::ResistorT<float> Rl4 { 1.2e3f };
+    chowdsp::wdft::WDFSeriesT<float, decltype (Sr4), decltype (Rl4)> Sr3 { Sr4, Rl4 };
+
+    chowdsp::wdft::WDFSeriesT<float, decltype (Sr2), decltype (Sr3)> Sr { Sr2, Sr3 };
     chowdsp::wdft::WDFSeriesT<float, decltype (Sr), decltype (Sl)> Pr { Sr, Sl };
 
     chowdsp::wdft::IdealVoltageSourceT<float, decltype (Pr)> Vb { Pr };
@@ -53,6 +64,14 @@ struct Reference_WDF
         Vb.setVoltage (1.5f);
         Vcc.setVoltage (1.2f);
         Rl.setVoltage (-1.1f);
+        Vcc.prepare (fs);
+        Rl.prepare (fs);
+        Cp.prepare (fs);
+        Cp2.prepare (fs);
+        C1.prepare (fs);
+        L1.prepare (fs);
+        L2.prepare (fs);
+        Cr.prepare (fs);
     }
 
     float process (float V)
