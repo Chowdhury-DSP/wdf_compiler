@@ -870,6 +870,12 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                                                             tprint("% reflected", token.name)));
                 array_add(*down_tree_statements, tprint("%3%1_z = -%1_a + %2%1_2RC_over_T_plus_2RC * (%1_a + %3%1_z); // %1 state update", token.name, impedances_str, state_str));
                 array_add(*required_impedances, tprint("%_2RC_over_T_plus_2RC", token.name));
+            case .Resistor_Inductor_Series;
+                array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
+                                                            tprint("%2%1_z", token.name, state_str),
+                                                            tprint("% reflected", token.name)));
+                array_add(*down_tree_statements, tprint("%3%1_z = -%1_a + %2%1_Ri * (%1_a - %3%1_z); // %1 state update", token.name, impedances_str, state_str));
+                array_add(*required_impedances, tprint("%_Ri", token.name));
             case .Resistor_Capacitor_Parallel;
                 array_add(*up_tree_statements, write_define(tprint("%_b", token.name),
                                                             tprint("%2%1_2RC_over_2RC_plus_T * %3%1_z", token.name, impedances_str, state_str),
@@ -1174,6 +1180,12 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                 for name,idx : token.param_names { write_param_named(*params_vars, token, name, idx); }
                 array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
                 array_add(*impedance_vars, write_struct_field(tprint("%1_2RC_over_T_plus_2RC", token.name)));
+                add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
+
+            case .Resistor_Inductor_Series;
+                for name,idx : token.param_names { write_param_named(*params_vars, token, name, idx); }
+                array_add(*state_vars, write_struct_field(tprint("%_z", token.name)));
+                array_add(*impedance_vars, write_struct_field(tprint("%1_Ri", token.name)));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistor_Capacitor_Parallel;
@@ -1571,6 +1583,15 @@ generate_updater :: (tokens: [] Token,
                 add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("(T / (2.0 * %1_cap_value)) + %1_res_value", token.name), required_impedances.*, *available_values);
                 add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1.0 / %1_R", token.name), required_impedances.*, *available_values);
                 array_add(*impedance_updates, tprint("%2%1_2RC_over_T_plus_2RC = (2.0 * %1_cap_value * %1_res_value) / (2.0 * %1_cap_value * %1_res_value + T);\n", token.name, impedances_str));
+                add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
+
+            case .Resistor_Inductor_Series;
+                array_add(*impedance_updates, tprint("// Computing impedance for: %1;", token.name));
+                array_add(*impedance_updates, write_define(tprint("%1_res_value", token.name), param_calc(token, token.param_calc_info[0])));
+                array_add(*impedance_updates, write_define(tprint("%1_ind_value", token.name), param_calc(token, token.param_calc_info[1])));
+                add_impedance(*impedance_updates, tprint("%1_R", token.name), tprint("2.0 * %1_ind_value * fs + %1_res_value", token.name), required_impedances.*, *available_values);
+                add_impedance(*impedance_updates, tprint("%1_G", token.name), tprint("1.0 / %1_R", token.name), required_impedances.*, *available_values);
+                array_add(*impedance_updates, tprint("%2%1_Ri = %1_res_value * %1_G;\n", token.name, impedances_str));
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
             case .Resistor_Capacitor_Parallel;
@@ -2002,6 +2023,7 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
     }
 
     rc_add :: (original_token: Token, idx: s64, rc: Token, new: Token) -> Token {
+        print("HERE\n");
         new_args := join_arrays (rc.args, new.args);
         param_names := join_arrays (rc.param_names, new.param_names);
         update_param_name_idxs(*new.param_calc_info[0], rc.param_names.count);
@@ -2010,7 +2032,7 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
         array_resize(*param_calc_info, 2);
         if (new.type == .Resistor) {
             param_calc_info[0] = .{
-                calc = ifx rc.type == .Resistor_Capacitor_Series then .Sum else .Reciprocal_Sum,
+                calc = ifx (rc.type == .Resistor_Capacitor_Series || rc.type == .Resistor_Inductor_Series) then .Sum else .Reciprocal_Sum,
                 child_left = *rc.param_calc_info[0],
                 child_right = *new.param_calc_info[0],
             };
@@ -2193,6 +2215,20 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
                         reductions_count += 1;
                     }
 
+                    // RLSeries
+                    if (child0.type == .Resistor && child1.type == .Inductor && ! is_child_output) {
+                        tokens[idx] = make_rc(token, idx, child0, child1, .Resistor_Inductor_Series);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+                    if (child1.type == .Resistor && child0.type == .Inductor && ! is_child_output) {
+                        tokens[idx] = make_rc(token, idx, child1, child0, .Resistor_Inductor_Series);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+
                     // RCSeries + R
                     if (child0.type == .Resistor_Capacitor_Series && child1.type == .Resistor && ! is_child_output) {
                         tokens[idx] = rc_add(token, idx, child0, child1);
@@ -2215,6 +2251,20 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
                         reductions_count += 1;
                     }
                     if (child0.type == .Capacitor && child1.type == .Resistor_Capacitor_Series && ! is_child_output) {
+                        tokens[idx] = rc_add(token, idx, child1, child0);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+
+                    // RLSeries + R
+                    if (child0.type == .Resistor_Inductor_Series && child1.type == .Resistor && ! is_child_output) {
+                        tokens[idx] = rc_add(token, idx, child0, child1);
+                        remove_token(*tokens, token.children[1]);
+                        remove_token(*tokens, token.children[0]);
+                        reductions_count += 1;
+                    }
+                    if (child0.type == .Resistor && child1.type == .Resistor_Inductor_Series && ! is_child_output) {
                         tokens[idx] = rc_add(token, idx, child1, child0);
                         remove_token(*tokens, token.children[1]);
                         remove_token(*tokens, token.children[0]);
