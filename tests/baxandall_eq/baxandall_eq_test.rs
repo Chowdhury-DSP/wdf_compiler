@@ -1,4 +1,5 @@
 #![allow(nonstandard_style)]
+#![allow(unused_imports)]
 
 mod custom_baxandall_rtype;
 mod baxandall_eq;

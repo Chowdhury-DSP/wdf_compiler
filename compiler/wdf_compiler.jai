@@ -2023,7 +2023,6 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
     }
 
     rc_add :: (original_token: Token, idx: s64, rc: Token, new: Token) -> Token {
-        print("HERE\n");
         new_args := join_arrays (rc.args, new.args);
         param_names := join_arrays (rc.param_names, new.param_names);
         update_param_name_idxs(*new.param_calc_info[0], rc.param_names.count);
