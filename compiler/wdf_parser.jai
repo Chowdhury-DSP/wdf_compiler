@@ -63,6 +63,31 @@ Token :: struct {
     custom_info: *Custom_Token_Info = null;
 }
 
+remove_comments :: (input_str: string) -> string {
+    // comments start with "//" and end with \n
+    // we don't support "/**/" style  comments (yet?)
+
+    str := input_str;
+    total_comments := 0;
+    while true {
+        comment_start_idx := String.find_index_from_right(str, "//");
+        if comment_start_idx < 0 { break; }
+
+        before_str := String.slice(str, 0, comment_start_idx);
+        after_str := "";
+
+        comment_end_idx := String.find_index_from_left(str, "\n", comment_start_idx);
+        if comment_end_idx >= 0 {
+            after_str = String.slice(str, comment_end_idx, str.count - comment_end_idx);
+        }
+        str = String.join(before_str, after_str);
+
+        total_comments += 1;
+    }
+
+    return str;
+}
+
 parse_custom_token_args :: (args: [] string) -> *Token.Custom_Token_Info {
     info := New(Token.Custom_Token_Info);
     name_prefix := "";
@@ -149,6 +174,7 @@ parse_circuit :: (circuit_str: string) -> [] Token {
         if token_str.count == 0 { continue; }
 
         found_token_tag, tag, args := String.split_from_left(token_str, #char "(");
+        error_assert(! String.contains(args, #char "("), tprint("Multiple tokens in one statement! Probably missing a semi-colon.\nStatement: %", token_str));
         // remove closing parenthese from args
         error_assert(args[args.count - 1] == #char ")", tprint("Token % is missing closing parenthese", tag));
         args.count = args.count - 1;
