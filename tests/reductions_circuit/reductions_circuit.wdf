@@ -1,6 +1,6 @@
 circuit:
 IVs(Vin);
-    Series(Sv1);
+    Series(Sv1); // Branch 1
         R(Rv1, 10k);
         Series(Sv2);
             R(Rv2, 5k);
@@ -14,7 +14,7 @@ IVs(Vin);
                             Parallel(P5);
                                 R(R7, 10k);
                                 C(C7, 10u);
-                    Series(S7);
+                    Series(S7); // Branch 2
                         C(C6, 4u);
                         Series(S6);
                             R(R6, 10k);

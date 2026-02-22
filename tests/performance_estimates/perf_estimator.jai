@@ -110,7 +110,8 @@ main :: () {
     file_str, fread_success := File.read_entire_file(wdf_file);
     if !fread_success { exit (1); }
 
-    sections := parse_file_sections (file_str);
+    file_str = remove_comments(file_str);
+    sections := parse_file_sections(file_str);
     outputs := String.split(sections.outputs, "\n");
     for *output : outputs { output.* = String.trim(output.*); }
     circuit_tokens := parse_circuit(sections.circuit);

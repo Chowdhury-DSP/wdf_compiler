@@ -62,7 +62,8 @@ main :: () {
     file_str, fread_success := File.read_entire_file(input_file);
     if !fread_success { exit (1); }
 
-    sections := parse_file_sections (file_str);
+    file_str = remove_comments(file_str);
+    sections := parse_file_sections(file_str);
     error_assert(sections.circuit.count > 0, "Missing \"circuit\" section");
     error_assert(sections.inputs.count > 0, "Missing \"input\" section");
     error_assert(sections.outputs.count > 0, "Missing \"output\" section");
@@ -2459,19 +2460,13 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
                         if (grandchild0.type == .Resistor && ! is_grandchild0_output) {
                             root_r_or_cvs(*tokens, idx, grandchild0.index, grandchild1.index, .Root_Resistive_Voltage_Source);
                             reductions_count += 1;
-                        }
-
-                        if (grandchild1.type == .Resistor && ! is_grandchild1_output) {
+                        } else if (grandchild1.type == .Resistor && ! is_grandchild1_output) {
                             root_r_or_cvs(*tokens, idx, grandchild1.index, grandchild0.index, .Root_Resistive_Voltage_Source);
                             reductions_count += 1;
-                        }
-
-                        if (grandchild0.type == .Capacitor && ! is_grandchild0_output) {
+                        } else if (grandchild0.type == .Capacitor && ! is_grandchild0_output) {
                             root_r_or_cvs(*tokens, idx, grandchild0.index, grandchild1.index, .Root_Capacitive_Voltage_Source);
                             reductions_count += 1;
-                        }
-
-                        if (grandchild1.type == .Capacitor && ! is_grandchild1_output) {
+                        } else if (grandchild1.type == .Capacitor && ! is_grandchild1_output) {
                             root_r_or_cvs(*tokens, idx, grandchild1.index, grandchild0.index, .Root_Capacitive_Voltage_Source);
                             reductions_count += 1;
                         }
@@ -2533,9 +2528,7 @@ reduce_circuit :: (original_tokens: [] Token, inputs: [] string, outputs: [] str
                         if (grandchild0.type == .Resistor && ! is_grandchild0_output) {
                             root_rvs_add_r(*tokens, idx, grandchild0.index, grandchild1.index);
                             reductions_count += 1;
-                        }
-
-                        if (grandchild1.type == .Resistor && ! is_grandchild1_output) {
+                        } else if (grandchild1.type == .Resistor && ! is_grandchild1_output) {
                             root_rvs_add_r(*tokens, idx, grandchild1.index, grandchild0.index);
                             reductions_count += 1;
                         }
