@@ -1,0 +1,7 @@
+* RC Lowpass Filter
+V1 P001 0 PULSE(0 1 1m 1u 1u 10m 20m 0) ; input root
+R1 P002 P001 1k
+C1 P002 0 500n ; output:V
+.tran 0 50m 0 10u
+.backanno
+.end

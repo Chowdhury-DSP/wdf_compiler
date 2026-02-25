@@ -8,6 +8,8 @@ wdf_compiler
 *.ilk
 *.rdi
 *.bin
+*.raw
+*.log
 
 /.idea
 /.vscode
@@ -23,3 +25,4 @@ rt-wdf/
 
 demo/
 notes/*.pdf
+netlist_converter/netlist_converter

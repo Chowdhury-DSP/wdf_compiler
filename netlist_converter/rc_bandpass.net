@@ -1,0 +1,9 @@
+* RC Bandpass Circuit
+Vin 1 0 PULSE(0 1 1m 1u 1u 10m 20m 0) ; input root
+C1 1 2 1u
+R1 2 0 1k
+R2 2 3 1k
+C2 3 0 1u ; output:V
+.tran 0 50m 0 10u
+.backanno
+.end

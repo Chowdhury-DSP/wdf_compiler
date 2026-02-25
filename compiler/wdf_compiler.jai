@@ -31,7 +31,7 @@ main :: () {
     context.print_style.default_format_float.zero_removal = .ONE_ZERO_AFTER_DECIMAL;
     set_initial_data(*scratch, SCRATCH_SIZE, alloc(SCRATCH_SIZE));
 
-    args_success, args, is_set, free_args := CLI.parse_arguments (Args, argument_flags);
+    args_success, args, is_set, free_args := CLI.parse_arguments(Args, argument_flags);
     if ! args_success { exit(1); }
 
     if args.version {
