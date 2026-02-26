@@ -3,6 +3,7 @@ build*/
 bin/
 *.dSYM
 wdf_compiler
+netlist_converter_standalone
 *.exe
 *.pdb
 *.ilk
@@ -25,4 +26,3 @@ rt-wdf/
 
 demo/
 notes/*.pdf
-netlist_converter/netlist_converter

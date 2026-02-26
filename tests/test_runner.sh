@@ -63,6 +63,24 @@ cpp_test () {
    fi
 }
 
+netlist_test () {
+   test="$1"
+   echo "Running CPP Test: $test"
+   cd "${SCRIPT_DIR}/${test}"
+   rm -f data.bin
+
+   wdf_compiler_flags="-netlist"
+   cpp_compiler_flags=${libcpp_flag}
+
+   $wdf_compiler "${test}.net" "${test}.h" ${wdf_compiler_flags}
+   $cpp_compiler "${test}.cpp" ${cpp_bench_flags} -I../../lib --std=c++20 ${cpp_compiler_flags} -o "${test}.exe"
+   if [[ "$OSTYPE" == "darwin"* ]]; then
+      echo ${sudo_pass} | sudo -S "./${test}.exe"
+   else
+      "./${test}.exe"
+   fi
+}
+
 c_test () {
    test="$1"
    echo "Running C Test: $test"
@@ -120,6 +138,7 @@ test () {
    if [[ "$*" = *jai* ]]; then jai_test $test; fi
    if [[ "$*" = *c_lang* ]]; then c_test $test; fi
    if [[ "$*" = *rust* ]]; then rust_test $test; fi
+   if [[ "$*" = *netlist* ]]; then netlist_test $test; fi
 }
 
 if [[ "$*" = *bench* ]]; then
@@ -153,13 +172,13 @@ elif [[ "$*" = *lang-perf* ]]; then
     c_test baxandall_eq
     rust_test baxandall_eq
 else
-   test rc_lowpass cpp jai c_lang rust
+   test rc_lowpass  cpp jai c_lang rust netlist
    test rc_lowpass_double cpp jai c_lang rust
    test rc_lowpass_simd cpp
-   test rc_bandpass cpp jai c_lang rust
+   test rc_bandpass cpp jai c_lang rust netlist
    test rl_lowpass cpp jai c_lang rust
    test rc_lowpass_var cpp jai c_lang rust
-   test rl_lowpass_var cpp jai c_lang rust
+   test rl_lowpass_var cpp jai c_lang rust netlist
    test rc_bandpass_var cpp jai c_lang rust
    test rc_lowpass_2ins cpp jai c_lang rust
    test preamp_eq cpp jai c_lang rust

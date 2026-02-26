@@ -1,8 +1,3 @@
-#import "Basic";
-File :: #import "File";
-String :: #import "String";
-#import "Print_Color";
-
 Decomp_Kind :: enum {
     LEAF;
     SERIES;
@@ -31,9 +26,10 @@ SP_Node :: struct {
     component_id: string; // for LEAF
     parent := -1;
     children: [2]int = .[-1, -1];   // for SERIES/PARALLEL: indices into sp_nodes
-    is_root := false;
-    is_input := false;
+    value: string;
     output: Node_Output_Type;
+    is_input := false;
+    is_root := false;
 }
 
 Edge :: struct {
@@ -51,10 +47,11 @@ Graph :: struct {
 
 add_component :: (graph: *Graph, sp_nodes: *[..] SP_Node,
                   n1: int, n2: int, component_id: string,
-                  meta: []string) {
+                  value_str: string, meta: []string) {
     leaf := SP_Node.{
         kind = .LEAF,
         component_id = component_id,
+        value = value_str,
     };
 
     if component_id[0] == {
@@ -68,7 +65,7 @@ add_component :: (graph: *Graph, sp_nodes: *[..] SP_Node,
         case "c"; leaf.leaf = .CAPACITOR;
         case "L"; #through;
         case "l"; leaf.leaf = .INDUCTOR;
-        case; assert(false, "unknown component type!");
+        case; assert(false, tprint("Netlist Error: Unknown component type: %", component_id[0]));
     }
 
     for param : meta {
@@ -97,8 +94,6 @@ add_component :: (graph: *Graph, sp_nodes: *[..] SP_Node,
     }
     array_add(*graph.adjacency[n1], edge_id);
     array_add(*graph.adjacency[n2], edge_id);
-    // if n1 != 0 { array_add(*graph.adjacency[n1], edge_id); }
-    // if n2 != 0 { array_add(*graph.adjacency[n2], edge_id); }
 }
 
 parse_netlist :: (netlist_str: string) -> Graph, [..] SP_Node {
@@ -125,9 +120,12 @@ parse_netlist :: (netlist_str: string) -> Graph, [..] SP_Node {
         if line[0] == "*" || line[0] == "." { continue; } // comment or heading line
 
         parts := String.split(line, " ");
-        assert(parts.count >= 3, "Netlist entry needs at least three parts: name, node 1, node 2");
+        assert(parts.count >= 3,
+               tprint("Netlist entry needs at least three parts: name, node 1, node 2. Parts: %", parts));
         node2 := get_node_idx(*node_names, parts[2]);
         node1 := get_node_idx(*node_names, parts[1]);
+        value_str := "";
+        if parts.count > 3 && parts[3].count > 0 && is_digit(parts[3][0]) { value_str = parts[3]; }
 
         meta: []string;
         for part : parts {
@@ -138,7 +136,7 @@ parse_netlist :: (netlist_str: string) -> Graph, [..] SP_Node {
             }
         }
 
-        add_component(*graph, *sp_nodes, node1, node2, parts[0], meta);
+        add_component(*graph, *sp_nodes, node1, node2, parts[0], value_str, meta);
     }
 
     return graph, sp_nodes;
@@ -268,7 +266,7 @@ reduce_to_sp_tree :: (graph: *Graph, sp_nodes: *[..]SP_Node) -> int
     }
 
     if count != 1 {
-        assert(false, "Graph is not series-parallel");
+        assert(false, "Netlist Error: Circuit graph is not series-parallel!");
     }
 
     junction_root_idx := graph.edges[remaining].sp_node;
@@ -293,6 +291,7 @@ reroot :: (sp_nodes: []SP_Node) -> int
         if node.is_root { new_root = it_index; break; }
     }
     // print("New root: %\n", new_root);
+    // print("New root: %\n", sp_nodes[new_root]);
 
     find_path_to_root :: (sp_nodes: []SP_Node, start: int) -> [..]int {
         path: [..]int;
@@ -339,47 +338,10 @@ reroot :: (sp_nodes: []SP_Node) -> int
         if i + 2 < path.count {
             grandparent := path[i+2];
             sp_nodes[child].parent  = grandparent;
-
-            // apparently we don't need to do this?
-            // if sp_nodes[grandparent].children[0] == parent { sp_nodes[grandparent].children[0] = child; }
-            // else if sp_nodes[grandparent].children[1] == parent { sp_nodes[grandparent].children[1] = child; }
         }
     }
 
     return new_root;
-}
-
-print_sp_graph :: (nodes: []SP_Node, root: int) {
-    print_element :: (nodes: []SP_Node, index: int, depth := 0, last := false) {
-        if depth == 5 return;
-
-        node := nodes[index];
-        name := ifx node.kind == .LEAF then node.component_id else tprint("%", node.kind);
-
-        for i: 0..depth-1 {
-            if i == depth - 1 {
-                if last { print("└── "); }
-                else { print("├── "); }
-            } else {
-                if i == 0 { print("    "); }
-                else { print("│   "); }
-            }
-        }
-
-        color := Console_Color.WHITE;
-        if node.is_input color = .RED;
-        else if node.output == .VOLTAGE color = .GREEN;
-        else if node.output == .CURRENT color = .MAGENTA;
-        print_color("%\n", name, color = color);
-
-        for child_idx : node.children {
-            if child_idx >= 0 {
-                print_element(nodes, child_idx, depth + 1,
-                              node.kind == .LEAF || it_index == node.children.count-1);
-            }
-        }
-    }
-    print_element(nodes, root);
 }
 
 generate_wdf_string :: (nodes: []SP_Node, root: int) -> string {
@@ -387,8 +349,6 @@ generate_wdf_string :: (nodes: []SP_Node, root: int) -> string {
     print_to_builder(*builder, "circuit:\n");
 
     print_element :: (builder: *String_Builder, nodes: []SP_Node, index: int, depth := 0) {
-        if depth == 5 return;
-
         node := nodes[index];
         type_name := "";
         elem_name := "";
@@ -420,7 +380,9 @@ generate_wdf_string :: (nodes: []SP_Node, root: int) -> string {
         for i: 0..depth-1 {
             print_to_builder(builder, "    ");
         }
-        print_to_builder(builder, "%(%);\n", type_name, elem_name);
+        print_to_builder(builder, "%(%", type_name, elem_name);
+        if node.value.count > 0 { print_to_builder(builder, ", %", node.value); }
+        print_to_builder(builder, ");\n");
 
         for child_idx : node.children {
             if child_idx >= 0 { print_element(builder, nodes, child_idx, depth + 1); }
@@ -440,30 +402,4 @@ generate_wdf_string :: (nodes: []SP_Node, root: int) -> string {
     }
 
     return builder_to_string(*builder);
-}
-
-main :: () {
-    args := get_command_line_arguments();
-    netlist_file := args[1];
-    wdf_file := args[2];
-    print("Converting netlist file % to %\n\n", netlist_file, wdf_file);
-
-    netlist_file_str, fread_success := File.read_entire_file(netlist_file);
-    assert(fread_success, "Unable to open file!");
-
-    graph, sp_nodes := parse_netlist(netlist_file_str);
-    // print("%\n", graph);
-    // print("%\n", sp_nodes);
-
-    root := reduce_to_sp_tree(*graph, *sp_nodes);
-    // print("%\n", graph);
-    // print("%\n", sp_nodes);
-    // print_sp_graph(sp_nodes, root);
-
-    root = reroot(sp_nodes);
-    // print("%\n", sp_nodes);
-    print_sp_graph(sp_nodes, root);
-
-    wdf_str := generate_wdf_string(sp_nodes, root);
-    print(wdf_str);
 }
