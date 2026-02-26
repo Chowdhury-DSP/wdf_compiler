@@ -4,6 +4,7 @@ File :: #import "File";
 Process :: #import "Process";
 #load "wdf_parser.jai";
 #load "scratch.jai";
+#load "netlist_converter.jai";
 
 Args :: struct {
     verbose      : bool = false;     @"?Verbose"
@@ -13,6 +14,7 @@ Args :: struct {
     align        : int = 16;         @"?Default data alignment to use for generated code. (Default: 16)"
     no_reduce    : bool = false;     @"?Skip circuit element reductions (Default: false)"
     one_multiply : bool = false;     @"?Use 1-multiply junctions for series adaptors and others (Default: false)"
+    netlist      : bool = false;     @"?Converts input file from netlist to WDF before generating code (Default: false)"
 }
 argument_flags :: CLI.Default_Argument_Flags;
 global_args: Args;
@@ -31,7 +33,7 @@ main :: () {
     context.print_style.default_format_float.zero_removal = .ONE_ZERO_AFTER_DECIMAL;
     set_initial_data(*scratch, SCRATCH_SIZE, alloc(SCRATCH_SIZE));
 
-    args_success, args, is_set, free_args := CLI.parse_arguments (Args, argument_flags);
+    args_success, args, is_set, free_args := CLI.parse_arguments(Args, argument_flags);
     if ! args_success { exit(1); }
 
     if args.version {
@@ -61,6 +63,15 @@ main :: () {
 
     file_str, fread_success := File.read_entire_file(input_file);
     if !fread_success { exit (1); }
+
+    if args.netlist {
+        verbose_print("Converting input from netlist...");
+        graph, sp_nodes := parse_netlist(file_str);
+        root := reduce_to_sp_tree(*graph, *sp_nodes);
+        root = reroot(sp_nodes);
+        file_str = generate_wdf_string(sp_nodes, root);
+        verbose_print("WDF representation:\n%", file_str);
+    }
 
     file_str = remove_comments(file_str);
     sections := parse_file_sections(file_str);
@@ -1087,27 +1098,38 @@ write_constexpr_var :: (name: string, value: string) -> string {
     return .{};
 }
 
-write_struct_field :: (name: string) -> string {
+write_struct_field :: (name: string, default_value := "") -> string {
+    field_str := "";
     if global_args.lang == {
         case "cpp"; #through;
         case "c";
-            return tprint("%2 %1;", name, global_args.dtype);
+            field_str = tprint("%2 %1;", name, global_args.dtype);
         case "jai";
-            return tprint("%1 : %2;", name, global_args.dtype);
+            field_str = tprint("%1 : %2;", name, global_args.dtype);
         case "rust";
-            return tprint("pub %1 : %2,", name, global_args.dtype);
+            field_str = tprint("pub %1 : %2,", name, global_args.dtype);
     }
-    return .{};
+
+    if (global_args.lang == "cpp" || global_args.lang == "jai") && default_value.count > 0 {
+        field_str.count -= 1;
+        field_str = tprint("% = %;", field_str, default_value);
+    }
+
+    return field_str;
 }
 
-write_param_named :: (params_vars : *[..] string, token: *Token, name: string, idx := 0) -> bool {
+write_param_named :: (params_vars : *[..] string,
+                      token: *Token,
+                      name: string,
+                      idx := 0,
+                      default_value := "") -> bool {
     is_defined_arg := is_param_defined(token, idx, true);
     if is_defined_arg {
         array_add(params_vars,
                   write_constexpr_var(name,
                                       tprint("%", get_value(token.args[idx]))));
     } else {
-        array_add(params_vars, write_struct_field(name));
+        array_add(params_vars, write_struct_field(name, default_value));
     }
 
     return is_defined_arg;
@@ -1240,7 +1262,9 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
 
                 for name,idx : token.param_names {
                     if idx == 0 { continue; } // @TODO: handle this if we allow combined inputs
-                    write_param_named(*params_vars, token, name, idx);
+                    default_value := "";
+                    if idx == 1 { default_value = "1.0e-6"; }
+                    write_param_named(*params_vars, token, name, idx, default_value=default_value);
                 }
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 
@@ -1361,10 +1385,12 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
                     }
                 }
 
-                if is_input_source {
-                    write_param(*params_vars, token, 0, "res_value");
-                } else {
-                    write_param(*params_vars, token, 1, "res_value");
+                for name,idx : token.param_names {
+                    if idx == 0 { continue; } // @TODO: handle this if we allow combined inputs
+
+                    default_value := "";
+                    if idx == 1 { default_value = "1.0e6"; }
+                    write_param_named(*params_vars, token, name, idx, default_value=default_value);
                 }
                 add_impedance_update_todo(*impedance_update_todos, *tokens[token.parent], token);
 

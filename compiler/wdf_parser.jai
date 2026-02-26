@@ -281,7 +281,8 @@ parse_circuit :: (circuit_str: string) -> [] Token {
                 }
 
             case .Root_Resistive_Voltage_Source; #through;
-            case .Resistive_Voltage_Source;
+            case .Resistive_Voltage_Source; #through;
+            case .Resistive_Current_Source;
                 param_names := make_array(string, 2);
                 param_names[0] = tprint("%_v_value", new_token.name);
                 param_names[1] = tprint("%_res_value", new_token.name);

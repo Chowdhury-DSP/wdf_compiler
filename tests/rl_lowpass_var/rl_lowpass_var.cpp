@@ -47,8 +47,12 @@ int main()
     ref.Ivar.setCurrent(Ivar_I);
     ref.R1.setResistanceValue(R1);
 
+    Params params {};
+    params.Iplus_i_value = Iplus_I;
+    params.Ivar_i_value = Ivar_I;
+    params.R1_value = R1;
     Impedances impedances {};
-    calc_impedances (impedances, fs, { Iplus_I, Ivar_I, R1 });
+    calc_impedances (impedances, fs, params);
     State state {};
 
     static constexpr int N = 100;

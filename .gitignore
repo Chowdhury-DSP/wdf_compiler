@@ -3,11 +3,14 @@ build*/
 bin/
 *.dSYM
 wdf_compiler
+netlist_converter_standalone
 *.exe
 *.pdb
 *.ilk
 *.rdi
 *.bin
+*.raw
+*.log
 
 /.idea
 /.vscode
