@@ -116,10 +116,11 @@ parse_netlist :: (netlist_str: string) -> Graph, [..] SP_Node {
     }
 
     for line : lines {
-        if line.count == 0 { continue; } // empty line
-        if line[0] == "*" || line[0] == "." { continue; } // comment or heading line
+        line_trim := String.trim(line);
+        if line_trim.count == 0 { continue; } // empty line
+        if line_trim[0] == "*" || line_trim[0] == "." { continue; } // comment or heading line
 
-        parts := String.split(line, " ");
+        parts := String.split(line_trim, " ");
         assert(parts.count >= 3,
                tprint("Netlist entry needs at least three parts: name, node 1, node 2. Parts: %", parts));
         node2 := get_node_idx(*node_names, parts[2]);
