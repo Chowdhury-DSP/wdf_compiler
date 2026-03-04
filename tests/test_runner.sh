@@ -25,7 +25,7 @@ if [[ "$*" = *bench* || "$*" = *lang-perf* ]]; then
 fi
 if [[ "$*" = *lang-perf* ]]; then
     echo "Running JAI perf tests..."
-    jai_compile_bench_flags="-release"
+    jai_compile_bench_flags="-optimized"
     jai_run_bench_flags="run_bench"
     c_bench_flags="-DRUN_BENCH=1 -O3"
     rust_bench_flags="-O --cfg RUN_BENCH"

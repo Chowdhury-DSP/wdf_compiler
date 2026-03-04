@@ -169,8 +169,8 @@ main :: () {
 
 // @TODO: re-run poly and RT-WDF numbers...
 // M1
-// ./perf_estimator ../rc_lowpass/rc_lowpass.wdf wdf_compiler,14.94 chowdsp_wdf,22.09 rt-wdf,72.07 faust,19.04
-// ./perf_estimator ../preamp_eq/preamp_eq.wdf wdf_compiler,58.02 chowdsp_wdf,66.33 rt-wdf,346.18 faust,73.30
+// ./perf_estimator ../rc_lowpass/rc_lowpass.wdf wdf_compiler,4.42 chowdsp_wdf,22.09 rt-wdf,72.07 faust,19.04
+// ./perf_estimator ../preamp_eq/preamp_eq.wdf wdf_compiler,59.18 chowdsp_wdf,66.33 rt-wdf,346.18 faust,73.30
 // Zen4
-// ./perf_estimator ../rc_lowpass/rc_lowpass.wdf wdf_compiler,19.04 chowdsp_wdf,31.73 rt-wdf,99.85 faust,15.03
-// ./perf_estimator ../preamp_eq/preamp_eq.wdf wdf_compiler,70.58 chowdsp_wdf,95.77 rt-wdf,505.42 faust,80.29
+// ./perf_estimator ../rc_lowpass/rc_lowpass.wdf wdf_compiler,6.06 chowdsp_wdf,31.73 rt-wdf,99.85 faust,15.03
+// ./perf_estimator ../preamp_eq/preamp_eq.wdf wdf_compiler,63.35 chowdsp_wdf,95.77 rt-wdf,505.42 faust,80.29
