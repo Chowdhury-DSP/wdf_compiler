@@ -2,6 +2,7 @@
 CLI :: #import "Command_Line";
 File :: #import "File";
 Process :: #import "Process";
+#import "Print_Color";
 #load "wdf_parser.jai";
 #load "scratch.jai";
 #load "netlist_converter.jai";
@@ -65,12 +66,14 @@ main :: () {
     if !fread_success { exit (1); }
 
     if args.netlist {
-        verbose_print("Converting input from netlist...");
+        verbose_print("Converting input from netlist...\n");
         graph, sp_nodes := parse_netlist(file_str);
         root := reduce_to_sp_tree(*graph, *sp_nodes);
         root = reroot(sp_nodes);
         file_str = generate_wdf_string(sp_nodes, root);
-        verbose_print("WDF representation:\n%", file_str);
+        if (global_args.verbose) {
+            print_sp_graph(sp_nodes, root);
+        }
     }
 
     file_str = remove_comments(file_str);

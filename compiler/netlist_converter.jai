@@ -404,3 +404,35 @@ generate_wdf_string :: (nodes: []SP_Node, root: int) -> string {
 
     return builder_to_string(*builder);
 }
+
+print_sp_graph :: (nodes: []SP_Node, root: int) {
+    print_element :: (nodes: []SP_Node, index: int, depth := 0, last := false) {
+        node := nodes[index];
+        name := ifx node.kind == .LEAF then node.component_id else tprint("%", node.kind);
+
+        for i: 0..depth-1 {
+            if i == depth - 1 {
+                if last { print("└── "); }
+                else { print("├── "); }
+            } else {
+                if i == 0 { print("    "); }
+                else { print("│   "); }
+            }
+        }
+
+        color := Console_Color.WHITE;
+        if node.is_input color = .RED;
+        else if node.is_root color = .YELLOW;
+        else if node.output == .VOLTAGE color = .GREEN;
+        else if node.output == .CURRENT color = .MAGENTA;
+        print_color("%\n", name, color = color);
+
+        for child_idx : node.children {
+            if child_idx >= 0 {
+                print_element(nodes, child_idx, depth + 1,
+                              node.kind == .LEAF || it_index == node.children.count-1);
+            }
+        }
+    }
+    print_element(nodes, root);
+}
