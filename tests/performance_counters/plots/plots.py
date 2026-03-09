@@ -8,6 +8,12 @@ def plot(data, name, file):
     # Narrower figure width
     fig, ax = plt.subplots(figsize=(8, 6))
 
+    # Desired bar order
+    framework_order = ["RT-WDF", "wdmodels", "chowdsp_wdf", "wdf_compiler"]
+
+    # Reorder columns
+    pivot_df = pivot_df[framework_order]
+
     pivot_df.plot(kind="bar", ax=ax)
 
     ax.set_yscale("log", base=2)
