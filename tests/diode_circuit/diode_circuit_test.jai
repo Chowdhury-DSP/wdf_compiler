@@ -10,8 +10,6 @@ main :: () {
     fs : float32 : 48000.0;
 
     params := Params.{
-        C1_value = 1.0e-9,
-        Vin_res_value = 100.0,
         DP_params = .{
             Is = 1.0e-9,
         },

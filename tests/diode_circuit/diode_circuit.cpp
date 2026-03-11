@@ -39,8 +39,6 @@ int main()
     ref.prepare (fs);
 
     Params params {
-        .C1_value = 1.0e-9f,
-        .Vin_res_value = 100.0f,
         .DP_params = {
             .Is = 1.0e-9f,
             .Vt = 25.85e-3f,
@@ -58,7 +56,13 @@ int main()
     for (int i = 0; i < N; ++i)
     {
         input[i] = 10.0f * std::sin ((float) i * 0.1f);
+#if NETLIST
+        input[i] = -input[i];
+#endif
         const auto test_output = process (state, impedances, input[i]);
+#if NETLIST
+        input[i] = -input[i];
+#endif
         ref_output[i] = ref.process (input[i]);
         const auto error = std::abs (test_output - ref_output[i]);
         max_error = std::max (error, max_error);
@@ -71,10 +75,12 @@ int main()
         return 1;
     }
 
+#if ! NETLIST
     std::ofstream ofp { "data.bin", std::ios::out | std::ios::binary };
     ofp.write(reinterpret_cast<const char*>(input.data()), N * sizeof (float));
     ofp.write(reinterpret_cast<const char*>(ref_output.data()), N * sizeof (float));
     ofp.close();
+#endif
 
     return 0;
 }

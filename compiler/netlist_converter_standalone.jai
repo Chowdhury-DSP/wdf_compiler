@@ -13,7 +13,7 @@ main :: () {
     netlist_file_str, fread_success := File.read_entire_file(netlist_file);
     assert(fread_success, "Unable to open file!");
 
-    graph, sp_nodes := parse_netlist(netlist_file_str);
+    graph, sp_nodes, circuit_meta := parse_netlist(netlist_file_str);
     // print("%\n", graph);
     // print("%\n", sp_nodes);
 
@@ -26,7 +26,7 @@ main :: () {
     // print("%\n", sp_nodes);
     print_sp_graph(sp_nodes, root);
 
-    wdf_str := generate_wdf_string(sp_nodes, root);
+    wdf_str := generate_wdf_string(sp_nodes, root, circuit_meta);
     // print(wdf_str);
 
     out_file, success := File.file_open(wdf_file, true);
