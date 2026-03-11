@@ -11,6 +11,7 @@ Leaf_Kind :: enum {
     RESISTOR;
     CAPACITOR;
     INDUCTOR;
+    CUSTOM;
 }
 
 Node_Output_Type :: enum {
@@ -48,6 +49,16 @@ Graph :: struct {
 add_component :: (graph: *Graph, sp_nodes: *[..] SP_Node,
                   n1: int, n2: int, component_id: string,
                   value_str: string, meta: []string) {
+
+    get_custom_meta :: (meta: []string) -> string {
+        for m_str : meta {
+            if String.begins_with(m_str, "custom:") {
+                return String.slice(m_str, 7, m_str.count - 7);
+            }
+        }
+        return .{};
+    }
+
     leaf := SP_Node.{
         kind = .LEAF,
         component_id = component_id,
@@ -65,7 +76,9 @@ add_component :: (graph: *Graph, sp_nodes: *[..] SP_Node,
         case "c"; leaf.leaf = .CAPACITOR;
         case "L"; #through;
         case "l"; leaf.leaf = .INDUCTOR;
-        case; assert(false, tprint("Netlist Error: Unknown component type: %", component_id[0]));
+        case;
+            leaf.leaf = .CUSTOM;
+            leaf.value = get_custom_meta(meta);
     }
 
     for param : meta {
@@ -96,11 +109,12 @@ add_component :: (graph: *Graph, sp_nodes: *[..] SP_Node,
     array_add(*graph.adjacency[n2], edge_id);
 }
 
-parse_netlist :: (netlist_str: string) -> Graph, [..] SP_Node {
+parse_netlist :: (netlist_str: string) -> Graph, [..] SP_Node, [..] string {
     lines := String.split(netlist_str, "\n");
 
     graph: Graph;
     sp_nodes : [..] SP_Node;
+    circuit_meta : [..] string;
     array_reserve(*sp_nodes, lines.count * 2);
 
     node_names: [..] string;
@@ -118,6 +132,11 @@ parse_netlist :: (netlist_str: string) -> Graph, [..] SP_Node {
     for line : lines {
         line_trim := String.trim(line);
         if line_trim.count == 0 { continue; } // empty line
+
+        if String.begins_with(line_trim, ".meta") {
+            array_add(*circuit_meta, String.slice(line_trim, 6, line_trim.count - 6));
+        }
+
         if line_trim[0] == "*" || line_trim[0] == "." { continue; } // comment or heading line
 
         parts := String.split(line_trim, " ");
@@ -140,7 +159,7 @@ parse_netlist :: (netlist_str: string) -> Graph, [..] SP_Node {
         add_component(*graph, *sp_nodes, node1, node2, parts[0], value_str, meta);
     }
 
-    return graph, sp_nodes;
+    return graph, sp_nodes, circuit_meta;
 }
 
 find_series_node :: (graph: *Graph) -> int, [2] int
@@ -345,7 +364,7 @@ reroot :: (sp_nodes: []SP_Node) -> int
     return new_root;
 }
 
-generate_wdf_string :: (nodes: []SP_Node, root: int) -> string {
+generate_wdf_string :: (nodes: []SP_Node, root: int, meta: []string) -> string {
     builder: String_Builder;
     print_to_builder(*builder, "circuit:\n");
 
@@ -373,6 +392,8 @@ generate_wdf_string :: (nodes: []SP_Node, root: int) -> string {
             } else if node.leaf == .CURRENT_SOURCE {
                 if node.is_root type_name = "IIs";
                 else type_name = "RIs";
+            } else if node.leaf == .CUSTOM {
+                type_name = "Custom";
             }
         }
 
@@ -402,6 +423,11 @@ generate_wdf_string :: (nodes: []SP_Node, root: int) -> string {
         if node.output == .CURRENT print_to_builder(*builder, "I:%\n", node.component_id);
     }
 
+    print_to_builder(*builder, "\nmeta:\n");
+    for m_str : meta {
+        print_to_builder(*builder, "%\n", m_str);
+    }
+
     return builder_to_string(*builder);
 }
 
@@ -415,8 +441,7 @@ print_sp_graph :: (nodes: []SP_Node, root: int) {
                 if last { print("└── "); }
                 else { print("├── "); }
             } else {
-                if i == 0 { print("    "); }
-                else { print("│   "); }
+                print("    ");
             }
         }
 
