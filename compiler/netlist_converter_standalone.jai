@@ -17,12 +17,12 @@ main :: () {
     // print("%\n", graph);
     // print("%\n", spqr_nodes);
 
-    root := reduce_to_sp_tree(*graph, *spqr_nodes);
+    root := reduce_to_spqr_tree(*graph, *spqr_nodes);
     // print("%\n", graph);
     // print("%\n", spqr_nodes);
-    // print_sp_graph(spqr_nodes, root);
+    // print_spqr_graph(spqr_nodes, root);
 
-    root = reroot(spqr_nodes);
+    root = reroot(spqr_nodes, root);
     // print("%\n", spqr_nodes);
     print_spqr_graph(spqr_nodes, root);
 

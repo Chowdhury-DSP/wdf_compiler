@@ -15,9 +15,6 @@ Leaf_Kind :: enum {
     CUSTOM;
 }
 
-
-
-
 Node_Output_Type :: enum {
     NONE;
     VOLTAGE;
@@ -30,7 +27,7 @@ SPQR_Node :: struct {
 
     component_id: string; // for LEAF
     parent := -1;
-    children: [] int; // for SERIES/PARALLEL: indices into sp_nodes
+    children: [..] int; // for SERIES/PARALLEL: indices into spqr_nodes
     value: string;
     output: Node_Output_Type;
     is_input := false;
@@ -40,7 +37,7 @@ SPQR_Node :: struct {
 Edge :: struct {
     n1: int;
     n2: int;
-    sp_node: int;   // index into SP list
+    spqr_node: int;   // index into SP list
     active := true;
 }
 
@@ -50,7 +47,7 @@ Graph :: struct {
     adjacency: [..][..]int;
 }
 
-add_component :: (graph: *Graph, sp_nodes: *[..] SPQR_Node,
+add_component :: (graph: *Graph, spqr_nodes: *[..] SPQR_Node,
                   n1: int, n2: int, component_id: string,
                   value_str: string, meta: []string) {
 
@@ -94,20 +91,20 @@ add_component :: (graph: *Graph, sp_nodes: *[..] SPQR_Node,
         }
     }
 
-    leaf_id := sp_nodes.count;
-    array_add(sp_nodes, leaf);
+    leaf_id := spqr_nodes.count;
+    array_add(spqr_nodes, leaf);
 
     edge := Edge.{
         n1 = n1,
         n2 = n2,
-        sp_node = leaf_id,
+        spqr_node = leaf_id,
     };
 
     edge_id := graph.edges.count;
     array_add(*graph.edges, edge);
 
     if n1 >= graph.adjacency.count || n2 >= graph.adjacency.count {
-        array_resize(*graph.adjacency, max(n1, n2) + 1, initialize=false);
+            array_resize(*graph.adjacency, max(n1, n2) + 1, initialize=true);
     }
     array_add(*graph.adjacency[n1], edge_id);
     array_add(*graph.adjacency[n2], edge_id);
@@ -117,9 +114,9 @@ parse_netlist :: (netlist_str: string) -> Graph, [..] SPQR_Node, [..] string {
     lines := String.split(netlist_str, "\n");
 
     graph: Graph;
-    sp_nodes : [..] SPQR_Node;
+    spqr_nodes : [..] SPQR_Node;
     circuit_meta : [..] string;
-    array_reserve(*sp_nodes, lines.count * 2);
+    array_reserve(*spqr_nodes, lines.count * 2);
 
     node_names: [..] string;
     array_reserve(*node_names, lines.count * 2);
@@ -160,10 +157,10 @@ parse_netlist :: (netlist_str: string) -> Graph, [..] SPQR_Node, [..] string {
             }
         }
 
-        add_component(*graph, *sp_nodes, node1, node2, parts[0], value_str, meta);
+        add_component(*graph, *spqr_nodes, node1, node2, parts[0], value_str, meta);
     }
 
-    return graph, sp_nodes, circuit_meta;
+    return graph, spqr_nodes, circuit_meta;
 }
 
 find_series_node :: (graph: *Graph) -> int, [2] int
@@ -184,7 +181,7 @@ find_series_node :: (graph: *Graph) -> int, [2] int
     return -1, .[-1, -1];
 }
 
-contract_series :: (graph: *Graph, sp_nodes: *[..]SPQR_Node,
+contract_series :: (graph: *Graph, spqr_nodes: *[..]SPQR_Node,
                     node: int, active_edges: [2] int)
 {
     e1_id := active_edges[0];
@@ -200,22 +197,23 @@ contract_series :: (graph: *Graph, sp_nodes: *[..]SPQR_Node,
     new_node := SPQR_Node.{
         kind = .SERIES,
     };
-    array_resize(*new_node.children, 2);
-    new_node.children[0] = e1.sp_node;
-    new_node.children[1] = e2.sp_node;
+    array_add(*new_node.children, e1.spqr_node);
+    array_add(*new_node.children, e2.spqr_node);
 
-    new_sp_id := sp_nodes.count;
-    array_add(sp_nodes, new_node);
-    sp_nodes.*[e1.sp_node].parent = new_sp_id;
-    sp_nodes.*[e2.sp_node].parent = new_sp_id;
+    new_spqr_id := spqr_nodes.count;
+    array_add(spqr_nodes, new_node);
+    spqr_nodes.*[e1.spqr_node].parent = new_spqr_id;
+    spqr_nodes.*[e2.spqr_node].parent = new_spqr_id;
 
     // replace e1
     graph.edges[e1_id].n1 = other1;
     graph.edges[e1_id].n2 = other2;
-    graph.edges[e1_id].sp_node = new_sp_id;
+    graph.edges[e1_id].spqr_node = new_spqr_id;
 
     // deactivate e2
     graph.edges[e2_id].active = false;
+    array_unordered_remove_by_value(*graph.adjacency[node], e2_id);
+    // remove e2_id from adjacency[node]
 }
 
 find_parallel_pair :: (graph: *Graph) -> int, int
@@ -239,7 +237,7 @@ find_parallel_pair :: (graph: *Graph) -> int, int
     return -1, -1;
 }
 
-contract_parallel :: (graph: *Graph, sp_nodes: *[..]SPQR_Node,
+contract_parallel :: (graph: *Graph, spqr_nodes: *[..]SPQR_Node,
                       e1_id: int, e2_id: int)
 {
     e1 := graph.edges[e1_id];
@@ -248,34 +246,52 @@ contract_parallel :: (graph: *Graph, sp_nodes: *[..]SPQR_Node,
     new_node := SPQR_Node.{
         kind = .PARALLEL,
     };
-    array_resize(*new_node.children, 2);
-    new_node.children[0] = e1.sp_node;
-    new_node.children[1] = e2.sp_node;
+    array_add(*new_node.children, e1.spqr_node);
+    array_add(*new_node.children, e2.spqr_node);
 
-    new_sp_id := sp_nodes.count;
-    array_add(sp_nodes, new_node);
-    sp_nodes.*[e1.sp_node].parent = new_sp_id;
-    sp_nodes.*[e2.sp_node].parent = new_sp_id;
+    new_spqr_id := spqr_nodes.count;
+    array_add(spqr_nodes, new_node);
+    spqr_nodes.*[e1.spqr_node].parent = new_spqr_id;
+    spqr_nodes.*[e2.spqr_node].parent = new_spqr_id;
 
     // Replace e1 with new synthetic edge
-    graph.edges[e1_id].sp_node = new_sp_id;
+    graph.edges[e1_id].spqr_node = new_spqr_id;
 
     // deactivate e2
     graph.edges[e2_id].active = false;
 }
 
-reduce_to_sp_tree :: (graph: *Graph, sp_nodes: *[..]SPQR_Node) -> int
+build_rigid_component :: (graph: *Graph, spqr_nodes: *[..]SPQR_Node) -> int
+{
+    rigid := SPQR_Node.{
+        kind = .RIGID,
+    };
+
+    rigid_id := spqr_nodes.count;
+    array_add(spqr_nodes, rigid);
+
+    for edge : graph.edges {
+        if !edge.active continue;
+
+        array_add(*spqr_nodes.*[rigid_id].children, edge.spqr_node);
+        spqr_nodes.*[edge.spqr_node].parent = rigid_id;
+    }
+
+    return rigid_id;
+}
+
+reduce_to_spqr_tree :: (graph: *Graph, spqr_nodes: *[..]SPQR_Node) -> int
 {
     while true {
         e1, e2 := find_parallel_pair(graph);
         if e1 != -1 {
-            contract_parallel(graph, sp_nodes, e1, e2);
+            contract_parallel(graph, spqr_nodes, e1, e2);
             continue;
         }
 
         series_node, active_edges := find_series_node(graph);
         if series_node != -1 {
-            contract_series(graph, sp_nodes, series_node, active_edges);
+            contract_series(graph, spqr_nodes, series_node, active_edges);
             continue;
         }
 
@@ -294,76 +310,70 @@ reduce_to_sp_tree :: (graph: *Graph, sp_nodes: *[..]SPQR_Node) -> int
     }
 
     if count != 1 {
-        assert(false, "Netlist Error: Circuit graph is not series-parallel!");
+        // assert(false, "Netlist Error: Circuit graph is not series-parallel!");
+        return build_rigid_component(graph, spqr_nodes);
     }
 
-    junction_root_idx := graph.edges[remaining].sp_node;
-    junction_root := sp_nodes.*[graph.edges[remaining].sp_node];
+    junction_root_idx := graph.edges[remaining].spqr_node;
+    junction_root := spqr_nodes.*[graph.edges[remaining].spqr_node];
     element_root_idx := junction_root.children[1];
     first_child_idx := junction_root.children[0];
-    sp_nodes.*[element_root_idx].children = .[first_child_idx];
-    sp_nodes.*[element_root_idx].parent = -1;
-    sp_nodes.*[first_child_idx].parent = element_root_idx;
+    array_add(*spqr_nodes.*[element_root_idx].children, first_child_idx);
+    spqr_nodes.*[element_root_idx].parent = -1;
+    spqr_nodes.*[first_child_idx].parent = element_root_idx;
 
-    // @TODO: removing the junction node like this seems janky!
-    assert(junction_root_idx == sp_nodes.count - 1);
-    sp_nodes.count -= 1;
+    assert(junction_root_idx == spqr_nodes.count - 1);
+    spqr_nodes.count -= 1;
 
     return element_root_idx; // return "root" node index
 }
 
-reroot :: (sp_nodes: []SPQR_Node) -> int
+reroot :: (spqr_nodes: []SPQR_Node, old_root: int) -> int
 {
     new_root := -1;
-    for node : sp_nodes {
+    for node : spqr_nodes {
         if node.is_root { new_root = it_index; break; }
     }
-    // print("New root: %\n", new_root);
-    // print("New root: %\n", sp_nodes[new_root]);
 
-    find_path_to_root :: (sp_nodes: []SPQR_Node, start: int) -> [..]int {
+    if new_root < 0 {
+        spqr_nodes[old_root].is_root = true;
+        return old_root;
+    }
+
+    find_path_to_root :: (spqr_nodes: []SPQR_Node, start: int) -> [..] int {
         path: [..]int;
         current := start;
 
         while current != -1 {
             array_add(*path, current);
-            current = sp_nodes[current].parent;
+            current = spqr_nodes[current].parent;
         }
 
         return path;  // from leaf up to root
     }
 
-    path := find_path_to_root(sp_nodes, new_root);
+    path := find_path_to_root(spqr_nodes, new_root);
     // print("%\n", path);
 
     for i : 0..path.count-2 {
-        // print("%\n", sp_nodes);
-        // print_spqr_graph(sp_nodes, new_root);
+        // print("%\n", spqr_nodes);
+        // print_spqr_graph(spqr_nodes, new_root);
 
         child := path[i];
         parent := path[i+1];
         if parent == -1 break;
 
         // Remove child from parent's children
-        for *child_idx : sp_nodes[parent].children {
-            val := child_idx.*;
-            if val == child { child_idx.* = -1; }
-        }
+        array_unordered_remove_by_value(*spqr_nodes[parent].children, child, stop_after_first=true);
 
         // Add parent as child of current
-        for *child_idx : sp_nodes[child].children {
-            val := child_idx.*;
-            if val == -1 {
-                child_idx.* = parent;
-                break;
-            }
-        }
+        array_add(*spqr_nodes[child].children, parent);
 
         // Fix parent pointers
-        sp_nodes[parent].parent = child;
+        spqr_nodes[parent].parent = child;
         if i + 2 < path.count {
             grandparent := path[i+2];
-            sp_nodes[child].parent  = grandparent;
+            spqr_nodes[child].parent  = grandparent;
         }
     }
 
@@ -438,17 +448,19 @@ generate_wdf_string :: (nodes: []SPQR_Node, root: int, meta: []string) -> string
 }
 
 print_spqr_graph :: (nodes: []SPQR_Node, root: int) {
-    print_element :: (nodes: []SPQR_Node, index: int, depth := 0, last := false) {
+
+    print_element :: (nodes: []SPQR_Node, index: int, prefix: string, last: bool) {
         node := nodes[index];
         name := ifx node.kind == .LEAF then node.component_id else tprint("%", node.kind);
 
-        for i: 0..depth-1 {
-            if i == depth - 1 {
-                if last { print("└── "); }
-                else { print("├── "); }
-            } else {
-                print("    ");
-            }
+        // print prefix
+        print("%", prefix);
+
+        // print branch
+        if last {
+            print("└── ");
+        } else {
+            print("├── ");
         }
 
         color := Console_Color.WHITE;
@@ -456,14 +468,39 @@ print_spqr_graph :: (nodes: []SPQR_Node, root: int) {
         else if node.is_root color = .YELLOW;
         else if node.output == .VOLTAGE color = .GREEN;
         else if node.output == .CURRENT color = .MAGENTA;
-        print_color("%\n", name, color = color);
 
-        for child_idx : node.children {
-            if child_idx >= 0 {
-                print_element(nodes, child_idx, depth + 1,
-                              node.kind == .LEAF || it_index == node.children.count-1);
-            }
+        print_color("%\n", name, color=color);
+
+        // compute prefix for children
+        child_prefix := prefix;
+        if last {
+            child_prefix = tprint("%    ", prefix);
+        } else {
+            child_prefix = tprint("%│   ", prefix);
+        }
+
+        for i: 0..node.children.count-1 {
+            child := node.children[i];
+            if child < 0 continue;
+
+            child_last := i == node.children.count - 1;
+
+            print_element(nodes, child, child_prefix, child_last);
         }
     }
-    print_element(nodes, root);
+
+    // root printed without prefix
+    root_node := nodes[root];
+    name := ifx root_node.kind == .LEAF then root_node.component_id else tprint("%", root_node.kind);
+    color := Console_Color.WHITE;
+    if root_node.is_input color = .RED;
+    else if root_node.is_root color = .YELLOW;
+    print_color("%\n", name, color=color);
+
+    for i: 0..root_node.children.count-1 {
+        child := root_node.children[i];
+        if child < 0 continue;
+
+        print_element(nodes, child, "", i == root_node.children.count-1);
+    }
 }
