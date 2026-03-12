@@ -1,5 +1,5 @@
 * Bassman Tone Stack
-V1 P002 0 PULSE(0 1 1m 1u 1u 10m 20m 0) ; input root
+V1 P002 0 PULSE(0 1 1m 1u 1u 10m 20m 0) ; input
 R4 P002 P003 56k
 C1 P002 P006 0.25n ; output:v
 C2 P003 P004 20n

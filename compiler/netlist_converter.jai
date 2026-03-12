@@ -26,8 +26,19 @@ SPQR_Node :: struct {
     leaf: Leaf_Kind;
 
     component_id: string; // for LEAF
+
     parent := -1;
     children: [..] int; // for SERIES/PARALLEL: indices into spqr_nodes
+
+    // Only used if kind == RIGID
+    rigid_vertices: int;
+    rigid_edges: [..] struct {
+        child: int; // index into children
+        v1: int;
+        v2: int;
+        virtual: bool;
+    };
+
     value: string;
     output: Node_Output_Type;
     is_input := false;
@@ -39,6 +50,7 @@ Edge :: struct {
     n2: int;
     spqr_node: int;   // index into SP list
     active := true;
+    virtual := false; // true if edge represents a contracted subgraph
 }
 
 // Graph :: ;
@@ -209,11 +221,11 @@ contract_series :: (graph: *Graph, spqr_nodes: *[..]SPQR_Node,
     graph.edges[e1_id].n1 = other1;
     graph.edges[e1_id].n2 = other2;
     graph.edges[e1_id].spqr_node = new_spqr_id;
+    graph.edges[e1_id].virtual = true;
 
     // deactivate e2
     graph.edges[e2_id].active = false;
-    array_unordered_remove_by_value(*graph.adjacency[node], e2_id);
-    // remove e2_id from adjacency[node]
+    // array_unordered_remove_by_value(*graph.adjacency[node], e2_id); // @TODO: do I need this?
 }
 
 find_parallel_pair :: (graph: *Graph) -> int, int
@@ -256,6 +268,7 @@ contract_parallel :: (graph: *Graph, spqr_nodes: *[..]SPQR_Node,
 
     // Replace e1 with new synthetic edge
     graph.edges[e1_id].spqr_node = new_spqr_id;
+    graph.edges[e1_id].virtual = true;
 
     // deactivate e2
     graph.edges[e2_id].active = false;
@@ -270,12 +283,33 @@ build_rigid_component :: (graph: *Graph, spqr_nodes: *[..]SPQR_Node) -> int
     rigid_id := spqr_nodes.count;
     array_add(spqr_nodes, rigid);
 
+    vertex_map: [..] int;
+    get_vertex :: (node: int, map: *[..] int) -> int {
+        for v : map.* { if v == node return it_index; }
+        idx := map.count;
+        array_add(map, node);
+        return idx;
+    }
+
     for edge : graph.edges {
         if !edge.active continue;
 
+        child_idx := spqr_nodes.*[rigid_id].children.count;
         array_add(*spqr_nodes.*[rigid_id].children, edge.spqr_node);
         spqr_nodes.*[edge.spqr_node].parent = rigid_id;
+
+        v1 := get_vertex(edge.n1, *vertex_map);
+        v2 := get_vertex(edge.n2, *vertex_map);
+
+        array_add(*spqr_nodes.*[rigid_id].rigid_edges, .{
+            child = child_idx,
+            v1 = v1,
+            v2 = v2,
+            virtual = edge.virtual,
+        });
     }
+
+    spqr_nodes.*[rigid_id].rigid_vertices = vertex_map.count;
 
     return rigid_id;
 }
