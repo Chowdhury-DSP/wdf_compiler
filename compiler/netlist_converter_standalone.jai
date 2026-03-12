@@ -13,20 +13,20 @@ main :: () {
     netlist_file_str, fread_success := File.read_entire_file(netlist_file);
     assert(fread_success, "Unable to open file!");
 
-    graph, sp_nodes, circuit_meta := parse_netlist(netlist_file_str);
+    graph, spqr_nodes, circuit_meta := parse_netlist(netlist_file_str);
     // print("%\n", graph);
-    // print("%\n", sp_nodes);
+    // print("%\n", spqr_nodes);
 
-    root := reduce_to_sp_tree(*graph, *sp_nodes);
+    root := reduce_to_sp_tree(*graph, *spqr_nodes);
     // print("%\n", graph);
-    // print("%\n", sp_nodes);
-    // print_sp_graph(sp_nodes, root);
+    // print("%\n", spqr_nodes);
+    // print_sp_graph(spqr_nodes, root);
 
-    root = reroot(sp_nodes);
-    // print("%\n", sp_nodes);
-    print_sp_graph(sp_nodes, root);
+    root = reroot(spqr_nodes);
+    // print("%\n", spqr_nodes);
+    print_spqr_graph(spqr_nodes, root);
 
-    wdf_str := generate_wdf_string(sp_nodes, root, circuit_meta);
+    wdf_str := generate_wdf_string(spqr_nodes, root, circuit_meta);
     // print(wdf_str);
 
     if wdf_file.count > 0 {

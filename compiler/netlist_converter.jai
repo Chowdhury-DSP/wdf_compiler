@@ -2,6 +2,7 @@ Decomp_Kind :: enum {
     LEAF;
     SERIES;
     PARALLEL;
+    RIGID;
 }
 
 Leaf_Kind :: enum {
@@ -14,19 +15,22 @@ Leaf_Kind :: enum {
     CUSTOM;
 }
 
+
+
+
 Node_Output_Type :: enum {
     NONE;
     VOLTAGE;
     CURRENT;
 }
 
-SP_Node :: struct {
+SPQR_Node :: struct {
     kind: Decomp_Kind;
     leaf: Leaf_Kind;
 
     component_id: string; // for LEAF
     parent := -1;
-    children: [2]int = .[-1, -1];   // for SERIES/PARALLEL: indices into sp_nodes
+    children: [] int; // for SERIES/PARALLEL: indices into sp_nodes
     value: string;
     output: Node_Output_Type;
     is_input := false;
@@ -46,7 +50,7 @@ Graph :: struct {
     adjacency: [..][..]int;
 }
 
-add_component :: (graph: *Graph, sp_nodes: *[..] SP_Node,
+add_component :: (graph: *Graph, sp_nodes: *[..] SPQR_Node,
                   n1: int, n2: int, component_id: string,
                   value_str: string, meta: []string) {
 
@@ -59,7 +63,7 @@ add_component :: (graph: *Graph, sp_nodes: *[..] SP_Node,
         return .{};
     }
 
-    leaf := SP_Node.{
+    leaf := SPQR_Node.{
         kind = .LEAF,
         component_id = component_id,
         value = value_str,
@@ -109,11 +113,11 @@ add_component :: (graph: *Graph, sp_nodes: *[..] SP_Node,
     array_add(*graph.adjacency[n2], edge_id);
 }
 
-parse_netlist :: (netlist_str: string) -> Graph, [..] SP_Node, [..] string {
+parse_netlist :: (netlist_str: string) -> Graph, [..] SPQR_Node, [..] string {
     lines := String.split(netlist_str, "\n");
 
     graph: Graph;
-    sp_nodes : [..] SP_Node;
+    sp_nodes : [..] SPQR_Node;
     circuit_meta : [..] string;
     array_reserve(*sp_nodes, lines.count * 2);
 
@@ -180,7 +184,7 @@ find_series_node :: (graph: *Graph) -> int, [2] int
     return -1, .[-1, -1];
 }
 
-contract_series :: (graph: *Graph, sp_nodes: *[..]SP_Node,
+contract_series :: (graph: *Graph, sp_nodes: *[..]SPQR_Node,
                     node: int, active_edges: [2] int)
 {
     e1_id := active_edges[0];
@@ -193,10 +197,12 @@ contract_series :: (graph: *Graph, sp_nodes: *[..]SP_Node,
     other1 := ifx e1.n1 == node then e1.n2 else e1.n1;
     other2 := ifx e2.n1 == node then e2.n2 else e2.n1;
 
-    new_node := SP_Node.{
+    new_node := SPQR_Node.{
         kind = .SERIES,
-        children = .[e1.sp_node, e2.sp_node],
     };
+    array_resize(*new_node.children, 2);
+    new_node.children[0] = e1.sp_node;
+    new_node.children[1] = e2.sp_node;
 
     new_sp_id := sp_nodes.count;
     array_add(sp_nodes, new_node);
@@ -233,16 +239,18 @@ find_parallel_pair :: (graph: *Graph) -> int, int
     return -1, -1;
 }
 
-contract_parallel :: (graph: *Graph, sp_nodes: *[..]SP_Node,
+contract_parallel :: (graph: *Graph, sp_nodes: *[..]SPQR_Node,
                       e1_id: int, e2_id: int)
 {
     e1 := graph.edges[e1_id];
     e2 := graph.edges[e2_id];
 
-    new_node := SP_Node.{
+    new_node := SPQR_Node.{
         kind = .PARALLEL,
-        children = .[e1.sp_node, e2.sp_node],
     };
+    array_resize(*new_node.children, 2);
+    new_node.children[0] = e1.sp_node;
+    new_node.children[1] = e2.sp_node;
 
     new_sp_id := sp_nodes.count;
     array_add(sp_nodes, new_node);
@@ -256,7 +264,7 @@ contract_parallel :: (graph: *Graph, sp_nodes: *[..]SP_Node,
     graph.edges[e2_id].active = false;
 }
 
-reduce_to_sp_tree :: (graph: *Graph, sp_nodes: *[..]SP_Node) -> int
+reduce_to_sp_tree :: (graph: *Graph, sp_nodes: *[..]SPQR_Node) -> int
 {
     while true {
         e1, e2 := find_parallel_pair(graph);
@@ -293,7 +301,7 @@ reduce_to_sp_tree :: (graph: *Graph, sp_nodes: *[..]SP_Node) -> int
     junction_root := sp_nodes.*[graph.edges[remaining].sp_node];
     element_root_idx := junction_root.children[1];
     first_child_idx := junction_root.children[0];
-    sp_nodes.*[element_root_idx].children[0] = first_child_idx;
+    sp_nodes.*[element_root_idx].children = .[first_child_idx];
     sp_nodes.*[element_root_idx].parent = -1;
     sp_nodes.*[first_child_idx].parent = element_root_idx;
 
@@ -304,7 +312,7 @@ reduce_to_sp_tree :: (graph: *Graph, sp_nodes: *[..]SP_Node) -> int
     return element_root_idx; // return "root" node index
 }
 
-reroot :: (sp_nodes: []SP_Node) -> int
+reroot :: (sp_nodes: []SPQR_Node) -> int
 {
     new_root := -1;
     for node : sp_nodes {
@@ -313,7 +321,7 @@ reroot :: (sp_nodes: []SP_Node) -> int
     // print("New root: %\n", new_root);
     // print("New root: %\n", sp_nodes[new_root]);
 
-    find_path_to_root :: (sp_nodes: []SP_Node, start: int) -> [..]int {
+    find_path_to_root :: (sp_nodes: []SPQR_Node, start: int) -> [..]int {
         path: [..]int;
         current := start;
 
@@ -330,7 +338,7 @@ reroot :: (sp_nodes: []SP_Node) -> int
 
     for i : 0..path.count-2 {
         // print("%\n", sp_nodes);
-        // print_sp_graph(sp_nodes, new_root);
+        // print_spqr_graph(sp_nodes, new_root);
 
         child := path[i];
         parent := path[i+1];
@@ -339,8 +347,6 @@ reroot :: (sp_nodes: []SP_Node) -> int
         // Remove child from parent's children
         for *child_idx : sp_nodes[parent].children {
             val := child_idx.*;
-            // print("%\n", val);
-            // child_idx.* = sp_nodes[new_root].children[it_index];
             if val == child { child_idx.* = -1; }
         }
 
@@ -364,11 +370,11 @@ reroot :: (sp_nodes: []SP_Node) -> int
     return new_root;
 }
 
-generate_wdf_string :: (nodes: []SP_Node, root: int, meta: []string) -> string {
+generate_wdf_string :: (nodes: []SPQR_Node, root: int, meta: []string) -> string {
     builder: String_Builder;
     print_to_builder(*builder, "circuit:\n");
 
-    print_element :: (builder: *String_Builder, nodes: []SP_Node, index: int, depth := 0) {
+    print_element :: (builder: *String_Builder, nodes: []SPQR_Node, index: int, depth := 0) {
         node := nodes[index];
         type_name := "";
         elem_name := "";
@@ -431,8 +437,8 @@ generate_wdf_string :: (nodes: []SP_Node, root: int, meta: []string) -> string {
     return builder_to_string(*builder);
 }
 
-print_sp_graph :: (nodes: []SP_Node, root: int) {
-    print_element :: (nodes: []SP_Node, index: int, depth := 0, last := false) {
+print_spqr_graph :: (nodes: []SPQR_Node, root: int) {
+    print_element :: (nodes: []SPQR_Node, index: int, depth := 0, last := false) {
         node := nodes[index];
         name := ifx node.kind == .LEAF then node.component_id else tprint("%", node.kind);
 

@@ -68,12 +68,12 @@ main :: () {
     if args.netlist {
         verbose_print("Converting input from netlist...\n");
         graph, sp_nodes, circuit_meta := parse_netlist(file_str);
-        root := reduce_to_sp_tree(*graph, *sp_nodes);
-        root = reroot(sp_nodes);
-        file_str = generate_wdf_string(sp_nodes, root, circuit_meta);
+        root := reduce_to_spqr_tree(*graph, *spqr_nodes);
+        root = reroot(spqr_nodes);
+        file_str = generate_wdf_string(spqr_nodes, root, circuit_meta);
         // print(file_str);
         if (global_args.verbose) {
-            print_sp_graph(sp_nodes, root);
+            print_spqr_graph(spqr_nodes, root);
         }
     }
 
