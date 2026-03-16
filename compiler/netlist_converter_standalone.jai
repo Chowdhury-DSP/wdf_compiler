@@ -1,6 +1,7 @@
 #import "Basic";
 File :: #import "File";
 String :: #import "String";
+Math :: #import "Math";
 #import "Print_Color";
 #load "netlist_converter.jai";
 
@@ -25,6 +26,12 @@ main :: () {
     root = reroot(spqr_nodes, root);
     // print("%\n", spqr_nodes);
     print_spqr_graph(spqr_nodes, root);
+
+    r_node := find_rigid_node(spqr_nodes);
+    if r_node >= 0 {
+        rtype_netlist := generate_rtype_netlist_string(spqr_nodes, r_node);
+        print(rtype_netlist);
+    }
 
     wdf_str := generate_wdf_string(spqr_nodes, root, circuit_meta);
     // print(wdf_str);
