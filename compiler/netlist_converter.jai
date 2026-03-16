@@ -28,12 +28,12 @@ SPQR_Node :: struct {
     component_id: string; // for LEAF
 
     parent := -1;
-    children: [..] int; // for SERIES/PARALLEL: indices into spqr_nodes
+    children: [..] int; // for SERIES/PARALLEL/RIGID: indices into spqr_nodes
 
     // Only used if kind == RIGID
     rigid_vertices: int;
-    rigid_edges: [..] struct {
-        child: int; // index into children
+    rigid_edges: [..] struct { // same order as "children"
+        child: int; // index into spqr_nodes
         v1: int;
         v2: int;
         virtual: bool;
@@ -294,7 +294,6 @@ build_rigid_component :: (graph: *Graph, spqr_nodes: *[..]SPQR_Node) -> int
     for edge : graph.edges {
         if !edge.active continue;
 
-        child_idx := spqr_nodes.*[rigid_id].children.count;
         array_add(*spqr_nodes.*[rigid_id].children, edge.spqr_node);
         spqr_nodes.*[edge.spqr_node].parent = rigid_id;
 
@@ -302,7 +301,7 @@ build_rigid_component :: (graph: *Graph, spqr_nodes: *[..]SPQR_Node) -> int
         v2 := get_vertex(edge.n2, *vertex_map);
 
         array_add(*spqr_nodes.*[rigid_id].rigid_edges, .{
-            child = child_idx,
+            child = edge.spqr_node,
             v1 = v1,
             v2 = v2,
             virtual = edge.virtual,
@@ -409,9 +408,26 @@ reroot :: (spqr_nodes: []SPQR_Node, old_root: int) -> int
             grandparent := path[i+2];
             spqr_nodes[child].parent  = grandparent;
         }
+
+        // Fix rigid edges
+        if spqr_nodes[parent].kind == .RIGID {
+            for *edge : spqr_nodes[parent].rigid_edges {
+                if edge.child == child {
+                    edge.child = -1;
+                    break;
+                }
+            }
+        }
     }
 
     return new_root;
+}
+
+get_element_name :: (node: SPQR_Node, index: s64) -> string {
+    if node.kind == .SERIES { return tprint("S%", index); }
+    if node.kind == .PARALLEL { return tprint("P%", index); }
+    if node.kind == .RIGID { return tprint("R%", index); }
+    return node.component_id;
 }
 
 generate_wdf_string :: (nodes: []SPQR_Node, root: int, meta: []string) -> string {
@@ -421,15 +437,17 @@ generate_wdf_string :: (nodes: []SPQR_Node, root: int, meta: []string) -> string
     print_element :: (builder: *String_Builder, nodes: []SPQR_Node, index: int, depth := 0) {
         node := nodes[index];
         type_name := "";
-        elem_name := "";
+        elem_name := get_element_name(node, index);
         if node.kind == .SERIES {
             type_name = "Series";
-            elem_name = tprint("S%", index);
         } else if node.kind == .PARALLEL {
             type_name = "Parallel";
-            elem_name = tprint("P%", index);
+        } else if node.kind == .RIGID {
+            type_name = "Custom";
+            // @TODO: can we insert the custom element args here?
+            // node.value = tprint("%, prefix=rtype_, params=R_Params, vars=R_Vars, updater=update_vars, compute=root_compute", node.children.count);
+            // print("%\n", node);
         } else {
-            elem_name = node.component_id;
             if node.leaf == .RESISTOR {
                 type_name = "R";
             } else if node.leaf == .CAPACITOR {
@@ -446,8 +464,6 @@ generate_wdf_string :: (nodes: []SPQR_Node, root: int, meta: []string) -> string
                 type_name = "Custom";
             }
         }
-
-        name := ifx node.kind == .LEAF then node.component_id else tprint("%", node.kind);
 
         for i: 0..depth-1 {
             print_to_builder(builder, "    ");
@@ -537,4 +553,36 @@ print_spqr_graph :: (nodes: []SPQR_Node, root: int) {
 
         print_element(nodes, child, "", i == root_node.children.count-1);
     }
+}
+
+find_rigid_node :: (nodes: []SPQR_Node) -> s64 {
+    for node : nodes {
+        if node.kind == .RIGID { return it_index; }
+    }
+    return -1;
+}
+
+generate_rtype_netlist_string :: (nodes: []SPQR_Node, r_node_idx: s64) -> string {
+    builder: String_Builder;
+    print_to_builder(*builder, "* R-Type Netlist\n");
+    r_node := nodes[r_node_idx];
+    // print("%\n", r_node);
+
+    adapt_node := -1;
+    in_between_idx := r_node.rigid_vertices;
+    for edge : r_node.rigid_edges {
+        child_idx := edge.child;
+        if child_idx < 0 {
+            child_idx = r_node.parent;
+            adapt_node = it_index;
+        }
+        child_name := get_element_name(nodes[child_idx], child_idx);
+        print_to_builder(*builder, "V%1 %2 %3 %4\n", it_index + 1, edge.v1 + 1, in_between_idx + 1, child_name);
+        print_to_builder(*builder, "R%1 %2 %3\n", it_index + 1, edge.v2 + 1, in_between_idx + 1);
+        in_between_idx += 1;
+    }
+
+    print_to_builder(*builder, ".adapt = %\n", adapt_node);
+    print_to_builder(*builder, ".end\n");
+    return builder_to_string(*builder);
 }
