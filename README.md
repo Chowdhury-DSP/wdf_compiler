@@ -33,7 +33,7 @@ Let's say that you've written your circuit description in a file called `my_circ
 ```bash
 wdf_compiler my_circuit.wdf my_circuit.h
 ```
-By default, `wdf_compiler` will generate C++ code, using `float` as the base data type. `wdf_compiler` also supports generating code in JAI:
+By default, `wdf_compiler` will generate C++ code, using `float` as the base data type. `wdf_compiler` also supports generating code in C, JAI, and Rust:
 ```bash
 wdf_compiler -lang jai my_circuit.wdf my_circuit.jai
 ```
@@ -72,22 +72,21 @@ To run the `wdf_compiler` performance benchmarks, run:
 
 ## Performance Measurements
 
-The following tables show the output of the performance benchmarks for `wdf_compiler` version 1.0.0. Along with `wdf_compiler`, the benchmarks compare these other WDF libraries: [`chowdsp_wdf`](https://github.com/Chowdhury-DSP/chowdsp_wdf), [`wdmodels`](https://faustlibraries.grame.fr/libs/wdmodels/), and [`RT-WDF`](https://github.com/RT-WDF/rt-wdf_lib).
+The following tables show the output of the performance benchmarks for `wdf_compiler` version 1.1.0. Along with `wdf_compiler`, the benchmarks compare these other WDF libraries: [`chowdsp_wdf`](https://github.com/Chowdhury-DSP/chowdsp_wdf), [`wdmodels`](https://faustlibraries.grame.fr/libs/wdmodels/), and [`RT-WDF`](https://github.com/RT-WDF/rt-wdf_lib).
 
 **CPU: Apple M1**
-![](./tests/performance_counters/plots/chart_m1.png)
 
-| Circuit          | Framework          | ns/sample | ops/sample | cycles/sample | ops/cycle |
+| Circuit          | Framework          | ns/sample | instructions/sample | cycles/sample | instructions/cycle |
 |------------------|--------------------|-----------|------------|---------------|-----------|
 | RC Lowpass       | `RT-WDF`           | 22.54     | 251.02     | 72.07         | 3.48      |
 | RC Lowpass       | `wdmodels`         | 6.02      | 17.01      | 19.04         | 0.89      |
 | RC Lowpass       | `chowdsp_wdf`      | 6.97      | 18.01      | 22.09         | 0.82      |
-| RC Lowpass       | `wdf_compiler`     | 4.64      | 13.00      | **14.94**     | 0.87      |
+| RC Lowpass       | `wdf_compiler`     | 1.37      | 12.00      | **4.42**      | 2.71      |
 |                  |                    |           |            |               |           |
 | Pre-Amp EQ       | `RT-WDF`           | 107.66    | 1007.10    | 346.18        | 2.91      |
 | Pre-Amp EQ       | `wdmodels`         | 22.91     | 83.02      | 73.30         | 1.13      |
 | Pre-Amp EQ       | `chowdsp_wdf`      | 20.71     | 56.01      | 66.33         | 0.84      |
-| Pre-Amp EQ       | `wdf_compiler`     | 18.09     | 51.02      | **58.02**     | 0.88      |
+| Pre-Amp EQ       | `wdf_compiler`     | 18.42     | 66.02      | **59.18**     | 1.12      |
 |                  |                    |           |            |               |           |
 | Diode Clipper    | `wdmodels`         | 116.52    | 566.93     | 374.53        | 1.51      |
 | Diode Clipper    | `chowdsp_wdf`      | 41.05     | 102.04     | 131.78        | 0.77      |
@@ -96,23 +95,22 @@ The following tables show the output of the performance benchmarks for `wdf_comp
 | Baxandall EQ     | `RT-WDF`           | 183.01    | 2028.18    | 588.16        | 3.45      |
 | Baxandall EQ     | `wdmodels`         | 18.54     | 163.02     | 59.23         | 2.75      |
 | Baxandall EQ     | `chowdsp_wdf`      | 20.52     | 156.01     | 65.55         | 2.38      |
-| Baxandall EQ     | `wdf_compiler`     | 11.38     | 49.01      | **36.44**     | 1.34      |
+| Baxandall EQ     | `wdf_compiler`     | 11.35     | 55.01      | **36.56**     | 1.50      |
 
 
 **CPU: AMD Ryzen Zen 4**
-![](./tests/performance_counters/plots/chart_zen4.png)
 
-| Circuit          | Framework          | ns/sample | ops/sample | cycles/sample | ops/cycle |
+| Circuit          | Framework          | ns/sample | instructions/sample | cycles/sample | instructions/cycle |
 |------------------|--------------------|-----------|------------|---------------|-----------|
 | RC Lowpass       | `RT-WDF`           | 20.31     | 268.06     | 99.85         | 2.68      |
-| RC Lowpass       | `wdmodels`         | 2.98      | 14.51      | **15.03**     | 0.97      |
+| RC Lowpass       | `wdmodels`         | 2.98      | 14.51      | 15.03         | 0.97      |
 | RC Lowpass       | `chowdsp_wdf`      | 6.44      | 38.02      | 31.73         | 1.20      |
-| RC Lowpass       | `wdf_compiler`     | 3.83      | 16.01      | 19.04         | 0.84      |
+| RC Lowpass       | `wdf_compiler`     | 1.21      | 9.51       | **6.06**      | 1.57      |
 |                  |                    |           |            |               |           |
 | Pre-Amp EQ       | `RT-WDF`           | 99.98     | 1132.51    | 505.42        | 2.24      |
 | Pre-Amp EQ       | `wdmodels`         | 15.92     | 128.05     | 80.29         | 1.59      |
 | Pre-Amp EQ       | `chowdsp_wdf`      | 18.96     | 136.05     | 95.77         | 1.42      |
-| Pre-Amp EQ       | `wdf_compiler`     | 13.99     | 54.04      | **70.58**     | 0.77      |
+| Pre-Amp EQ       | `wdf_compiler`     | 12.77     | 83.03      | **63.35**     | 1.31      |
 |                  |                    |           |            |               |           |
 | Diode Clipper    | `wdmodels`         | 90.17     | 354.14     | 389.10        | 0.91      |
 | Diode Clipper    | `chowdsp_wdf`      | 28.31     | 126.24     | 141.86        | 0.89      |
@@ -121,7 +119,7 @@ The following tables show the output of the performance benchmarks for `wdf_comp
 | Baxandall EQ     | `RT-WDF`           | 160.94    | 2406.47    | 805.60        | 2.99      |
 | Baxandall EQ     | `wdmodels`         | 14.66     | 261.04     | 72.95         | 3.58      |
 | Baxandall EQ     | `chowdsp_wdf`      | 22.17     | 199.19     | 112.25        | 1.77      |
-| Baxandall EQ     | `wdf_compiler`     | 8.66      | 84.02      | **43.60**     | 1.93      |
+| Baxandall EQ     | `wdf_compiler`     | 8.58      | 95.02      | **43.62**     | 2.18      |
 
 
 ## In The Wild
