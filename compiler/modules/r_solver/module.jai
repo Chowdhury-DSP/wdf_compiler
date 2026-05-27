@@ -298,6 +298,9 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
     // ---------------------------------------------------------------
     array_resize(*result.S_matrix, n_ports * n_ports);
 
+    // Reuse this for adaptation instead of solving the adapt excitation twice.
+    adapt_xaa: Expr_ID = NO_EXPR;
+
     for k : 0..n_ports-1 {
         pc_k := port_base + k; // index of the port-k current unknown
 
@@ -311,6 +314,10 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
         }
 
         solutions := solve(equations, unknowns, exprs);
+
+        if k == topo.adapt_port {
+            adapt_xaa = solutions[port_base + k];
+        }
 
         // S[j,k] = delta(j,k)  +  2 * R_j * solutions[port_base + j]
         for j : 0..n_ports-1 {
@@ -409,17 +416,9 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
             return false, NO_EXPR;
         }
 
-        // Re-solve only the adapt-port excitation column to get x_aa.
-        pc_a := port_base + a;
-        equations_a: [..] Expr_ID;
-        for i : 0..dim-1 {
-            rhs := ifx i == pc_a then one else NO_EXPR;
-            eq  := combine(row_exprs[i], rhs, .SUB, exprs);
-            if eq == NO_EXPR  eq = expr_const(0, exprs);
-            array_add(*equations_a, eq);
-        }
-        solutions_a := solve(equations_a, unknowns, exprs);
-        x_aa := solutions_a[port_base + a];
+        // Reuse x_aa from the existing per-port solve loop above.
+        x_aa := adapt_xaa;
+        assert(x_aa != NO_EXPR);
 
         two := expr_const(2, exprs);
         adapt_eq_g: Expr_ID;
