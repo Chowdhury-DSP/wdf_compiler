@@ -1,8 +1,3 @@
-#import "Basic";
-String :: #import "String";
-Sort :: #import "Sort";
-#load "utils.jai";
-
 Token_Type :: enum {
     Ideal_Voltage_Source;
     Ideal_Current_Source;
@@ -464,3 +459,9 @@ get_value :: (val_str: string) -> float32 {
     }
     return val;
 }
+
+#scope_file
+#import "Basic";
+String :: #import "String";
+Sort :: #import "Sort";
+#import "utils";

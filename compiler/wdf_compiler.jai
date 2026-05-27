@@ -3,10 +3,12 @@ CLI :: #import "Command_Line";
 File :: #import "File";
 Math :: #import "Math";
 Process :: #import "Process";
-#import "Print_Color";
-#load "wdf_parser.jai";
-#load "scratch.jai";
-#load "netlist_converter.jai";
+String :: #import "String";
+Sort :: #import "Sort";
+#import "wdf_parser";
+#import "scratch";
+#import "utils";
+#import "netlist_converter";
 
 Args :: struct {
     verbose      : bool = false;     @"?Verbose"

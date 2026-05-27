@@ -3,7 +3,7 @@ File :: #import "File";
 String :: #import "String";
 Math :: #import "Math";
 #import "Print_Color";
-#load "netlist_converter.jai";
+#import "netlist_converter";
 
 main :: () {
     args := get_command_line_arguments();

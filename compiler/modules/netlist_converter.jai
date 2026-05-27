@@ -586,3 +586,8 @@ generate_rtype_netlist_string :: (nodes: []SPQR_Node, r_node_idx: s64) -> string
     print_to_builder(*builder, ".end\n");
     return builder_to_string(*builder);
 }
+
+#scope_file
+#import "Basic";
+String :: #import "String";
+#import "Print_Color";
