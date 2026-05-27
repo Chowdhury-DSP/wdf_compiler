@@ -351,6 +351,11 @@ fold :: (e: Expr_ID, exprs: *[..] Expr) {
             if expr.kind == .SUB {
                 if right.kind == .CONST && right.value == 0 { exprs.*[e] = left;  return; } // x - 0 → x
                 if left.kind  == .CONST && left.value  == 0 { exprs.*[e] = .{ kind = .NEG, left = expr.right }; return; } // 0 - x → -x
+                // a - a → 0 : cancel identical sub-expressions
+                if exprs_equal(expr.left, expr.right, exprs.*) {
+                    exprs.*[e] = .{ kind = .CONST, value = 0 };
+                    return;
+                }
                 // a - (-b) → a + b : eliminate double sign
                 if right.kind == .NEG {
                     exprs.*[e] = .{ kind = .ADD, left = expr.left, right = right.left };

@@ -562,6 +562,27 @@ find_rigid_node :: (nodes: []SPQR_Node) -> s64 {
     return -1;
 }
 
+// Converts the SPQR rigid node at r_node_idx into an R_Type_Topology.
+// The adapt port is the edge whose child == -1 (the connection to the
+// SPQR parent). VCVS entries are left empty; they must be filled in
+// separately when the circuit contains controlled sources.
+rtype_topology_from_spqr :: (nodes: []SPQR_Node, r_node_idx: s64) -> R_Type_Topology {
+    r_node := nodes[r_node_idx];
+    topo: R_Type_Topology;
+    topo.n_verts = r_node.rigid_vertices;
+
+    for edge : r_node.rigid_edges {
+        child_idx := edge.child;
+        if child_idx < 0 {
+            child_idx       = r_node.parent;
+            topo.adapt_port = it_index;
+        }
+        name := get_element_name(nodes[child_idx], child_idx);
+        array_add(*topo.ports, .{ v1 = edge.v1, v2 = edge.v2, impedance_name = name });
+    }
+    return topo;
+}
+
 generate_rtype_netlist_string :: (nodes: []SPQR_Node, r_node_idx: s64) -> string {
     builder: String_Builder;
     print_to_builder(*builder, "* R-Type Netlist\n");
@@ -591,3 +612,4 @@ generate_rtype_netlist_string :: (nodes: []SPQR_Node, r_node_idx: s64) -> string
 #import "Basic";
 String :: #import "String";
 #import "Print_Color";
+#import "r_solver";

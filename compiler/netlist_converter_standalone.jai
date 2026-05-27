@@ -4,9 +4,14 @@ String :: #import "String";
 Math :: #import "Math";
 #import "Print_Color";
 #import "netlist_converter";
+#import "r_solver";
+#import "sym_algebra";
 
 main :: () {
+
     args := get_command_line_arguments();
+    if args.count < 2  return;
+
     netlist_file := args[1];
     wdf_file := ifx args.count >= 3 then args[2] else "";
     print("Converting netlist file % to %\n\n", netlist_file, wdf_file);
@@ -29,8 +34,17 @@ main :: () {
 
     r_node := find_rigid_node(spqr_nodes);
     if r_node >= 0 {
+        // Print the raw MNA netlist for debugging.
         rtype_netlist := generate_rtype_netlist_string(spqr_nodes, r_node);
         print(rtype_netlist);
+
+        // Symbolically solve the scattering matrix.
+        // @TODO: pass the result into the code generator once wdf_compiler
+        //        is updated to consume R_Solver_Result for RIGID nodes.
+        topo   := rtype_topology_from_spqr(spqr_nodes, r_node);
+        result := solve_rtype_scattering(topo);
+        print("R-type adaptor: % ports, adapt port = %\n",
+              result.n_ports, result.adapt_port);
     }
 
     wdf_str := generate_wdf_string(spqr_nodes, root, circuit_meta);

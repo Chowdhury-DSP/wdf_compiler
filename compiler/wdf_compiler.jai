@@ -73,6 +73,13 @@ main :: () {
         graph, spqr_nodes, circuit_meta := parse_netlist(file_str);
         root := reduce_to_spqr_tree(*graph, *spqr_nodes);
         root = reroot(spqr_nodes, root);
+
+        // @TODO (r_solver hook-in): for each RIGID node, call
+        //   solve_rtype_scattering(spqr_nodes, r_node_idx)
+        // and store the resulting R_Solver_Result alongside the node so that
+        // generate_custom_process_root can emit the S-matrix update code and
+        // the impedance-updater for the adapted port.
+
         file_str = generate_wdf_string(spqr_nodes, root, circuit_meta);
         // print(file_str);
         if (global_args.verbose) {
