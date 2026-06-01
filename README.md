@@ -2,6 +2,9 @@
 
 WDF Compiler is a code generation system for developing circuit simulations using Wave Digital Filters (WDFs).
 
+### Demo Video
+[![Watch the demo](https://img.youtube.com/vi/MWx9BN7b8Oo/hqdefault.jpg)](https://www.youtube.com/watch?v=MWx9BN7b8Oo)
+
 ## Usage
 
 WDF Compiler is intended to be used as follows:
