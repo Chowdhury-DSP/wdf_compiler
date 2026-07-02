@@ -23,6 +23,7 @@ netlist_converter_standalone
 xsimd/
 armadillo/
 rt-wdf/
+scratch/
 
 demo/
 notes/*.pdf

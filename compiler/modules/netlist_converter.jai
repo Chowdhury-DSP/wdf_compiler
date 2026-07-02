@@ -38,6 +38,10 @@ SPQR_Node :: struct {
         v2: int;
         virtual: bool;
     };
+    // rigid_vertex_global[local_idx] = global node_names index.
+    // Lets code outside build_rigid_component (e.g. op-amp wiring) translate
+    // global node indices into this rigid component's local vertex numbering.
+    rigid_vertex_global: [..] int;
 
     value: string;
     output: Node_Output_Type;
@@ -53,15 +57,36 @@ Edge :: struct {
     virtual := false; // true if edge represents a contracted subgraph
 }
 
-// Graph :: ;
 Graph :: struct {
     edges: [..] Edge;
     adjacency: [..][..]int;
+    // pinned[node] == true means the node must survive series contraction
+    // even if it has exactly two active edges. Used for nodes that op-amps
+    // reference but that never become graph edges themselves.
+    pinned: [..] bool;
+}
+
+Op_Amp :: struct {
+    component_id: string;
+    n_pos: int;
+    n_neg: int;
+    n_out: int;
+    n_gnd: int;
+}
+
+get_node_idx :: (node_names: *[..]string, name: string) -> int {
+    found, idx := array_find(node_names.*, name);
+    if found return idx;
+
+    idx = node_names.count;
+    array_add(node_names, name);
+    return idx;
 }
 
 add_component :: (graph: *Graph, spqr_nodes: *[..] SPQR_Node,
-                  n1: int, n2: int, component_id: string,
-                  value_str: string, meta: []string) {
+                  op_amps: *[..] Op_Amp, node_names: *[..]string,
+                  n1: int, n2: int, value_str: string,
+                  meta: []string, parts: []string) {
 
     get_custom_meta :: (meta: []string) -> string {
         for m_str : meta {
@@ -72,6 +97,7 @@ add_component :: (graph: *Graph, spqr_nodes: *[..] SPQR_Node,
         return .{};
     }
 
+    component_id := parts[0];
     leaf := SPQR_Node.{
         kind = .LEAF,
         component_id = component_id,
@@ -89,6 +115,17 @@ add_component :: (graph: *Graph, spqr_nodes: *[..] SPQR_Node,
         case "c"; leaf.leaf = .CAPACITOR;
         case "L"; #through;
         case "l"; leaf.leaf = .INDUCTOR;
+        case "E"; #through;
+        case "e";
+            op_amp := Op_Amp.{
+                component_id = component_id,
+                n_pos = get_node_idx(node_names, parts[3]),
+                n_neg = get_node_idx(node_names, parts[4]),
+                n_out = get_node_idx(node_names, parts[1]),
+                n_gnd = get_node_idx(node_names, parts[2]),
+            };
+            array_add(op_amps, op_amp);
+            return;
         case;
             leaf.leaf = .CUSTOM;
             leaf.value = get_custom_meta(meta);
@@ -122,25 +159,17 @@ add_component :: (graph: *Graph, spqr_nodes: *[..] SPQR_Node,
     array_add(*graph.adjacency[n2], edge_id);
 }
 
-parse_netlist :: (netlist_str: string) -> Graph, [..] SPQR_Node, [..] string {
+parse_netlist :: (netlist_str: string) -> Graph, [..] SPQR_Node, [..] Op_Amp, [..] string {
     lines := String.split(netlist_str, "\n");
 
     graph: Graph;
     spqr_nodes : [..] SPQR_Node;
+    op_amps : [..] Op_Amp;
     circuit_meta : [..] string;
     array_reserve(*spqr_nodes, lines.count * 2);
 
     node_names: [..] string;
     array_reserve(*node_names, lines.count * 2);
-
-    get_node_idx :: (node_names: *[..]string, name: string) -> int {
-        found, idx := array_find(node_names.*, name);
-        if found return idx;
-
-        idx = node_names.count;
-        array_add(node_names, name);
-        return idx;
-    }
 
     for line : lines {
         line_trim := String.trim(line);
@@ -169,15 +198,27 @@ parse_netlist :: (netlist_str: string) -> Graph, [..] SPQR_Node, [..] string {
             }
         }
 
-        add_component(*graph, *spqr_nodes, node1, node2, parts[0], value_str, meta);
+        add_component(*graph, *spqr_nodes, *op_amps, *node_names, node1, node2, value_str, meta, parts);
     }
 
-    return graph, spqr_nodes, circuit_meta;
+    if op_amps.count > 0 {
+        array_resize(*graph.pinned, node_names.count, initialize=true);
+        for op_amp : op_amps {
+            graph.pinned[op_amp.n_pos] = true;
+            graph.pinned[op_amp.n_neg] = true;
+            graph.pinned[op_amp.n_out] = true;
+            graph.pinned[op_amp.n_gnd] = true;
+        }
+    }
+
+    return graph, spqr_nodes, op_amps, circuit_meta;
 }
 
 find_series_node :: (graph: *Graph) -> int, [2] int
 {
     for adjacency: graph.adjacency {
+        if it_index < graph.pinned.count && graph.pinned[it_index] continue;
+
         active_edges: [2]int;
         active_edges_count := 0;
         for e_id: adjacency {
@@ -223,9 +264,18 @@ contract_series :: (graph: *Graph, spqr_nodes: *[..]SPQR_Node,
     graph.edges[e1_id].spqr_node = new_spqr_id;
     graph.edges[e1_id].virtual = true;
 
+    // e1 now touches `other2` instead of `node`. Keep adjacency in sync,
+    // otherwise later degree checks (find_series_node/find_parallel_pair)
+    // undercount other2's true degree by one -- silently missing this edge
+    // can let a node that still has 3 real connections get contracted away
+    // as if it only had 2, which later shows up as a node "isolated inside
+    // the RIGID subgraph" for the R-type solver (see PLAN.md issue #1).
+    array_unordered_remove_by_value(*graph.adjacency[node], e1_id, stop_after_first=true);
+    array_add(*graph.adjacency[other2], e1_id);
+
     // deactivate e2
     graph.edges[e2_id].active = false;
-    // array_unordered_remove_by_value(*graph.adjacency[node], e2_id); // @TODO: do I need this?
+    array_unordered_remove_by_value(*graph.adjacency[node], e2_id, stop_after_first=true);
 }
 
 find_parallel_pair :: (graph: *Graph) -> int, int
@@ -309,6 +359,7 @@ build_rigid_component :: (graph: *Graph, spqr_nodes: *[..]SPQR_Node) -> int
     }
 
     spqr_nodes.*[rigid_id].rigid_vertices = vertex_map.count;
+    spqr_nodes.*[rigid_id].rigid_vertex_global = vertex_map;
 
     return rigid_id;
 }
@@ -562,11 +613,22 @@ find_rigid_node :: (nodes: []SPQR_Node) -> s64 {
     return -1;
 }
 
+// Translates a global node_names index into this rigid component's local
+// vertex numbering (as assigned by build_rigid_component). Op-amp nodes are
+// recorded in global node space since op-amps never become graph edges and
+// so never go through the SPQR reduction that assigns local indices.
+global_to_rigid_vertex :: (r_node: SPQR_Node, global_idx: int) -> int {
+    for v : r_node.rigid_vertex_global {
+        if v == global_idx return it_index;
+    }
+    return -1;
+}
+
 // Converts the SPQR rigid node at r_node_idx into an R_Type_Topology.
 // The adapt port is the edge whose child == -1 (the connection to the
 // SPQR parent). VCVS entries are left empty; they must be filled in
 // separately when the circuit contains controlled sources.
-rtype_topology_from_spqr :: (nodes: []SPQR_Node, r_node_idx: s64) -> R_Type_Topology {
+rtype_topology_from_spqr :: (nodes: []SPQR_Node, op_amps: []Op_Amp, r_node_idx: s64) -> R_Type_Topology {
     r_node := nodes[r_node_idx];
     topo: R_Type_Topology;
     topo.n_verts = r_node.rigid_vertices;
@@ -580,10 +642,40 @@ rtype_topology_from_spqr :: (nodes: []SPQR_Node, r_node_idx: s64) -> R_Type_Topo
         name := get_element_name(nodes[child_idx], child_idx);
         array_add(*topo.ports, .{ v1 = edge.v1, v2 = edge.v2, impedance_name = name });
     }
+
+    for op_amp : op_amps {
+        n_pos := global_to_rigid_vertex(r_node, op_amp.n_pos);
+        n_neg := global_to_rigid_vertex(r_node, op_amp.n_neg);
+        n_out := global_to_rigid_vertex(r_node, op_amp.n_out);
+        n_gnd := global_to_rigid_vertex(r_node, op_amp.n_gnd);
+        assert(n_pos >= 0 && n_neg >= 0 && n_out >= 0 && n_gnd >= 0,
+               tprint("Op-amp % references a node outside the rigid component", op_amp.component_id));
+
+        // r_solver's R_VCVS names are swapped from what they sound like:
+        // its "out_n1/out_n2" pair takes the admittance (1/Ri) stamp and the
+        // constraint row's Ag coefficient lands on "ctrl_n1/ctrl_n2" -- i.e.
+        // "ctrl" is the terminal pair that actually carries the branch
+        // current and follows Ag*V_ctrl, which is the op-amp's real output.
+        // So the real output pins go into ctrl_n1/ctrl_n2 and the real
+        // (high-impedance) input pins go into out_n1/out_n2. This also
+        // matches R_VCVS's own doc comment, which only allows ctrl_n2 (not
+        // out_n2) to be grounded -- exactly where n_gnd (the op-amp's output
+        // return) lands here.
+        array_add(*topo.vcvs,
+                  .{ out_n1 = n_pos,
+                     out_n2 = n_neg,
+                     ctrl_n1 = n_out,
+                     ctrl_n2 = n_gnd,
+                     gain_name = "Ag",
+                     ri_name = "Ri",
+                     ro_name = "Ro",
+                   });
+    }
+
     return topo;
 }
 
-generate_rtype_netlist_string :: (nodes: []SPQR_Node, r_node_idx: s64) -> string {
+generate_rtype_netlist_string :: (nodes: []SPQR_Node, op_amps: []Op_Amp, r_node_idx: s64) -> string {
     builder: String_Builder;
     print_to_builder(*builder, "* R-Type Netlist\n");
     r_node := nodes[r_node_idx];
@@ -601,6 +693,23 @@ generate_rtype_netlist_string :: (nodes: []SPQR_Node, r_node_idx: s64) -> string
         print_to_builder(*builder, "V%1 %2 %3 %4\n", it_index + 1, edge.v1 + 1, in_between_idx + 1, child_name);
         print_to_builder(*builder, "R%1 %2 %3\n", it_index + 1, edge.v2 + 1, in_between_idx + 1);
         in_between_idx += 1;
+    }
+
+    for op_amp : op_amps {
+        n_pos := global_to_rigid_vertex(r_node, op_amp.n_pos);
+        n_neg := global_to_rigid_vertex(r_node, op_amp.n_neg);
+        n_out := global_to_rigid_vertex(r_node, op_amp.n_out);
+        n_gnd := global_to_rigid_vertex(r_node, op_amp.n_gnd);
+        assert(n_pos >= 0 && n_neg >= 0 && n_out >= 0 && n_gnd >= 0,
+               tprint("Op-amp % references a node outside the rigid component", op_amp.component_id));
+
+        print_to_builder(*builder,
+                         "%1 %2 %3 %4 %5 Ag\n",
+                         op_amp.component_id,
+                         n_neg + 1,
+                         n_pos + 1,
+                         n_out + 1,
+                         n_gnd + 1);
     }
 
     print_to_builder(*builder, ".adapt = %\n", adapt_node);

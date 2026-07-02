@@ -71,7 +71,7 @@ main :: () {
 
     if args.netlist {
         verbose_print("Converting input from netlist...\n");
-        graph, spqr_nodes, circuit_meta := parse_netlist(file_str);
+        graph, spqr_nodes, op_amps, circuit_meta := parse_netlist(file_str);
         root := reduce_to_spqr_tree(*graph, *spqr_nodes);
         root = reroot(spqr_nodes, root);
         if (global_args.verbose) {
@@ -103,7 +103,7 @@ main :: () {
             if node.kind != .RIGID  continue;
             rigid_idx := it_index;  // capture before any nested loops shadow it_index
 
-            topo   := rtype_topology_from_spqr(spqr_nodes, rigid_idx);
+            topo   := rtype_topology_from_spqr(spqr_nodes, op_amps, rigid_idx);
             result := solve_rtype_scattering(topo);
             rigid_solve_count += 1;
 
@@ -172,7 +172,7 @@ main :: () {
     for *output : outputs { output.* = String.trim(output.*); }
 
     meta_info := parse_meta_info(sections.meta);
-    circuit_tokens := parse_circuit(sections.circuit);
+    circuit_tokens := parse_circuit(sections.circuit, args.lang);
 
     if ! args.no_reduce {
         circuit_tokens = reduce_circuit(circuit_tokens, inputs, outputs);

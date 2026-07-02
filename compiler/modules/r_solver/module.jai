@@ -57,10 +57,10 @@
 // One WDF port in the R-type adaptor MNA circuit.
 //   V_k : from v1 to mid_k  (mid_k node index = n_verts + k)
 //   R_k : from v2 to mid_k  (resistance symbol = impedance_name)
-// Node 0 is the datum; v1 may be 0 (voltage source drives from ground).
+// Node 0 is the datum; either v1 or v2 may be 0 (grounded on that side).
 R_Port :: struct {
     v1:             int;    // source-side vertex (0-indexed; 0 = datum/ground)
-    v2:             int;    // load-side vertex   (0-indexed; always non-datum)
+    v2:             int;    // load-side vertex   (0-indexed; 0 = datum/ground)
     impedance_name: string; // symbol name for the port wave impedance
 }
 
@@ -213,7 +213,7 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
 
     for k : 0..n_ports-1 {
         port  := topo.ports[k];
-        v2c_r := port.v2 - 1;   // v2 is always non-datum
+        v2c_r := port.v2 - 1;   // -1 when v2 = datum (node 0)
         v1c_r := port.v1 - 1;   // -1 when v1 = datum (node 0)
 
         G_k: Expr_ID;
@@ -226,12 +226,14 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
         neg_Gk := expr_neg(G_k, exprs);
 
         // Conductance G_k between v1 and v2.
-        // If v1 = datum the port is grounded at v1, so only the v2 diagonal entry.
-        xadd(*X_r, v2c_r, v2c_r, dim_r, G_k, exprs);
+        // Either side may be the datum (grounded); skip terms that touch it.
+        if v2c_r >= 0  xadd(*X_r, v2c_r, v2c_r, dim_r, G_k, exprs);
         if v1c_r >= 0 {
-            xadd(*X_r, v1c_r, v1c_r, dim_r, G_k,    exprs);
-            xadd(*X_r, v2c_r, v1c_r, dim_r, neg_Gk, exprs);
-            xadd(*X_r, v1c_r, v2c_r, dim_r, neg_Gk, exprs);
+            xadd(*X_r, v1c_r, v1c_r, dim_r, G_k, exprs);
+            if v2c_r >= 0 {
+                xadd(*X_r, v2c_r, v1c_r, dim_r, neg_Gk, exprs);
+                xadd(*X_r, v1c_r, v2c_r, dim_r, neg_Gk, exprs);
+            }
         }
     }
 
@@ -241,6 +243,7 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
         vcvs  := topo.vcvs[j];
         exc_r := extra_base_r + j;
 
+        print("Adding VCVS % % %\n", vcvs.ri_name, vcvs.ro_name, vcvs.gain_name);
         Ri_sym := expr_symbol(vcvs.ri_name,   exprs);
         Ro_sym := expr_symbol(vcvs.ro_name,   exprs);
         Ag_sym := expr_symbol(vcvs.gain_name, exprs);
@@ -321,7 +324,7 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
         // Build RHS b_k (dim_r entries, structural zeros = NO_EXPR).
         b_k: [..] Expr_ID;
         for i : 0..dim_r-1  array_add(*b_k, NO_EXPR);
-        b_k[v2c_k] = expr_neg(G_k, exprs);
+        if v2c_k >= 0  b_k[v2c_k] = expr_neg(G_k, exprs);
         if v1c_k >= 0  b_k[v1c_k] = G_k;
 
         for j : 0..n_ports-1 {
@@ -329,8 +332,11 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
             v2c_j  := port_j.v2 - 1;
             v1c_j  := port_j.v1 - 1;
 
-            // Cramer numerator for v2_j.
-            det_v2j := det_cramer(X_r, dim_r, b_k, v2c_j, all_mask_r, det_Xr_cache, exprs);
+            // Cramer numerator for v2_j (skip if v2_j = datum).
+            det_v2j: Expr_ID = NO_EXPR;
+            if v2c_j >= 0 {
+                det_v2j = det_cramer(X_r, dim_r, b_k, v2c_j, all_mask_r, det_Xr_cache, exprs);
+            }
 
             // Cramer numerator for v1_j (skip if v1_j = datum or same node as v2_j).
             det_v1j: Expr_ID = NO_EXPR;
@@ -340,17 +346,19 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
 
             // Save raw dets for the adapt step.
             if k == topo.adapt_port && j == k {
-                adapt_det_v2 = det_v2j;
+                adapt_det_v2 = det_v2j;  // NO_EXPR when v2_a = datum
                 adapt_det_v1 = det_v1j;  // NO_EXPR when v1_a = datum
             }
 
-            // x[v2c_j] = det_v2j / det_Xr.
-            x_v2j: Expr_ID;
-            if exprs.*[det_v2j].kind == .CONST && exprs.*[det_v2j].value == 0 {
-                x_v2j = det_v2j;
-            } else {
-                x_v2j = expr_div(det_v2j, det_Xr, exprs);
-                fold(x_v2j, exprs);
+            // x[v2c_j] = det_v2j / det_Xr  (or NO_EXPR = 0 if v2_j = datum).
+            x_v2j: Expr_ID = NO_EXPR;
+            if det_v2j != NO_EXPR {
+                if exprs.*[det_v2j].kind == .CONST && exprs.*[det_v2j].value == 0 {
+                    x_v2j = det_v2j;
+                } else {
+                    x_v2j = expr_div(det_v2j, det_Xr, exprs);
+                    fold(x_v2j, exprs);
+                }
             }
 
             // x[v1c_j] = det_v1j / det_Xr  (or NO_EXPR = 0 if v1_j = datum).
@@ -364,7 +372,7 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
                 }
             }
 
-            // v_diff = v_v1_j - v_v2_j  (= -x_v2j when v1_j = datum).
+            // v_diff = v_v1_j - v_v2_j  (treats a datum-side term as 0).
             // x_v2j is always defined (v2_j is never datum), so v_diff != NO_EXPR.
             v_diff := combine(x_v1j, x_v2j, .SUB, exprs);
 
@@ -395,9 +403,11 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
         Ga      := expr_symbol(ga_name, exprs);
         two     := expr_const(2, exprs);
 
-        assert(adapt_det_v2 != NO_EXPR);
+        // v1_a and v2_a are distinct nodes, so at most one of them is the datum.
+        assert(adapt_det_v1 != NO_EXPR || adapt_det_v2 != NO_EXPR);
 
-        // Numerator of v_diff_aa: (det_v1 - det_v2), or -det_v2 if v1_a = datum.
+        // Numerator of v_diff_aa: (det_v1 - det_v2), or -det_v2 if v1_a = datum,
+        // or det_v1 if v2_a = datum.
         adapt_num := combine(adapt_det_v1, adapt_det_v2, .SUB, exprs);
 
         // Cleared adaptation equation: 2*adapt_num - det_Xr = 0.
@@ -429,6 +439,7 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
         result.adapt_impedance = simplify(expr_div(one, adapt_g, exprs), exprs);
 
         // Substitute the solved G_a back into all S entries.
+        print("Subsistuting %\n", ga_name);
         substitute_symbol_name(ga_name, adapt_g, exprs);
         for i : 0..n_ports*n_ports-1 {
             e := result.S_matrix[i];
@@ -496,6 +507,30 @@ generate_rtype_header :: (
         array_add(*gen_var_ids, result.adapt_impedance);
     }
 
+    // Find symbols referenced by the generated expressions that are *not*
+    // one of the WDF child ports (e.g. a VCVS's Ri/Ro/Ag). These have no
+    // other source of a value, so they need to become user-configurable
+    // R_Params fields. Collected before CSE, since cse() may rewrite
+    // gen_var_ids in place to reference extracted temporaries.
+    collect_symbols :: (id: Expr_ID, exprs: []Expr, out: *[..]string) {
+        if id == NO_EXPR return;
+        node := exprs[id];
+        if node.kind == .SYMBOL {
+            found, _ := array_find(out.*, node.name);
+            if !found  array_add(out, node.name);
+            return;
+        }
+        if node.kind == .NEG { collect_symbols(node.left, exprs, out); return; }
+        if node.kind == .CONST || node.kind == .NULL return;
+        collect_symbols(node.left,  exprs, out);
+        collect_symbols(node.right, exprs, out);
+    }
+    extra_symbols: [..] string;
+    for id : gen_var_ids  collect_symbols(id, exprs.*, *extra_symbols);
+    for name : ordered_child_names {
+        array_unordered_remove_by_value(*extra_symbols, name, stop_after_first=true);
+    }
+
     // CSE over all S entries + adapt expression together.
     cse_vars: [..] CSE_Var;
     if gen_var_ids.count > 0 {
@@ -515,7 +550,21 @@ generate_rtype_header :: (
     print_to_builder(*builder, "\n");
 
     // Structs.
-    print_to_builder(*builder, "struct R_Params {};\n\n");
+    if extra_symbols.count > 0 {
+        print_to_builder(*builder, "struct R_Params {\n");
+        for name : extra_symbols {
+            // Near-ideal-op-amp defaults: very high input impedance, very
+            // low (but nonzero) output impedance, high open-loop gain.
+            // These exist so the generated code compiles; callers should
+            // override them with real device values.
+            default_value := "1.0e6f";
+            if name == "Ro"  default_value = "1.0e-3f";
+            print_to_builder(*builder, "    float % = %;\n", name, default_value);
+        }
+        print_to_builder(*builder, "};\n\n");
+    } else {
+        print_to_builder(*builder, "struct R_Params {};\n\n");
+    }
     print_to_builder(*builder, "struct R_Vars {\n");
     print_to_builder(*builder, "    float S[n_ports * n_ports]{};\n");
     if adapt >= 0 {
@@ -531,11 +580,19 @@ generate_rtype_header :: (
     // update_vars.
     print_to_builder(*builder, "static inline float update_vars(\n");
     print_to_builder(*builder, "    R_Vars* vars,\n");
-    print_to_builder(*builder, "    const R_Params* /*params*/");
+    if extra_symbols.count > 0 {
+        print_to_builder(*builder, "    const R_Params* params");
+    } else {
+        print_to_builder(*builder, "    const R_Params* /*params*/");
+    }
     for name : ordered_child_names {
         print_to_builder(*builder, ",\n    float %, float /*G_%*/", name, name);
     }
     print_to_builder(*builder, "\n) {\n");
+    for name : extra_symbols {
+        print_to_builder(*builder, "    const float % = params->%;\n", name, name);
+    }
+    if extra_symbols.count > 0  print_to_builder(*builder, "\n");
     for cv : cse_vars {
         print_to_builder(*builder, "    const float % = %;\n",
             cv.name, print_expr(cv.expr_id, exprs.*));
@@ -603,6 +660,162 @@ generate_rtype_header :: (
 
     print_to_builder(*builder, "} // namespace rtype_%\n", node_name);
     return builder_to_string(*builder);
+}
+
+// ===========================================================================
+// PRINT HELPERS
+// ===========================================================================
+// We can maybe move these methods somewhere else, since most things don't need them?
+// // Build a canonical rational form for display/debugging:
+//   e -> N / D
+// then clear reciprocal symbols (1/Rx factors) by multiplying N and D
+// by each requested symbol until no direct reciprocal remains.
+canonicalize_for_print :: (e: Expr_ID, clear_symbols: [] string, exprs: *[..] Expr) -> Expr_ID {
+    one := expr_const(1, exprs);
+
+    Rat :: struct {
+        num: Expr_ID;
+        den: Expr_ID;
+    }
+
+    to_rational :: (x: Expr_ID, one: Expr_ID, exprs: *[..] Expr) -> Rat {
+        node := exprs.*[x];
+        if node.kind == {
+            case .NULL;
+                return .{ num = expr_const(0, exprs), den = one };
+
+            case .CONST; #through;
+            case .SYMBOL;
+                return .{ num = x, den = one };
+
+            case .NEG;
+                r := to_rational(node.left, one, exprs);
+                return .{ num = expr_neg(r.num, exprs), den = r.den };
+
+            case .ADD; #through;
+            case .SUB;
+                l := to_rational(node.left,  one, exprs);
+                r := to_rational(node.right, one, exprs);
+                l_scaled := expr_mul(l.num, r.den, exprs);
+                r_scaled := expr_mul(r.num, l.den, exprs);
+                return .{
+                    num = expr_bin(node.kind, l_scaled, r_scaled, exprs),
+                    den = expr_mul(l.den, r.den, exprs),
+                };
+
+            case .MUL;
+                l := to_rational(node.left,  one, exprs);
+                r := to_rational(node.right, one, exprs);
+                return .{
+                    num = expr_mul(l.num, r.num, exprs),
+                    den = expr_mul(l.den, r.den, exprs),
+                };
+
+            case .DIV;
+                l := to_rational(node.left,  one, exprs);
+                r := to_rational(node.right, one, exprs);
+                return .{
+                    num = expr_mul(l.num, r.den, exprs),
+                    den = expr_mul(l.den, r.num, exprs),
+                };
+        }
+
+        return .{ num = x, den = one };
+    }
+
+    has_direct_reciprocal :: (x: Expr_ID, symbol_name: string, exprs: *[..] Expr) -> bool {
+        node := exprs.*[x];
+        if node.kind == .DIV {
+            right := exprs.*[node.right];
+            if right.kind == .SYMBOL && right.name == symbol_name  return true;
+        }
+        if node.kind == .CONST || node.kind == .SYMBOL || node.kind == .NULL  return false;
+        if node.kind == .NEG  return has_direct_reciprocal(node.left, symbol_name, exprs);
+        return has_direct_reciprocal(node.left, symbol_name, exprs)
+            || has_direct_reciprocal(node.right, symbol_name, exprs);
+    }
+
+    rat := to_rational(e, one, exprs);
+    num := simplify(rat.num, exprs);
+    den := simplify(rat.den, exprs);
+
+    // Cancel common symbolic factors from numerator and denominator.
+    for name : clear_symbols {
+        sym := expr_symbol(name, exprs);
+        for _: 0..4 {
+            ok_n, new_num := try_cancel(num, sym, exprs);
+            ok_d, new_den := try_cancel(den, sym, exprs);
+            if ok_n && ok_d {
+                num = simplify(new_num, exprs);
+                den = simplify(new_den, exprs);
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Cancel small common integer factors.
+    for k : 2..9 {
+        k_expr := expr_const(k, exprs);
+        for _: 0..4 {
+            ok_n, new_num := try_cancel(num, k_expr, exprs);
+            ok_d, new_den := try_cancel(den, k_expr, exprs);
+            if ok_n && ok_d {
+                num = simplify(new_num, exprs);
+                den = simplify(new_den, exprs);
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Clear direct reciprocal factors 1/Rx.
+    for name : clear_symbols {
+        sym := expr_symbol(name, exprs);
+        for _: 0..4 {
+            has_rec := has_direct_reciprocal(num, name, exprs)
+                    || has_direct_reciprocal(den, name, exprs);
+            if !has_rec  break;
+
+            num = simplify(expr_mul(num, sym, exprs), exprs);
+            den = simplify(expr_mul(den, sym, exprs), exprs);
+        }
+    }
+
+    den_node := exprs.*[den];
+    if den_node.kind == .NEG {
+        num = simplify(expr_neg(num, exprs), exprs);
+        den = den_node.left;
+    }
+
+    return simplify(expr_div(num, den, exprs), exprs);
+}
+
+print_rtype :: (result: R_Solver_Result, topo: R_Type_Topology) {
+    clear_symbols: [..] string;
+    for p : topo.ports {
+        array_add(*clear_symbols, p.impedance_name);
+    }
+    for v : topo.vcvs {
+        array_add(*clear_symbols, v.ri_name);
+        array_add(*clear_symbols, v.ro_name);
+    }
+
+    for j : 0..result.n_ports-1 {
+        for k : 0..result.n_ports-1 {
+            e := result.S_matrix[j * result.n_ports + k];
+            s := "0";
+            if e != NO_EXPR {
+                e_canon := canonicalize_for_print(e, clear_symbols, *result.exprs);
+                s = print_expr(e_canon, result.exprs);
+            }
+            print("S[%][%] = %\n", j, k, s);
+        }
+    }
+    if result.adapt_port >= 0 {
+        r_canon := canonicalize_for_print(result.adapt_impedance, clear_symbols, *result.exprs);
+        print("R_adapt = %\n", print_expr(r_canon, result.exprs));
+    }
 }
 
 #scope_file
