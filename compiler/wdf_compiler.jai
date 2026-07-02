@@ -72,8 +72,28 @@ main :: () {
     if args.netlist {
         verbose_print("Converting input from netlist...\n");
         graph, spqr_nodes, op_amps, circuit_meta := parse_netlist(file_str);
+
+        // ".meta root:rigid" makes the RIGID (R-type) node the literal tree
+        // root (a single compute() step) instead of adapting it under
+        // whichever leaf is annotated "; ... root". Mutually exclusive with
+        // that leaf annotation.
+        root_at_rigid := false;
+        for i : 0..circuit_meta.count-1 {
+            if circuit_meta[i] == "root:rigid" {
+                root_at_rigid = true;
+                array_ordered_remove_by_index(*circuit_meta, i);
+                break;
+            }
+        }
+        if root_at_rigid {
+            for node : spqr_nodes {
+                error_assert(!node.is_root,
+                       tprint("Netlist Error: '.meta root:rigid' was specified, but component '%' is also annotated as root. These are mutually exclusive.", node.component_id));
+            }
+        }
+
         root := reduce_to_spqr_tree(*graph, *spqr_nodes);
-        root = reroot(spqr_nodes, root);
+        root = reroot(spqr_nodes, root, prefer_rigid_root = root_at_rigid);
         if (global_args.verbose) {
             print_spqr_graph(spqr_nodes, root);
         }
@@ -111,11 +131,6 @@ main :: () {
             print("Solved RIGID node %: ports=%, adapt_port=%\n",
                   node_name, result.n_ports, result.adapt_port);
 
-            // Step B: only generate header when there is an adapt port
-            // (root RIGID nodes without a parent have adapt_port == -1 and
-            // would need a different 'compute=' signature -- skip for now).
-            if result.adapt_port < 0  continue;
-
             // Build ordered_child_names: port impedance name for each entry in
             // node.children, looked up via rigid_edges (which share the same order
             // as port_impedance_names from the topology).
@@ -146,10 +161,19 @@ main :: () {
             }
 
             // Set node.value so generate_wdf_string emits the Custom(...) args.
-            n_children := result.n_ports - 1;
-            spqr_nodes[rigid_idx].value = tprint(
-                "%, cpp_prefix=rtype_%::, params=R_Params, vars=R_Vars, state=R_State, updater=update_vars, incident=incident, reflected=reflected",
-                n_children, node_name);
+            // Adapted (non-root) nodes need the incident=/reflected= split
+            // and state= caching; a root node has no parent to defer to, so
+            // it resolves everything in one stateless compute= step.
+            if result.adapt_port >= 0 {
+                n_children := result.n_ports - 1;
+                spqr_nodes[rigid_idx].value = tprint(
+                    "%, cpp_prefix=rtype_%::, params=R_Params, vars=R_Vars, state=R_State, updater=update_vars, incident=incident, reflected=reflected",
+                    n_children, node_name);
+            } else {
+                spqr_nodes[rigid_idx].value = tprint(
+                    "%, cpp_prefix=rtype_%::, params=R_Params, vars=R_Vars, updater=update_vars, compute=compute",
+                    result.n_ports, node_name);
+            }
 
             // Inject include: directive so the meta: section picks up the sidecar.
             array_add(*circuit_meta, tprint("include:\"%\"", sidecar_name));

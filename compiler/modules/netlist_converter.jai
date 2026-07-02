@@ -412,11 +412,24 @@ reduce_to_spqr_tree :: (graph: *Graph, spqr_nodes: *[..]SPQR_Node) -> int
     return element_root_idx; // return "root" node index
 }
 
-reroot :: (spqr_nodes: []SPQR_Node, old_root: int) -> int
+// prefer_rigid_root (".meta root:rigid") roots the tree at the RIGID node
+// instead of the leaf annotated "root" (caller must ensure no leaf also
+// claims that label). In practice this is a no-op: reduce_to_spqr_tree
+// creates at most one RIGID node, as its last step, absorbing every
+// remaining edge -- so it's already old_root. The path-walking logic below
+// still applies generally, in case that invariant ever changes.
+reroot :: (spqr_nodes: []SPQR_Node, old_root: int, prefer_rigid_root := false) -> int
 {
     new_root := -1;
-    for node : spqr_nodes {
-        if node.is_root { new_root = it_index; break; }
+    if prefer_rigid_root {
+        for node : spqr_nodes {
+            if node.kind == .RIGID { new_root = it_index; break; }
+        }
+        assert(new_root >= 0, "Netlist Error: '.meta root:rigid' was specified, but the circuit contains no RIGID (non-series-parallel) subgraph.");
+    } else {
+        for node : spqr_nodes {
+            if node.is_root { new_root = it_index; break; }
+        }
     }
 
     if new_root < 0 {

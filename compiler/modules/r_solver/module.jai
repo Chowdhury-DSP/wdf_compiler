@@ -656,6 +656,30 @@ generate_rtype_header :: (
             print_to_builder(*builder, ";\n");
         }
         print_to_builder(*builder, "}\n\n");
+    } else {
+        // Root RIGID node (no adapt port, no parent to defer to): a single
+        // compute() step gathers every child's b (as a_in), applies the full
+        // n_ports x n_ports S matrix, and scatters the results back out as
+        // every child's a (b_out) -- matching how the hand-written
+        // bassman_tone_stack.wdf's root Custom(...) element uses a single
+        // "compute=" callback instead of separate incident=/reflected=.
+        print_to_builder(*builder, "static inline void compute(\n");
+        print_to_builder(*builder, "    const R_Vars* vars,\n");
+        print_to_builder(*builder, "    const float* a_in,  // [n_children]\n");
+        print_to_builder(*builder, "    float* b_out        // [n_children]\n");
+        print_to_builder(*builder, ") {\n");
+        for k : 0..n_children-1 {
+            port_k := child_to_port[k];
+            print_to_builder(*builder, "    b_out[%] = vars->S[% * n_ports + %] * a_in[0]",
+                k, port_k, child_to_port[0]);
+            for k2 : 1..n_children-1 {
+                port_k2 := child_to_port[k2];
+                print_to_builder(*builder, "\n              + vars->S[% * n_ports + %] * a_in[%]",
+                    port_k, port_k2, k2);
+            }
+            print_to_builder(*builder, ";\n");
+        }
+        print_to_builder(*builder, "}\n\n");
     }
 
     print_to_builder(*builder, "} // namespace rtype_%\n", node_name);

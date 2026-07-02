@@ -304,12 +304,79 @@ test_r_solver_star_3port_adapted :: () {
     print("  3-port star (adapted) check ok: %\n\n", ok);
 }
 
+// Regression test for generate_rtype_header's root-RIGID codegen path (used
+// when a ".meta root:rigid" netlist directive makes the R-type node the
+// literal tree root, e.g. tests/bassman_tone_stack/bassman_tone_stack.net --
+// see PLAN.md). A root node has adapt_port == -1 (no parent to defer an
+// upward wave to), so instead of the usual state-caching incident()/
+// reflected() pair, generate_rtype_header must emit a single stateless
+// compute(a_in[], b_out[]) that resolves every port in one call. This test
+// checks both the emitted code's shape (right function, no leftover
+// adapt-port-only artifacts) and that its S matrix (the same numeric values
+// compute() reads out of vars->S) still matches the reference N-port
+// parallel-adaptor formula already verified in
+// test_r_solver_star_3port_no_adapt.
+test_r_solver_root_rtype_codegen :: () {
+    topo := build_star_3port_topology();
+    topo.adapt_port = -1;
+
+    result := solve_rtype_scattering(topo);
+
+    print("=== test_r_solver: root RIGID node codegen (no adapt port) ===\n");
+
+    // Verify the raw S matrix *before* calling generate_rtype_header: its
+    // CSE pass rewrites result.S_matrix/result.exprs in place to reference
+    // extracted temporaries (_t0, _t1, ...), which eval_expr_numeric_3r
+    // doesn't know how to evaluate. Same reference formula as
+    // test_r_solver_star_3port_no_adapt.
+    R0: float64 = 2.0;
+    R1: float64 = 4.7;
+    R2: float64 = 9.1;
+    G0 := 1.0 / R0; G1 := 1.0 / R1; G2 := 1.0 / R2;
+    Gsum := G0 + G1 + G2;
+    G := float64.[G0, G1, G2];
+
+    values_ok := true;
+    for i : 0..2 {
+        for j : 0..2 {
+            e := result.S_matrix[i * result.n_ports + j];
+            actual := ifx e == NO_EXPR then 0.0 else eval_expr_numeric_3r(e, result.exprs, R0, R1, R2);
+            expected := 2.0 * G[j] / Gsum - cast(float64) ifx i == j then 1 else 0;
+            d := abs64(actual - expected);
+            if d > 1.0e-9 {
+                values_ok = false;
+                print("  S[%][%] mismatch: got % expected %\n", i, j, actual, expected);
+            }
+        }
+    }
+    print("  S-matrix values check ok: %\n", values_ok);
+
+    header := generate_rtype_header("Root3", *result, .["R0", "R1", "R2"]);
+
+    has_compute,    _ := String.contains(header, "static inline void compute(");
+    has_state,      _ := String.contains(header, "R_State");
+    has_adapt_port, _ := String.contains(header, "adapt_port");
+    has_incident,   _ := String.contains(header, "static inline void incident(");
+    has_reflected,  _ := String.contains(header, "static inline float reflected(");
+
+    shape_ok := has_compute && !has_state && !has_adapt_port && !has_incident && !has_reflected;
+    print("  has compute(): %  (expect true)\n", has_compute);
+    print("  has R_State:   %  (expect false)\n", has_state);
+    print("  has adapt_port:%  (expect false)\n", has_adapt_port);
+    print("  has incident():%  (expect false)\n", has_incident);
+    print("  has reflected():%  (expect false)\n", has_reflected);
+    print("  codegen shape check ok: %\n", shape_ok);
+
+    print("  root RIGID codegen check ok: %\n\n", shape_ok && values_ok);
+}
+
 run_r_solver_tests :: () {
     test_r_solver();
     test_r_solver_adapted();
     test_r_solver_grounded_v2();
     test_r_solver_star_3port_no_adapt();
     test_r_solver_star_3port_adapted();
+    test_r_solver_root_rtype_codegen();
 }
 
 main :: () {
@@ -320,3 +387,4 @@ main :: () {
 #import "Basic";
 #import "r_solver";
 #import "sym_algebra";
+String :: #import "String";
