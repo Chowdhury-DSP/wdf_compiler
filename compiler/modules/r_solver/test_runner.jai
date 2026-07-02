@@ -1,3 +1,5 @@
+abs64 :: (x: float64) -> float64 { return ifx x < 0.0 then -x else x; }
+
 // Runs the 2-port + VCVS test case taken from the Mathematica reference.
 // Prints the symbolic S matrix; compare against the expected output below.
 test_r_solver :: () {
@@ -105,8 +107,6 @@ test_r_solver_adapted :: () {
         return 0.0;
     }
 
-    abs64 :: (x: float64) -> float64 { return ifx x < 0.0 then -x else x; }
-
     // Numeric sanity check for adaptation:
     // 1) adapted Ra matches reference formula
     // 2) S[0][0] evaluates ~ 0 after substitution
@@ -204,10 +204,112 @@ test_r_solver_grounded_v2 :: () {
     print("  grounded-v2 check ok: %\n\n", ok);
 }
 
+// Shared by the two 3-port star tests below: three resistors R0, R1, R2 all
+// wired node1 -> ground (v2 = datum), same shape as test_r_solver_grounded_v2
+// but with a third port, to catch anything that only breaks once n_ports > 2
+// (e.g. an off-by-one in the port loop, or the datum symmetry fix only being
+// exercised pairwise).
+build_star_3port_topology :: () -> R_Type_Topology {
+    topo: R_Type_Topology;
+    topo.n_verts = 2; // node 0 = datum, node 1 = the shared junction
+    array_add(*topo.ports, .{ v1 = 1, v2 = 0, impedance_name = "R0" });
+    array_add(*topo.ports, .{ v1 = 1, v2 = 0, impedance_name = "R1" });
+    array_add(*topo.ports, .{ v1 = 1, v2 = 0, impedance_name = "R2" });
+    return topo;
+}
+
+eval_expr_numeric_3r :: (e: Expr_ID, exprs: []Expr, R0: float64, R1: float64, R2: float64) -> float64 {
+    node := exprs[e];
+    if node.kind == {
+        case .NULL;   return 0.0;
+        case .CONST;  return cast(float64) node.value;
+        case .SYMBOL;
+            if node.name == "R0" return R0;
+            if node.name == "R1" return R1;
+            if node.name == "R2" return R2;
+            print("[r_solver] Unknown symbol in numeric eval: %\n", node.name);
+            assert(false);
+            return 0.0;
+        case .NEG; return -eval_expr_numeric_3r(node.left, exprs, R0, R1, R2);
+        case .ADD; return eval_expr_numeric_3r(node.left, exprs, R0, R1, R2) + eval_expr_numeric_3r(node.right, exprs, R0, R1, R2);
+        case .SUB; return eval_expr_numeric_3r(node.left, exprs, R0, R1, R2) - eval_expr_numeric_3r(node.right, exprs, R0, R1, R2);
+        case .MUL; return eval_expr_numeric_3r(node.left, exprs, R0, R1, R2) * eval_expr_numeric_3r(node.right, exprs, R0, R1, R2);
+        case .DIV;
+            denom := eval_expr_numeric_3r(node.right, exprs, R0, R1, R2);
+            assert(denom != 0.0);
+            return eval_expr_numeric_3r(node.left, exprs, R0, R1, R2) / denom;
+    }
+    return 0.0;
+}
+
+// Verifies the full (unadapted) S matrix against Fettweis' classic N-port
+// parallel-adaptor formula: S[i][j] = 2*Gj/Gsum - delta(i,j), where
+// Gk = 1/Rk and Gsum = G0 + G1 + G2. Unlike the other tests here, this
+// checks every entry, not just one derived impedance.
+test_r_solver_star_3port_no_adapt :: () {
+    topo := build_star_3port_topology();
+    topo.adapt_port = -1;
+
+    result := solve_rtype_scattering(topo);
+
+    print("=== test_r_solver: 3-port resistive star (no adaptation) ===\n");
+    print_rtype(result, topo);
+    print("Expected: S[i][j] = 2*Gj/Gsum - delta(i,j)\n");
+
+    R0: float64 = 2.0;
+    R1: float64 = 4.7;
+    R2: float64 = 9.1;
+    G0 := 1.0 / R0; G1 := 1.0 / R1; G2 := 1.0 / R2;
+    Gsum := G0 + G1 + G2;
+    G := float64.[G0, G1, G2];
+
+    ok := true;
+    for i : 0..2 {
+        for j : 0..2 {
+            e := result.S_matrix[i * result.n_ports + j];
+            actual := ifx e == NO_EXPR then 0.0 else eval_expr_numeric_3r(e, result.exprs, R0, R1, R2);
+            expected := 2.0 * G[j] / Gsum - cast(float64) ifx i == j then 1 else 0;
+            d := abs64(actual - expected);
+            if d > 1.0e-9 {
+                ok = false;
+                print("  S[%][%] mismatch: got % expected %\n", i, j, actual, expected);
+            }
+        }
+    }
+    print("  3-port star (no adapt) check ok: %\n\n", ok);
+}
+
+// Same 3-port star, but with port 0 adapted. Classic N-port parallel
+// adaptor identity: the adapted port's impedance equals the parallel
+// combination of the *other* ports' impedances (generalizes
+// test_r_solver_grounded_v2 from 2 to 3 ports).
+test_r_solver_star_3port_adapted :: () {
+    topo := build_star_3port_topology();
+    topo.adapt_port = 0;
+
+    result := solve_rtype_scattering(topo);
+
+    print("=== test_r_solver: 3-port resistive star (adapt port 0) ===\n");
+    print_rtype(result, topo);
+    print("Expected: R_adapt = R1*R2 / (R1 + R2)\n");
+
+    R1: float64 = 4.7;
+    R2: float64 = 9.1;
+    expected := (R1 * R2) / (R1 + R2);
+    actual := eval_expr_numeric_3r(result.adapt_impedance, result.exprs, 0.0, R1, R2);
+    d := abs64(actual - expected);
+
+    print("  R_adapt = % (expected %)\n", actual, expected);
+    ok := result.adapt_port == 0 && d < 1.0e-9;
+    print("  3-port star (adapted) check ok: %\n\n", ok);
+}
+
 run_r_solver_tests :: () {
     test_r_solver();
     test_r_solver_adapted();
     test_r_solver_grounded_v2();
+    test_r_solver_star_3port_no_adapt();
+    test_r_solver_star_3port_adapted();
 }
 
 main :: () {

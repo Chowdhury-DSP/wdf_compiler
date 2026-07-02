@@ -1,0 +1,23 @@
+* Sallen-Key Low-Pass Filter
+
+Vin vi 0 ; input root PULSE(-1 1 0 20m 1u 1u 20m)
+
+* RC network
+R1 vi n1 10k
+R2 n1 n2 10k
+C1 n2 0 100n IC=0
+C2 vo n1 100n IC=0
+
+* Op-amp
+* [out, 0, pos, neg, gain]
+Eop vo 0 n2 n3 1e6
+
+* Feedback network
+Rf vo n3 8k
+Rg n3 0 6k
+
+* Load
+Rload vo 0 100k ; output:V
+
+.tran 0 80m 0 20.0u
+.end
