@@ -32,7 +32,7 @@ update_vars :: (vars: *Diode_Pair_Vars,
 
 root_compute :: (vars: *Diode_Pair_Vars, a: float) -> float {
     // See eqn (39) from reference paper
-    lambda : float = ifx a >= 0 then 1.0 else 0.0;
+    lambda : float = ifx a > 0 then 1.0 else ifx a < 0 then -1.0 else 0.0;
     lambda_a_over_vt := lambda * a * vars.vt_recip;
     b := a - vars.vt_2 * lambda * (Omega.omega4 (vars.logR_Is_over_vt + lambda_a_over_vt)
                                  - Omega.omega4 (vars.logR_Is_over_vt - lambda_a_over_vt));

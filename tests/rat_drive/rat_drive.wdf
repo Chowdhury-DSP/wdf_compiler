@@ -1,0 +1,34 @@
+circuit:
+Custom(DP, 1, prefix=wdf_lib::diode_pair::, jai_prefix=, params=Diode_Pair_Params, vars=Diode_Pair_Vars, updater=update_vars, compute=root_compute);
+    Series(Sd);
+        Series(S_R6_C7);
+            R(R6, 1k);
+            C(C7, 4.7u);
+        Custom(R, 3, cpp_prefix=rat_drive_rtype::, params=R_Params, vars=R_Vars, updater=update_vars, incident=incident, reflected=reflected);
+            Parallel(Pa);
+                C(C2, 1n);
+                Series(S2);
+                    R(R3, 1k);
+                    Parallel(P1);
+                        RVs(Vplus_R2, 4.5, 1M);
+                        CVs(Vin_C1, 22n);
+            Parallel(Pb);
+                Series(S_R4_C5);
+                    R(R4, 47);
+                    C(C5, 2.2u);
+                Series(S_R5_C6);
+                    R(R5, 560);
+                    C(C6, 4.7u);
+            Parallel(P_Rd_C4);
+                R(Rd, ?);
+                C(C4, 100p);
+
+inputs:
+Vin_C1
+
+outputs:
+V:Sd
+
+meta:
+include_cpp:"custom_rat_drive_rtype.h"
+include:<wdf_lib_diode_pair.h>
