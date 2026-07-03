@@ -9,10 +9,6 @@ R_Vars :: struct {
     S: [num_ports * num_ports_padded] float32 #align 16;
 }
 
-R_State :: struct {
-    b_up: float32;
-}
-
 update_vars :: (vars: *R_Vars,
                 params: R_Params,
                 Rb: float32,
@@ -48,12 +44,28 @@ S_transpose : [num_ports][num_ports] float32 = .[
     return Ra;
 }
 
-reflected :: (vars: *R_Vars, state: *R_State, a_in: *float32) -> float32
+reflected :: (vars: *R_Vars, a_in: *float32) -> float32
 {
-    return state.b_up;
+    // S[up_port][up_port] == 0, so this doesn't need a fresh a[up_port].
+    a: [num_ports] float32 = --- #align 16;
+    j := 0;
+    for 0..num_ports-1 {
+        if (it == up_port) {
+            a[it] = 0.0;
+        } else {
+            a[it] = a_in[j];
+            j += 1;
+        }
+    }
+
+    b := vars.S[up_port] * a[0];
+    for r: 1..num_ports-1 {
+        b += vars.S[r * num_ports_padded + up_port] * a[r];
+    }
+    return b;
 }
 
-incident :: (vars: *R_Vars, state: *R_State, a_up: float32, a_in: *float32, b_out: *float32)
+incident :: (vars: *R_Vars, a_up: float32, a_in: *float32, b_out: *float32)
 {
     a: [num_ports] float32 = --- #align 16;
     b: [num_ports_padded] float32 = --- #align 16;
@@ -77,9 +89,7 @@ incident :: (vars: *R_Vars, state: *R_State, a_up: float32, a_in: *float32, b_ou
 
     j = 0;
     for i: 0..num_ports-1 {
-        if (i == up_port) {
-            state.b_up = b[i];
-        } else {
+        if (i != up_port) {
             b_out[j] = b[i];
             j += 1;
         }

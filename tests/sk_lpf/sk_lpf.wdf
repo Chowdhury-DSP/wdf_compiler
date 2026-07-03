@@ -2,7 +2,7 @@ circuit:
 IVs(Vin);
     Series(S1);
         R(R1, 10k);
-        Custom(R, 6, prefix=SK_LPF_, params=R_Params, vars=R_Vars, state=R_State, updater=update_vars, incident=incident, reflected=reflected);
+        Custom(R, 6, prefix=SK_LPF_, params=R_Params, vars=R_Vars, updater=update_vars, incident=incident, reflected=reflected);
             R(R2, 10k);
             C(C2, 100n);
             C(C1, 100n);

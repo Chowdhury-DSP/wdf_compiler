@@ -20,10 +20,6 @@ impl Default for R_Vars {
     }
 }
 
-#[derive(Default,Copy,Clone)]
-pub struct R_State {
-}
-
 #[allow(unused_variables)]
 pub fn update_vars(vars: &mut R_Vars,
                    params: R_Params,
@@ -58,7 +54,7 @@ pub fn update_vars(vars: &mut R_Vars,
 }
 
 #[allow(unused_variables)]
-pub fn reflected(vars: &R_Vars, state: &mut R_State, a_in: &[f32; num_ports-1]) -> f32
+pub fn reflected(vars: &R_Vars, a_in: &[f32; num_ports-1]) -> f32
 {
     // S[up_port][up_port] == 0, so this doesn't need a fresh a[up_port].
     let mut a : [f32; num_ports] = [0.0; num_ports];
@@ -78,7 +74,7 @@ pub fn reflected(vars: &R_Vars, state: &mut R_State, a_in: &[f32; num_ports-1]) 
 }
 
 #[allow(unused_variables)]
-pub fn incident(vars: &R_Vars, state: &mut R_State, a_up: f32, a_in: &[f32; num_ports-1], b_out: &mut [f32; num_ports-1])
+pub fn incident(vars: &R_Vars, a_up: f32, a_in: &[f32; num_ports-1], b_out: &mut [f32; num_ports-1])
 {
     let mut a : [f32; num_ports] = [0.0; num_ports];
     let mut b : [f32; num_ports_padded] = [0.0; num_ports_padded];

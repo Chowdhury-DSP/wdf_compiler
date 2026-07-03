@@ -13,10 +13,6 @@ struct SK_LPF_R_Vars
     float S[num_ports * num_ports] {};
 };
 
-struct SK_LPF_R_State
-{
-};
-
 // Note: sk_lpf.wdf's Custom(...) declares 6 children (R2, C2, C1, Rg, Rf,
 // Rload), so this only takes 6 R/G pairs -- there is no input pair for the
 // adapt port itself (up_port), since that impedance is what's being solved
@@ -60,7 +56,7 @@ static inline float SK_LPF_update_vars (SK_LPF_R_Vars* vars,
 // introduce a spurious 1-sample delay into the R-type junction's upward
 // wave (this matches how the netlist-generated rtype_R9::reflected()
 // recomputes fresh every call, with no state caching).
-static inline float SK_LPF_reflected (const SK_LPF_R_Vars* vars, const SK_LPF_R_State* /*state*/, const float* a_in)
+static inline float SK_LPF_reflected (const SK_LPF_R_Vars* vars, const float* a_in)
 {
     float b_up = 0.0f;
     int j = 0;
@@ -73,7 +69,7 @@ static inline float SK_LPF_reflected (const SK_LPF_R_Vars* vars, const SK_LPF_R_
     return b_up;
 }
 
-static inline void SK_LPF_incident (const SK_LPF_R_Vars* vars, SK_LPF_R_State* /*state*/, float a_up, const float* a_in, float* b_out)
+static inline void SK_LPF_incident (const SK_LPF_R_Vars* vars, float a_up, const float* a_in, float* b_out)
 {
     float a[num_ports];
     float b[num_ports_padded];

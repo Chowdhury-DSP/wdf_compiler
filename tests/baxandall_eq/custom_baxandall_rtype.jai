@@ -9,9 +9,6 @@ R_Vars :: struct {
     S: [num_ports * num_ports_padded] float32 #align 16;
 }
 
-R_State :: struct {
-}
-
 update_vars :: (vars: *R_Vars,
                 params: R_Params,
                 Ra: float32,
@@ -44,7 +41,7 @@ update_vars :: (vars: *R_Vars,
     return Rf;
 }
 
-reflected :: (vars: *R_Vars, state: *R_State, a_in: *float32) -> float32
+reflected :: (vars: *R_Vars, a_in: *float32) -> float32
 {
     // S[up_port][up_port] == 0, so this doesn't need a fresh a[up_port].
     a: [num_ports] float32 = --- #align 16;
@@ -65,7 +62,7 @@ reflected :: (vars: *R_Vars, state: *R_State, a_in: *float32) -> float32
     return b;
 }
 
-incident :: (vars: *R_Vars, state: *R_State, a_up: float32, a_in: *float32, b_out: *float32)
+incident :: (vars: *R_Vars, a_up: float32, a_in: *float32, b_out: *float32)
 {
     a: [num_ports] float32 = --- #align 16;
     b: [num_ports_padded] float32 = --- #align 16;

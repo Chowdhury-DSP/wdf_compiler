@@ -351,7 +351,7 @@ test_r_solver_root_rtype_codegen :: () {
     }
     print("  S-matrix values check ok: %\n", values_ok);
 
-    header := generate_rtype_header("Root3", *result, .["R0", "R1", "R2"]);
+    header := generate_rtype_header("Root3", *result, .["R0", "R1", "R2"], "cpp");
 
     has_compute,    _ := String.contains(header, "static inline void compute(");
     has_state,      _ := String.contains(header, "R_State");

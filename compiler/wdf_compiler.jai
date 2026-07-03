@@ -146,8 +146,10 @@ main :: () {
             assert(ordered_child_names.count == node.children.count,
                    "RIGID node child/edge mismatch");
 
-            // Generate the C++ sidecar header string.
-            header_str := generate_rtype_header(node_name, *result, ordered_child_names);
+            // Generate the sidecar header string. The wdf_lib_rtype_helpers.h
+            // matmul helpers are only available in C++; other languages fall
+            // back to the manual-loop codegen inside generate_rtype_header.
+            header_str := generate_rtype_header(node_name, *result, ordered_child_names, args.lang);
 
             // Write the sidecar file next to the output file.
             sidecar_name := tprint("%_rtype.h", node_name);
@@ -161,13 +163,13 @@ main :: () {
             }
 
             // Set node.value so generate_wdf_string emits the Custom(...) args.
-            // Adapted (non-root) nodes need the incident=/reflected= split
-            // and state= caching; a root node has no parent to defer to, so
-            // it resolves everything in one stateless compute= step.
+            // Adapted (non-root) nodes need the incident=/reflected= split;
+            // a root node has no parent to defer to, so it resolves
+            // everything in one stateless compute= step.
             if result.adapt_port >= 0 {
                 n_children := result.n_ports - 1;
                 spqr_nodes[rigid_idx].value = tprint(
-                    "%, cpp_prefix=rtype_%::, params=R_Params, vars=R_Vars, state=R_State, updater=update_vars, incident=incident, reflected=reflected",
+                    "%, cpp_prefix=rtype_%::, params=R_Params, vars=R_Vars, updater=update_vars, incident=incident, reflected=reflected",
                     n_children, node_name);
             } else {
                 spqr_nodes[rigid_idx].value = tprint(
