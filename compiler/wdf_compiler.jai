@@ -1106,6 +1106,10 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
         for *token : tokens {
             if token.name == output_info[1] {
                 output_token = token;
+                if (token.type == .Custom) {
+                    error_assert(token.children.count == 1, "Only custom nodes with 1 child may be used for outputs!");
+                    output_token = *tokens[token.children[0]];
+                }
                 break;
             }
         }

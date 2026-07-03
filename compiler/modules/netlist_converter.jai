@@ -181,7 +181,11 @@ parse_netlist :: (netlist_str: string) -> Graph, [..] SPQR_Node, [..] Op_Amp, [.
 
         if line_trim[0] == "*" || line_trim[0] == "." { continue; } // comment or heading line
 
-        parts := String.split(line_trim, " ");
+        raw_parts := String.split(line_trim, " ");
+        parts: [..] string;
+        for part : raw_parts {
+            if part.count > 0 { array_add(*parts, part); }
+        }
         assert(parts.count >= 3,
                tprint("Netlist entry needs at least three parts: name, node 1, node 2. Parts: %", parts));
         node2 := get_node_idx(*node_names, parts[2]);

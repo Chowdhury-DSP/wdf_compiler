@@ -181,16 +181,28 @@ substitute :: (old_expr: Expr_ID, new_expr: Expr_ID, exprs: *[..] Expr) -> Expr_
 // Sentinel meaning "zero / absent expression"
 NO_EXPR : Expr_ID : -1;
 
-// Represents:  sum_i(coeffs[i] * vars[i])  +  constant
-// where coeffs is parallel to the `vars` array passed to linearize().
+// Represents:  sum_i(coeffs[i] * vars[i])  +  sum_i,j(quad[i*n+j] * vars[i] * vars[j])  +  constant
+// where coeffs is parallel to the `vars` array passed to linearize(), and
+// quad is an n*n row-major matrix of pairwise-product coefficients.
 // NO_EXPR in any slot means that term is structurally zero.
+//
+// The quad terms exist to tolerate expressions that are only *transiently*
+// quadratic: e.g. the R-type adapt-port equation is guaranteed linear in G_a
+// by the matrix determinant lemma, but symbolic_det's raw cofactor expansion
+// can produce a MUL of two G_a-dependent sub-expressions whose G_a^2 term
+// only cancels once summed with a sibling term elsewhere in the tree. Rather
+// than requiring each individual MUL node to already be manifestly linear,
+// linearize() carries quadratic terms up through ADD/SUB and only requires
+// the caller (solve()) to confirm they fold away to zero once fully combined.
 Linear :: struct {
     coeffs:   [..] Expr_ID;
+    quad:     [..] Expr_ID;
     constant: Expr_ID;
 }
 
 linear_is_constant :: (l: Linear) -> bool {
     for l.coeffs  if it != NO_EXPR  return false;
+    for l.quad    if it != NO_EXPR  return false;
     return true;
 }
 
@@ -207,12 +219,16 @@ combine :: (a: Expr_ID, b: Expr_ID, op: Expr_Kind, exprs: *[..] Expr) -> Expr_ID
     return expr_bin(op, a, b, exprs);
 }
 
-// Decompose `e` into a linear combination of `vars`.
-// Each entry in the returned Linear.coeffs is parallel to `vars`.
-// Asserts if the expression is not linear in the given variables.
+// Decompose `e` into a linear combination of `vars`, tolerating terms up to
+// quadratic in `vars` (see Linear's doc comment) -- callers that need a
+// strictly-linear result must check that the returned `.quad` entries fold
+// to zero (solve() does this).
+// Each entry in the returned Linear.coeffs/.quad is parallel to `vars`.
+// Asserts if the expression has a term of cubic or higher degree in `vars`.
 linearize :: (e: Expr_ID, vars: [] Expr_ID, exprs: *[..] Expr) -> Linear {
     result: Linear;
     for i: 0..vars.count-1  array_add(*result.coeffs, NO_EXPR);
+    for i: 0..vars.count*vars.count-1  array_add(*result.quad, NO_EXPR);
     result.constant = NO_EXPR;
 
     // Copy the node before recursing: array_add inside recursive calls may
@@ -224,8 +240,18 @@ linearize :: (e: Expr_ID, vars: [] Expr_ID, exprs: *[..] Expr) -> Linear {
             result.constant = e;
 
         case .SYMBOL;
+            // Match by name, not just by Expr_ID: fold() can copy a var's
+            // SYMBOL content into an unrelated node's slot (e.g. the
+            // "-(-x) -> x" identity), producing a second, differently-ID'd
+            // node with the same name (see substitute_symbol_name's doc
+            // comment for the same issue on the substitution side). An
+            // ID-only check here would let such a duplicate leak into
+            // `.constant` as an opaque "parameter" -- and if that duplicate
+            // is later substituted (by name) with an expression derived
+            // from *this* linearization, the result is a node that
+            // references itself, which hangs fold()'s unmemoized recursion.
             for i: 0..vars.count-1 {
-                if vars[i] == e {
+                if vars[i] == e || (exprs.*[vars[i]].kind == .SYMBOL && exprs.*[vars[i]].name == expr.name) {
                     result.coeffs[i] = expr_const(1, exprs);
                     return result;
                 }
@@ -236,6 +262,8 @@ linearize :: (e: Expr_ID, vars: [] Expr_ID, exprs: *[..] Expr) -> Linear {
             la := linearize(expr.left, vars, exprs);
             for i: 0..vars.count-1
                 result.coeffs[i] = combine(NO_EXPR, la.coeffs[i], .SUB, exprs);
+            for i: 0..vars.count*vars.count-1
+                result.quad[i] = combine(NO_EXPR, la.quad[i], .SUB, exprs);
             result.constant = combine(NO_EXPR, la.constant, .SUB, exprs);
 
         case .ADD; #through;
@@ -244,6 +272,8 @@ linearize :: (e: Expr_ID, vars: [] Expr_ID, exprs: *[..] Expr) -> Linear {
             lb := linearize(expr.right, vars, exprs);
             for i: 0..vars.count-1
                 result.coeffs[i] = combine(la.coeffs[i], lb.coeffs[i], expr.kind, exprs);
+            for i: 0..vars.count*vars.count-1
+                result.quad[i] = combine(la.quad[i], lb.quad[i], expr.kind, exprs);
             result.constant = combine(la.constant, lb.constant, expr.kind, exprs);
 
         case .MUL;
@@ -251,16 +281,53 @@ linearize :: (e: Expr_ID, vars: [] Expr_ID, exprs: *[..] Expr) -> Linear {
             lb := linearize(expr.right, vars, exprs);
             la_const := linear_is_constant(la);
             lb_const := linear_is_constant(lb);
-            assert(la_const || lb_const, "Expression is not linear in the given variables!");
-            scalar   := ifx la_const then la.constant else lb.constant;
-            var_part := ifx la_const then lb           else la;
-            if scalar != NO_EXPR {
-                for i: 0..vars.count-1 {
-                    if var_part.coeffs[i] != NO_EXPR
-                        result.coeffs[i] = expr_mul(scalar, var_part.coeffs[i], exprs);
+            if la_const || lb_const {
+                scalar   := ifx la_const then la.constant else lb.constant;
+                var_part := ifx la_const then lb           else la;
+                if scalar != NO_EXPR {
+                    for i: 0..vars.count-1 {
+                        if var_part.coeffs[i] != NO_EXPR
+                            result.coeffs[i] = expr_mul(scalar, var_part.coeffs[i], exprs);
+                    }
+                    for i: 0..vars.count*vars.count-1 {
+                        if var_part.quad[i] != NO_EXPR
+                            result.quad[i] = expr_mul(scalar, var_part.quad[i], exprs);
+                    }
+                    if var_part.constant != NO_EXPR
+                        result.constant = expr_mul(scalar, var_part.constant, exprs);
                 }
-                if var_part.constant != NO_EXPR
-                    result.constant = expr_mul(scalar, var_part.constant, exprs);
+            } else {
+                // Neither side is manifestly constant in `vars`. This is only
+                // representable if the product has no term above quadratic
+                // degree -- i.e. neither side may itself already carry a
+                // quadratic term (that would make the product cubic+).
+                la_has_quad := false;
+                for q : la.quad  if q != NO_EXPR { la_has_quad = true; break; }
+                lb_has_quad := false;
+                for q : lb.quad  if q != NO_EXPR { lb_has_quad = true; break; }
+                assert(!la_has_quad && !lb_has_quad,
+                       "Expression has a term of cubic or higher degree in the given variables!");
+
+                if la.constant != NO_EXPR && lb.constant != NO_EXPR
+                    result.constant = expr_mul(la.constant, lb.constant, exprs);
+
+                for i: 0..vars.count-1 {
+                    term: Expr_ID = NO_EXPR;
+                    if la.constant != NO_EXPR && lb.coeffs[i] != NO_EXPR
+                        term = combine(term, expr_mul(la.constant, lb.coeffs[i], exprs), .ADD, exprs);
+                    if la.coeffs[i] != NO_EXPR && lb.constant != NO_EXPR
+                        term = combine(term, expr_mul(la.coeffs[i], lb.constant, exprs), .ADD, exprs);
+                    result.coeffs[i] = term;
+                }
+
+                for i: 0..vars.count-1 {
+                    for j: 0..vars.count-1 {
+                        term: Expr_ID = NO_EXPR;
+                        if la.coeffs[i] != NO_EXPR && lb.coeffs[j] != NO_EXPR
+                            term = combine(term, expr_mul(la.coeffs[i], lb.coeffs[j], exprs), .ADD, exprs);
+                        result.quad[i * vars.count + j] = term;
+                    }
+                }
             }
 
         case .DIV;
@@ -272,6 +339,10 @@ linearize :: (e: Expr_ID, vars: [] Expr_ID, exprs: *[..] Expr) -> Linear {
                 for i: 0..vars.count-1 {
                     if la.coeffs[i] != NO_EXPR
                         result.coeffs[i] = expr_div(la.coeffs[i], divisor, exprs);
+                }
+                for i: 0..vars.count*vars.count-1 {
+                    if la.quad[i] != NO_EXPR
+                        result.quad[i] = expr_div(la.quad[i], divisor, exprs);
                 }
                 if la.constant != NO_EXPR
                     result.constant = expr_div(la.constant, divisor, exprs);
@@ -549,6 +620,21 @@ solve :: (equations: [] Expr_ID, solve_for: [] Expr_ID, exprs: *[..] Expr) -> [.
 
     for i: 0..n-1 {
         lin := linearize(equations[i], solve_for, exprs);
+
+        // linearize() tolerates transient quadratic terms (see Linear's doc
+        // comment) that are only provably zero once fully combined. Confirm
+        // that's actually the case here before discarding them -- if any
+        // quad entry doesn't fold to the constant 0, the equation genuinely
+        // isn't linear in solve_for and we must not silently drop the term.
+        for q, qi : lin.quad {
+            if q == NO_EXPR  continue;
+            q_simplified := simplify(q, exprs);
+            is_zero := exprs.*[q_simplified].kind == .CONST && exprs.*[q_simplified].value == 0;
+            assert(is_zero,
+                   tprint("Equation % is not linear in the given variables (quadratic term in % * % did not cancel to zero: %)",
+                          i, solve_for[qi / solve_for.count], solve_for[qi % solve_for.count], print_expr(q_simplified, exprs.*)));
+        }
+
         for j: 0..n-1 {
             a_ij := lin.coeffs[j];
             if a_ij != NO_EXPR  fold(a_ij, exprs);

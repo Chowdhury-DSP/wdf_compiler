@@ -88,7 +88,7 @@ struct Reference_WDF
 
 int main()
 {
-    std::cout << "RAT Drive LPF test\n";
+    std::cout << "RAT Drive test\n";
 
     static constexpr float fs = 48000.0f;
 
@@ -97,7 +97,14 @@ int main()
 
     Impedances impedances {};
     Params params {
+#if NETLIST
+        // @TODO!!!
+        // .Rd_value = 0.5f * Reference_WDF::Rdistortion,
+        .S16_v_value = 0.0f, // what is this...?
+        .Vin_res_value = 1.0e-6f, // Ideally this would a capacitive voltage source... even if not, we need the default value here
+#else
         .Rd_value = 0.5f * Reference_WDF::Rdistortion,
+#endif
         .DP_params = {
             .Is = 5.0e-9f,
             .Vt = 25.85e-3f,

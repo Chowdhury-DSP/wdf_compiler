@@ -27,7 +27,7 @@ inputs:
 Vin_C1
 
 outputs:
-V:Sd
+V:DP
 
 meta:
 include_cpp:"custom_rat_drive_rtype.h"
