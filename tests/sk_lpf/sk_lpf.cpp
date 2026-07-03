@@ -11,101 +11,6 @@
 #include <random>
 #include <tuple>
 
-/**
- * chowdsp::wdft::RtypeAdaptor::reflected() returns b_vec[upPortIndex], which
- * was last written by incident() during the *previous* sample -- it never
- * recomputes using the down-ports' a values it just gathered in this same
- * reflected() call. Since S[upPortIndex][upPortIndex] == 0 for a fully
- * adapted port, b_up mathematically never depends on a_up, so that staleness
- * isn't necessary; it's a spurious 1-sample delay. This is a local,
- * delay-free reimplementation (matching the netlist-generated
- * rtype_R9::reflected(), see R9_rtype.h) used only to confirm that theory
- * against the wdf_compiler-generated reference.
- */
-template <typename T, int upPortIndex, typename ImpedanceCalculator, typename... PortTypes>
-class DelayFreeRtypeAdaptor : public chowdsp::wdft::BaseWDF
-{
-public:
-    static constexpr auto numPorts = int (sizeof...(PortTypes) + 1);
-
-    explicit DelayFreeRtypeAdaptor (PortTypes&... dps) : downPorts (std::tie (dps...))
-    {
-        std::apply ([&] (auto&... port) { (port.connectToParent (this), ...); }, downPorts);
-    }
-
-    void calcImpedance() override
-    {
-        wdf.R = ImpedanceCalculator::calcImpedance (*this);
-        wdf.G = (T) 1 / wdf.R;
-    }
-
-    constexpr auto getPortImpedances()
-    {
-        std::array<T, numPorts - 1> portImpedances {};
-        int i = 0;
-        std::apply ([&] (auto&... port) { ((portImpedances[i++] = port.wdf.R), ...); }, downPorts);
-        return portImpedances;
-    }
-
-    void setSMatrixData (const T (&mat)[numPorts][numPorts])
-    {
-        for (int i = 0; i < numPorts; ++i)
-            for (int j = 0; j < numPorts; ++j)
-                S_matrix[j][i] = mat[i][j]; // matches chowdsp's transposed storage convention
-    }
-
-    inline void incident (T downWave) noexcept
-    {
-        wdf.a = downWave;
-        a_vec[upPortIndex] = wdf.a;
-
-        for (int c = 0; c < numPorts; ++c)
-        {
-            T sum = S_matrix[0][c] * a_vec[0];
-            for (int r = 1; r < numPorts; ++r)
-                sum += S_matrix[r][c] * a_vec[r];
-            b_vec[c] = sum;
-        }
-
-        int i = 0;
-        std::apply ([&] (auto&... port) { (port.incident (b_vec[getPortIndex (i++)]), ...); }, downPorts);
-    }
-
-    inline T reflected() noexcept
-    {
-        int i = 0;
-        std::apply ([&] (auto&... port) { ((a_vec[getPortIndex (i++)] = port.reflected()), ...); }, downPorts);
-
-        T b_up = (T) 0;
-        for (int r = 0; r < numPorts; ++r)
-            if (r != upPortIndex)
-                b_up += S_matrix[r][upPortIndex] * a_vec[r];
-
-        wdf.b = b_up;
-        return wdf.b;
-    }
-
-    chowdsp::wdft::WDFMembers<T> wdf;
-
-private:
-    constexpr auto getPortIndex (int tupleIndex)
-    {
-        return tupleIndex < upPortIndex ? tupleIndex : tupleIndex + 1;
-    }
-
-    std::tuple<PortTypes&...> downPorts;
-    T S_matrix[numPorts][numPorts] {};
-    T a_vec[numPorts] {};
-    T b_vec[numPorts] {};
-};
-
-/**
- * Sallen-Key low-pass filter with a non-inverting op-amp gain stage.
- * The RIGID op-amp subgraph (R2, C2, C1, Rg, Rf, Rload) is modelled here
- * with DelayFreeRtypeAdaptor, using the same scattering matrix as
- * custom_sk_lpf_rtype.h's update_vars (up_port = 0, down-ports in the same
- * order as declared in sk_lpf.wdf: R2, C2, C1, Rg, Rf, Rload).
- */
 struct Reference_WDF
 {
     void prepare (float fs)
@@ -169,7 +74,7 @@ struct Reference_WDF
         }
     };
 
-    using RType = DelayFreeRtypeAdaptor<float, 0, ImpedanceCalc, decltype (R2), decltype (C2), decltype (C1), decltype (Rg), decltype (Rf), decltype (Rload)>;
+    using RType = chowdsp::wdft::RtypeAdaptor<float, 0, ImpedanceCalc, decltype (R2), decltype (C2), decltype (C1), decltype (Rg), decltype (Rf), decltype (Rload)>;
     RType R { R2, C2, C1, Rg, Rf, Rload };
 
     // Outer series resistor between Vin and the R-type block ("R1" in both
