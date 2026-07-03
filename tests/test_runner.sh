@@ -187,7 +187,6 @@ else
    test diode_clipper cpp jai
    test diode_circuit cpp jai netlist
    test simple_triode cpp jai
-   # test bassman_tone_stack cpp netlist
    test bassman_tone_stack cpp jai c_lang rust netlist
    test sk_lpf cpp netlist
    test baxandall_eq cpp jai c_lang rust

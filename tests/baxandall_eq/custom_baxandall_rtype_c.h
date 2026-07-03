@@ -14,7 +14,6 @@ struct R_Vars
 
 struct R_State
 {
-    float b_up;
 };
 
 static inline float update_vars (struct R_Vars* vars,
@@ -49,11 +48,31 @@ static inline float update_vars (struct R_Vars* vars,
 
 static inline float reflected (const struct R_Vars* vars, const struct R_State* state, const float* a_in)
 {
-    return state->b_up;
+    (void) state;
+    /* S[up_port][up_port] == 0, so this doesn't need a fresh a[up_port]. */
+    _Alignas (16) float a[num_ports];
+    for (int i = 0, j = 0; i < num_ports; ++i)
+    {
+        if (i == up_port)
+        {
+            a[i] = 0.0f;
+        }
+        else
+        {
+            a[i] = a_in[j];
+            j++;
+        }
+    }
+
+    float b = vars->S[up_port] * a[0];
+    for (int r = 1; r < num_ports; ++r)
+        b += vars->S[r * num_ports + up_port] * a[r];
+    return b;
 }
 
 static inline void incident (const struct R_Vars* vars, struct R_State* state, float a_up, const float* a_in, float* b_out)
 {
+    (void) state;
     _Alignas (16) float a[num_ports];
     _Alignas (16) float b[num_ports];
 
@@ -79,11 +98,7 @@ static inline void incident (const struct R_Vars* vars, struct R_State* state, f
 
     for (int i = 0, j = 0; i < num_ports; ++i)
     {
-        if (i == up_port)
-        {
-            state->b_up = b[i];
-        }
-        else
+        if (i != up_port)
         {
             b_out[j] = b[i];
             j++;
