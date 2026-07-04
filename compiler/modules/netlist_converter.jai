@@ -345,6 +345,18 @@ build_rigid_component :: (graph: *Graph, spqr_nodes: *[..]SPQR_Node) -> int
         return idx;
     }
 
+    // The r_solver treats local vertex 0 as the MNA datum (circuit ground,
+    // global node 0). Pre-seed global node 0 as local vertex 0 whenever it
+    // appears in the rigid component; otherwise the first edge's n1 gets
+    // index 0 and is treated as ground, which produces an incorrect MNA.
+    for edge : graph.edges {
+        if !edge.active continue;
+        if edge.n1 == 0 || edge.n2 == 0 {
+            array_add(*vertex_map, 0);
+            break;
+        }
+    }
+
     for edge : graph.edges {
         if !edge.active continue;
 
@@ -504,6 +516,50 @@ generate_wdf_string :: (nodes: []SPQR_Node, root: int, meta: []string) -> string
 
     print_element :: (builder: *String_Builder, nodes: []SPQR_Node, index: int, depth := 0) {
         node := nodes[index];
+
+        // A Series of [bare non-root voltage source, capacitor] is an ideal
+        // source directly in series with a cap -- the netlist gave the
+        // source no resistance at all. Emit it as a genuine Capacitive_Voltage_Source
+        // (CVs) leaf instead of descending into Series(RVs, C).
+        //
+        // A Series of [bare non-root voltage source, resistor] is a Thevenin
+        // source. Emit it as a ResistiveVoltageSource (RVs) so the reflected
+        // wave is +Vs (not the -Vs that the Series combinator would produce).
+        if node.kind == .SERIES && node.children.count == 2 {
+            child0 := nodes[node.children[0]];
+            child1 := nodes[node.children[1]];
+            vs_idx  := -1;
+            cap_idx := -1;
+            res_idx := -1;
+            if child0.kind == .LEAF && child0.leaf == .VOLTAGE_SOURCE && !child0.is_root && child1.kind == .LEAF && child1.leaf == .CAPACITOR {
+                vs_idx  = node.children[0];
+                cap_idx = node.children[1];
+            } else if child1.kind == .LEAF && child1.leaf == .VOLTAGE_SOURCE && !child1.is_root && child0.kind == .LEAF && child0.leaf == .CAPACITOR {
+                vs_idx  = node.children[1];
+                cap_idx = node.children[0];
+            } else if child0.kind == .LEAF && child0.leaf == .VOLTAGE_SOURCE && !child0.is_root && child1.kind == .LEAF && child1.leaf == .RESISTOR {
+                vs_idx  = node.children[0];
+                res_idx = node.children[1];
+            } else if child1.kind == .LEAF && child1.leaf == .VOLTAGE_SOURCE && !child1.is_root && child0.kind == .LEAF && child0.leaf == .RESISTOR {
+                vs_idx  = node.children[1];
+                res_idx = node.children[0];
+            }
+            if vs_idx >= 0 && cap_idx >= 0 {
+                vs_node  := nodes[vs_idx];
+                cap_node := nodes[cap_idx];
+                for i: 0..depth-1  print_to_builder(builder, "    ");
+                print_to_builder(builder, "CVs(%, %);\n", vs_node.component_id, cap_node.value);
+                return;
+            }
+            if vs_idx >= 0 && res_idx >= 0 {
+                vs_node  := nodes[vs_idx];
+                res_node := nodes[res_idx];
+                for i: 0..depth-1  print_to_builder(builder, "    ");
+                print_to_builder(builder, "RVs(%, %);\n", vs_node.component_id, res_node.value);
+                return;
+            }
+        }
+
         type_name := "";
         elem_name := get_element_name(node, index);
         if node.kind == .SERIES {

@@ -1256,6 +1256,18 @@ write_param :: (params_vars : *[..] string, token: *Token, idx := 0, suffix := "
     return write_param_named(params_vars, token, tprint("%1_%2", token.name, suffix), idx);
 }
 
+// Like write_param, but names the field after param_names[idx] instead of
+// token.name -- keeps a merged token's voltage param named after its
+// original leaf (e.g. "Vplus_v_value") rather than the merge's auto-generated
+// label (e.g. "S16"), consistent with every other param index on the token.
+// Returns (is_known, declared_name) so callers can look the constexpr up
+// under the name actually declared.
+write_param_own_name :: (params_vars : *[..] string, token: *Token, idx := 0) -> bool, string {
+    name := token.param_names[idx];
+    is_known := write_param_named(params_vars, token, name, idx);
+    return is_known, name;
+}
+
 get_constexpr_var :: (prefix: string, name: string) -> string {
     if global_args.lang == {
         case "cpp";
@@ -1336,10 +1348,10 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
 
             case .Ideal_Voltage_Source;
                 if ! is_input(token, inputs) {
-                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    is_known, v_param_name := write_param_own_name(*params_vars, token, 0);
                     if is_known {
                         array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
-                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
+                                                                       get_constexpr_var("Params", v_param_name)));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
@@ -1368,10 +1380,10 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
             case .Resistive_Voltage_Source;
                 is_input_source := is_input(token, inputs);
                 if ! is_input_source {
-                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    is_known, v_param_name := write_param_own_name(*params_vars, token, 0);
                     if is_known {
                         array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
-                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
+                                                                       get_constexpr_var("Params", v_param_name)));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
@@ -1388,10 +1400,10 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
             case .Root_Resistive_Voltage_Source;
                 is_input_source := is_input(token, inputs);
                 if ! is_input_source {
-                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    is_known, v_param_name := write_param_own_name(*params_vars, token, 0);
                     if is_known {
                         array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
-                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
+                                                                       get_constexpr_var("Params", v_param_name)));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
@@ -1408,10 +1420,10 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
             case .Capacitive_Voltage_Source;
                 is_input_source := is_input(token, inputs);
                 if ! is_input_source {
-                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    is_known, v_param_name := write_param_own_name(*params_vars, token, 0);
                     if is_known {
                         array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
-                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
+                                                                       get_constexpr_var("Params", v_param_name)));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
@@ -1428,10 +1440,10 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
             case .Root_Capacitive_Voltage_Source;
                 is_input_source := is_input(token, inputs);
                 if ! is_input_source {
-                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    is_known, v_param_name := write_param_own_name(*params_vars, token, 0);
                     if is_known {
                         array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
-                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
+                                                                       get_constexpr_var("Params", v_param_name)));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
@@ -1450,10 +1462,10 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
             case .Root_Capacitive_Voltage_Source_par_Resistor;
                 is_input_source := is_input(token, inputs);
                 if ! is_input_source {
-                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    is_known, v_param_name := write_param_own_name(*params_vars, token, 0);
                     if is_known {
                         array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
-                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
+                                                                       get_constexpr_var("Params", v_param_name)));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
@@ -1473,10 +1485,10 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
             case .Resistive_Capacitive_Voltage_Source;
                 is_input_source := is_input(token, inputs);
                 if ! is_input_source {
-                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    is_known, v_param_name := write_param_own_name(*params_vars, token, 0);
                     if is_known {
                         array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
-                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
+                                                                       get_constexpr_var("Params", v_param_name)));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
@@ -1753,7 +1765,7 @@ generate_updater :: (tokens: [] Token,
                     is_known := is_param_defined(token, 0);
                     if ! is_known {
                         array_add(*root_impedance_updates, tprint("// Computing voltage for: %1;", token.name));
-                        array_add(*root_impedance_updates, tprint("%2%1_V = params.%1_v_value;\n", token.name, impedances_str));
+                        array_add(*root_impedance_updates, tprint("%2%1_V = params.%3;\n", token.name, impedances_str, token.param_names[0]));
                     }
                 }
 
@@ -1778,7 +1790,7 @@ generate_updater :: (tokens: [] Token,
                     is_known := is_param_defined(token, 0);
                     if ! is_known {
                         array_add(*impedance_updates, tprint("// Computing voltage for: %1;", token.name));
-                        array_add(*impedance_updates, tprint("%2%1_V = params.%1_v_value;\n", token.name, impedances_str));
+                        array_add(*impedance_updates, tprint("%2%1_V = params.%3;\n", token.name, impedances_str, token.param_names[0]));
                     }
                 }
 
@@ -1793,7 +1805,7 @@ generate_updater :: (tokens: [] Token,
                     is_known := is_param_defined(token, 0);
                     if ! is_known {
                         array_add(*root_impedance_updates, tprint("// Computing voltage for: %1;", token.name));
-                        array_add(*root_impedance_updates, tprint("%2%1_V = params.%1_v_value;\n", token.name, impedances_str));
+                        array_add(*root_impedance_updates, tprint("%2%1_V = params.%3;\n", token.name, impedances_str, token.param_names[0]));
                     }
                 }
 
@@ -1808,7 +1820,7 @@ generate_updater :: (tokens: [] Token,
                     is_known := is_param_defined(token, 0);
                     if ! is_known {
                         array_add(*impedance_updates, tprint("// Computing voltage for: %1;", token.name));
-                        array_add(*impedance_updates, tprint("%2%1_V = params.%1_v_value;\n", token.name, impedances_str));
+                        array_add(*impedance_updates, tprint("%2%1_V = params.%3;\n", token.name, impedances_str, token.param_names[0]));
                     }
                 }
 
@@ -1823,7 +1835,7 @@ generate_updater :: (tokens: [] Token,
                     is_known := is_param_defined(token, 0);
                     if ! is_known {
                         array_add(*root_impedance_updates, tprint("// Computing voltage for: %1;", token.name));
-                        array_add(*root_impedance_updates, tprint("%2%1_V = params.%1_v_value;\n", token.name, impedances_str));
+                        array_add(*root_impedance_updates, tprint("%2%1_V = params.%3;\n", token.name, impedances_str, token.param_names[0]));
                     }
                 }
 
@@ -1838,7 +1850,7 @@ generate_updater :: (tokens: [] Token,
                     is_known := is_param_defined(token, 0);
                     if ! is_known {
                         array_add(*root_impedance_updates, tprint("// Computing voltage for: %1;", token.name));
-                        array_add(*root_impedance_updates, tprint("%2%1_V = params.%1_v_value;\n", token.name, impedances_str));
+                        array_add(*root_impedance_updates, tprint("%2%1_V = params.%3;\n", token.name, impedances_str, token.param_names[0]));
                     }
                 }
 
@@ -1857,7 +1869,7 @@ generate_updater :: (tokens: [] Token,
                     is_known := is_param_defined(token, 0);
                     if ! is_known {
                         array_add(*impedance_updates, tprint("// Computing voltage for: %1;", token.name));
-                        array_add(*impedance_updates, tprint("%2%1_V = params.%1_v_value;\n", token.name, impedances_str));
+                        array_add(*impedance_updates, tprint("%2%1_V = params.%3;\n", token.name, impedances_str, token.param_names[0]));
                     }
                 }
 

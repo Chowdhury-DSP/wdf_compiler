@@ -98,10 +98,12 @@ int main()
     Impedances impedances {};
     Params params {
 #if NETLIST
-        // @TODO!!!
-        // .Rd_value = 0.5f * Reference_WDF::Rdistortion,
-        .S16_v_value = 0.0f, // what is this...?
-        .Vin_res_value = 1.0e-6f, // Ideally this would a capacitive voltage source... even if not, we need the default value here
+        .Vplus_v_value = 4.5f,
+        .R26_params = {
+            .Ro = 1.0e-1f,
+            .Ag = 100.0f,
+            .Ri = 10.0e6f
+        },
 #else
         .Rd_value = 0.5f * Reference_WDF::Rdistortion,
 #endif

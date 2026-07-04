@@ -36,7 +36,7 @@ fn main() {
         L1_value : 2.0e-01,
         Rl2_value : 1.0e+04,
         Rp_value : 4.0e+03,
-        S4_v_value : 1.2e+00,
+        Vcc_v_value : 1.2e+00,
         Vcc_cap_value : 1.0e-6,
         C1_value :  1.0e-08,
         Cp2_value : 7.0e-09,

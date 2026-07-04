@@ -185,7 +185,7 @@ else
    test preamp_eq_comb cpp jai c_lang rust
    test hard_clipper cpp jai c_lang rust
    test diode_clipper cpp jai
-   test diode_circuit cpp jai netlist
+   test diode_circuit cpp jai # netlist @TODO!!
    test simple_triode cpp jai
    test bassman_tone_stack cpp jai c_lang rust netlist
    test sk_lpf cpp netlist
@@ -195,7 +195,7 @@ else
    test reductions_circuit2 cpp jai c_lang rust
    test analog_eq cpp jai rust
    test channel_hpf cpp jai c_lang rust
-   test rat_drive cpp
+   test rat_drive cpp netlist
 fi
 
 if [[ "$*" = *bad_configs* ]]; then

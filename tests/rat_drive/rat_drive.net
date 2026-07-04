@@ -27,9 +27,9 @@ C4 nmin nop 100p
 * OUTPUT NETWORK
 C7  nop   n4 4.7u
 R6   n4 nout 1k
-DP nout    0 ; root output:V custom:1,prefix=wdf_lib::diode::,params=Diode_Params,vars=Diode_Vars,updater=update_vars,compute=root_compute
+DP nout    0 ; root output:V custom:1,prefix=wdf_lib::diode_pair::,params=Diode_Pair_Params,vars=Diode_Pair_Vars,updater=update_vars,compute=root_compute
 
 .tran 0 50m 0 10u
-.meta:include:<wdf_lib_diode.h>
+.meta:include:<wdf_lib_diode_pair.h>
 .backanno
 .end

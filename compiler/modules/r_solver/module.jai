@@ -411,7 +411,17 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
         adapt_num := combine(adapt_det_v1, adapt_det_v2, .SUB, exprs);
 
         // Cleared adaptation equation: 2*adapt_num - det_Xr = 0.
-        adapt_eq_g := simplify(
+        //
+        // rational_simplify (not plain simplify) matters here: det_Xr and
+        // adapt_num are each built from many cofactor-expansion sub-terms
+        // that only cancel once fully expanded and collected. Left as
+        // pattern-rewritten-but-uncollected, the generated code computes a
+        // small true coefficient as the difference of much larger
+        // intermediate terms -- catastrophic cancellation that can round to
+        // an outright spurious 0.0 in float32 (seen in practice as a
+        // divide-by-zero downstream, since this coefficient is the shared
+        // denominator for G_a and everything substituted from it).
+        adapt_eq_g := rational_simplify(
             expr_bin(.SUB, expr_mul(two, adapt_num, exprs), det_Xr, exprs), exprs);
 
         adapt_solutions_g := solve(.[adapt_eq_g], .[Ga], exprs);
@@ -439,7 +449,7 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
         result.adapt_impedance = simplify(expr_div(one, adapt_g, exprs), exprs);
 
         // Substitute the solved G_a back into all S entries.
-        print("Subsistuting %\n", ga_name);
+        // print("Subsistuting %\n", ga_name);
         substitute_symbol_name(ga_name, adapt_g, exprs);
         for i : 0..n_ports*n_ports-1 {
             e := result.S_matrix[i];

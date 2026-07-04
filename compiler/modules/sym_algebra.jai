@@ -181,28 +181,16 @@ substitute :: (old_expr: Expr_ID, new_expr: Expr_ID, exprs: *[..] Expr) -> Expr_
 // Sentinel meaning "zero / absent expression"
 NO_EXPR : Expr_ID : -1;
 
-// Represents:  sum_i(coeffs[i] * vars[i])  +  sum_i,j(quad[i*n+j] * vars[i] * vars[j])  +  constant
-// where coeffs is parallel to the `vars` array passed to linearize(), and
-// quad is an n*n row-major matrix of pairwise-product coefficients.
+// Represents:  sum_i(coeffs[i] * vars[i])  +  constant
+// where coeffs is parallel to the `vars` array passed to linearize().
 // NO_EXPR in any slot means that term is structurally zero.
-//
-// The quad terms exist to tolerate expressions that are only *transiently*
-// quadratic: e.g. the R-type adapt-port equation is guaranteed linear in G_a
-// by the matrix determinant lemma, but symbolic_det's raw cofactor expansion
-// can produce a MUL of two G_a-dependent sub-expressions whose G_a^2 term
-// only cancels once summed with a sibling term elsewhere in the tree. Rather
-// than requiring each individual MUL node to already be manifestly linear,
-// linearize() carries quadratic terms up through ADD/SUB and only requires
-// the caller (solve()) to confirm they fold away to zero once fully combined.
 Linear :: struct {
     coeffs:   [..] Expr_ID;
-    quad:     [..] Expr_ID;
     constant: Expr_ID;
 }
 
 linear_is_constant :: (l: Linear) -> bool {
     for l.coeffs  if it != NO_EXPR  return false;
-    for l.quad    if it != NO_EXPR  return false;
     return true;
 }
 
@@ -219,16 +207,12 @@ combine :: (a: Expr_ID, b: Expr_ID, op: Expr_Kind, exprs: *[..] Expr) -> Expr_ID
     return expr_bin(op, a, b, exprs);
 }
 
-// Decompose `e` into a linear combination of `vars`, tolerating terms up to
-// quadratic in `vars` (see Linear's doc comment) -- callers that need a
-// strictly-linear result must check that the returned `.quad` entries fold
-// to zero (solve() does this).
-// Each entry in the returned Linear.coeffs/.quad is parallel to `vars`.
-// Asserts if the expression has a term of cubic or higher degree in `vars`.
+// Decompose `e` into a linear combination of `vars`.
+// Each entry in the returned Linear.coeffs is parallel to `vars`.
+// Asserts if the expression is not linear in the given variables.
 linearize :: (e: Expr_ID, vars: [] Expr_ID, exprs: *[..] Expr) -> Linear {
     result: Linear;
     for i: 0..vars.count-1  array_add(*result.coeffs, NO_EXPR);
-    for i: 0..vars.count*vars.count-1  array_add(*result.quad, NO_EXPR);
     result.constant = NO_EXPR;
 
     // Copy the node before recursing: array_add inside recursive calls may
@@ -262,8 +246,6 @@ linearize :: (e: Expr_ID, vars: [] Expr_ID, exprs: *[..] Expr) -> Linear {
             la := linearize(expr.left, vars, exprs);
             for i: 0..vars.count-1
                 result.coeffs[i] = combine(NO_EXPR, la.coeffs[i], .SUB, exprs);
-            for i: 0..vars.count*vars.count-1
-                result.quad[i] = combine(NO_EXPR, la.quad[i], .SUB, exprs);
             result.constant = combine(NO_EXPR, la.constant, .SUB, exprs);
 
         case .ADD; #through;
@@ -272,8 +254,6 @@ linearize :: (e: Expr_ID, vars: [] Expr_ID, exprs: *[..] Expr) -> Linear {
             lb := linearize(expr.right, vars, exprs);
             for i: 0..vars.count-1
                 result.coeffs[i] = combine(la.coeffs[i], lb.coeffs[i], expr.kind, exprs);
-            for i: 0..vars.count*vars.count-1
-                result.quad[i] = combine(la.quad[i], lb.quad[i], expr.kind, exprs);
             result.constant = combine(la.constant, lb.constant, expr.kind, exprs);
 
         case .MUL;
@@ -281,53 +261,16 @@ linearize :: (e: Expr_ID, vars: [] Expr_ID, exprs: *[..] Expr) -> Linear {
             lb := linearize(expr.right, vars, exprs);
             la_const := linear_is_constant(la);
             lb_const := linear_is_constant(lb);
-            if la_const || lb_const {
-                scalar   := ifx la_const then la.constant else lb.constant;
-                var_part := ifx la_const then lb           else la;
-                if scalar != NO_EXPR {
-                    for i: 0..vars.count-1 {
-                        if var_part.coeffs[i] != NO_EXPR
-                            result.coeffs[i] = expr_mul(scalar, var_part.coeffs[i], exprs);
-                    }
-                    for i: 0..vars.count*vars.count-1 {
-                        if var_part.quad[i] != NO_EXPR
-                            result.quad[i] = expr_mul(scalar, var_part.quad[i], exprs);
-                    }
-                    if var_part.constant != NO_EXPR
-                        result.constant = expr_mul(scalar, var_part.constant, exprs);
-                }
-            } else {
-                // Neither side is manifestly constant in `vars`. This is only
-                // representable if the product has no term above quadratic
-                // degree -- i.e. neither side may itself already carry a
-                // quadratic term (that would make the product cubic+).
-                la_has_quad := false;
-                for q : la.quad  if q != NO_EXPR { la_has_quad = true; break; }
-                lb_has_quad := false;
-                for q : lb.quad  if q != NO_EXPR { lb_has_quad = true; break; }
-                assert(!la_has_quad && !lb_has_quad,
-                       "Expression has a term of cubic or higher degree in the given variables!");
-
-                if la.constant != NO_EXPR && lb.constant != NO_EXPR
-                    result.constant = expr_mul(la.constant, lb.constant, exprs);
-
+            assert(la_const || lb_const, "Expression is not linear in the given variables!");
+            scalar   := ifx la_const then la.constant else lb.constant;
+            var_part := ifx la_const then lb           else la;
+            if scalar != NO_EXPR {
                 for i: 0..vars.count-1 {
-                    term: Expr_ID = NO_EXPR;
-                    if la.constant != NO_EXPR && lb.coeffs[i] != NO_EXPR
-                        term = combine(term, expr_mul(la.constant, lb.coeffs[i], exprs), .ADD, exprs);
-                    if la.coeffs[i] != NO_EXPR && lb.constant != NO_EXPR
-                        term = combine(term, expr_mul(la.coeffs[i], lb.constant, exprs), .ADD, exprs);
-                    result.coeffs[i] = term;
+                    if var_part.coeffs[i] != NO_EXPR
+                        result.coeffs[i] = expr_mul(scalar, var_part.coeffs[i], exprs);
                 }
-
-                for i: 0..vars.count-1 {
-                    for j: 0..vars.count-1 {
-                        term: Expr_ID = NO_EXPR;
-                        if la.coeffs[i] != NO_EXPR && lb.coeffs[j] != NO_EXPR
-                            term = combine(term, expr_mul(la.coeffs[i], lb.coeffs[j], exprs), .ADD, exprs);
-                        result.quad[i * vars.count + j] = term;
-                    }
-                }
+                if var_part.constant != NO_EXPR
+                    result.constant = expr_mul(scalar, var_part.constant, exprs);
             }
 
         case .DIV;
@@ -339,10 +282,6 @@ linearize :: (e: Expr_ID, vars: [] Expr_ID, exprs: *[..] Expr) -> Linear {
                 for i: 0..vars.count-1 {
                     if la.coeffs[i] != NO_EXPR
                         result.coeffs[i] = expr_div(la.coeffs[i], divisor, exprs);
-                }
-                for i: 0..vars.count*vars.count-1 {
-                    if la.quad[i] != NO_EXPR
-                        result.quad[i] = expr_div(la.quad[i], divisor, exprs);
                 }
                 if la.constant != NO_EXPR
                     result.constant = expr_div(la.constant, divisor, exprs);
@@ -620,21 +559,6 @@ solve :: (equations: [] Expr_ID, solve_for: [] Expr_ID, exprs: *[..] Expr) -> [.
 
     for i: 0..n-1 {
         lin := linearize(equations[i], solve_for, exprs);
-
-        // linearize() tolerates transient quadratic terms (see Linear's doc
-        // comment) that are only provably zero once fully combined. Confirm
-        // that's actually the case here before discarding them -- if any
-        // quad entry doesn't fold to the constant 0, the equation genuinely
-        // isn't linear in solve_for and we must not silently drop the term.
-        for q, qi : lin.quad {
-            if q == NO_EXPR  continue;
-            q_simplified := simplify(q, exprs);
-            is_zero := exprs.*[q_simplified].kind == .CONST && exprs.*[q_simplified].value == 0;
-            assert(is_zero,
-                   tprint("Equation % is not linear in the given variables (quadratic term in % * % did not cancel to zero: %)",
-                          i, solve_for[qi / solve_for.count], solve_for[qi % solve_for.count], print_expr(q_simplified, exprs.*)));
-        }
-
         for j: 0..n-1 {
             a_ij := lin.coeffs[j];
             if a_ij != NO_EXPR  fold(a_ij, exprs);
@@ -1006,6 +930,261 @@ simplify :: (e: Expr_ID, exprs: *[..] Expr) -> Expr_ID {
     fold(e, exprs);             // clean up any new constant sub-expressions
     simplify_node(e, exprs);    // second pass: catches opportunities exposed above
     fold(e, exprs);
+    return e;
+}
+
+
+//==================================================
+// RATIONAL CANONICALIZATION
+//
+// `simplify`/`fold` above are pattern-rewrite heuristics: they cancel a
+// handful of recognized shapes but never actually collect like terms across
+// a sum. That's normally fine, but it breaks down for expressions built by
+// repeated cofactor expansion (symbolic_det / Cramer's rule), where the same
+// quantity can appear split across many differently-shaped sub-terms that
+// only cancel once fully multiplied out. Left uncancelled, the generated
+// code computes a small true value as the difference of much larger
+// intermediate terms -- exactly the setup for catastrophic cancellation
+// (and, in float32, an outright spurious 0.0).
+//
+// rational_simplify() instead puts the expression over one canonical
+// (numerator polynomial) / (denominator polynomial) fraction, expanding
+// every product and collecting every like monomial, so any term that
+// algebraically cancels is actually removed rather than computed and
+// subtracted at runtime. It does not attempt numerator/denominator GCD
+// cancellation, so it's applied selectively (the R-type adapt-port equation)
+// rather than as a blanket replacement for `simplify` -- unlike that
+// equation, the full S-matrix has enough compounded divisions that a naive
+// cross-multiplied denominator could grow unreasonably large.
+
+Mono_Factor :: struct {
+    name: string;
+    exp:  int;  // always > 0
+}
+
+// Sorted by name, no duplicate names (merged), no zero-exponent entries.
+Monomial :: [..] Mono_Factor;
+
+string_less :: (a: string, b: string) -> bool {
+    n := min(a.count, b.count);
+    for i: 0..n-1 {
+        if a[i] != b[i]  return a[i] < b[i];
+    }
+    return a.count < b.count;
+}
+
+monomial_eq :: (a: Monomial, b: Monomial) -> bool {
+    if a.count != b.count  return false;
+    for i: 0..a.count-1 {
+        if a[i].name != b[i].name || a[i].exp != b[i].exp  return false;
+    }
+    return true;
+}
+
+// Merge two sorted factor lists, summing exponents for shared names.
+monomial_mul :: (a: Monomial, b: Monomial) -> Monomial {
+    result: Monomial;
+    ai := 0;
+    bi := 0;
+    while ai < a.count && bi < b.count {
+        if a[ai].name == b[bi].name {
+            array_add(*result, Mono_Factor.{ name = a[ai].name, exp = a[ai].exp + b[bi].exp });
+            ai += 1;
+            bi += 1;
+        } else if string_less(a[ai].name, b[bi].name) {
+            array_add(*result, a[ai]);
+            ai += 1;
+        } else {
+            array_add(*result, b[bi]);
+            bi += 1;
+        }
+    }
+    while ai < a.count { array_add(*result, a[ai]); ai += 1; }
+    while bi < b.count { array_add(*result, b[bi]); bi += 1; }
+    return result;
+}
+
+// A sum of monomial terms with integer coefficients. Canonical form: no two
+// terms share a monomial, and no term has a zero coefficient.
+Poly_Term :: struct {
+    coeff: s64;
+    mono:  Monomial;
+}
+Poly :: [..] Poly_Term;
+
+poly_from_const :: (c: s64) -> Poly {
+    p: Poly;
+    if c != 0  array_add(*p, Poly_Term.{ coeff = c });
+    return p;
+}
+
+poly_from_symbol :: (name: string) -> Poly {
+    p: Poly;
+    term: Poly_Term;
+    term.coeff = 1;
+    array_add(*term.mono, Mono_Factor.{ name = name, exp = 1 });
+    array_add(*p, term);
+    return p;
+}
+
+poly_neg :: (a: Poly) -> Poly {
+    p: Poly;
+    for term : a  array_add(*p, Poly_Term.{ coeff = -term.coeff, mono = term.mono });
+    return p;
+}
+
+// Add (sign=1) or subtract (sign=-1) b into a, merging like monomials and
+// dropping any that cancel to zero.
+poly_add :: (a: Poly, b: Poly, sign: s64 = 1) -> Poly {
+    result: Poly;
+    for term : a  array_add(*result, term);
+    for term : b {
+        found := false;
+        for *rterm : result {
+            if monomial_eq(rterm.mono, term.mono) {
+                rterm.coeff += term.coeff * sign;
+                found = true;
+                break;
+            }
+        }
+        if !found  array_add(*result, Poly_Term.{ coeff = term.coeff * sign, mono = term.mono });
+    }
+    cleaned: Poly;
+    for term : result  if term.coeff != 0  array_add(*cleaned, term);
+    return cleaned;
+}
+
+poly_mul :: (a: Poly, b: Poly) -> Poly {
+    result: Poly;
+    for ta : a {
+        for tb : b {
+            new_mono := monomial_mul(ta.mono, tb.mono);
+            new_coeff := ta.coeff * tb.coeff;
+            found := false;
+            for *rterm : result {
+                if monomial_eq(rterm.mono, new_mono) {
+                    rterm.coeff += new_coeff;
+                    found = true;
+                    break;
+                }
+            }
+            if !found  array_add(*result, Poly_Term.{ coeff = new_coeff, mono = new_mono });
+        }
+    }
+    cleaned: Poly;
+    for term : result  if term.coeff != 0  array_add(*cleaned, term);
+    return cleaned;
+}
+
+// A single canonical fraction: num / den, each a collected Poly.
+Rational :: struct {
+    num: Poly;
+    den: Poly;
+}
+
+rat_from_const  :: (c: s64)      -> Rational { r: Rational; r.num = poly_from_const(c);    r.den = poly_from_const(1); return r; }
+rat_from_symbol :: (name: string) -> Rational { r: Rational; r.num = poly_from_symbol(name); r.den = poly_from_const(1); return r; }
+rat_neg :: (a: Rational) -> Rational { r: Rational; r.num = poly_neg(a.num); r.den = a.den; return r; }
+
+rat_add :: (a: Rational, b: Rational, sign: s64 = 1) -> Rational {
+    r: Rational;
+    r.num = poly_add(poly_mul(a.num, b.den), poly_mul(b.num, a.den), sign);
+    r.den = poly_mul(a.den, b.den);
+    return r;
+}
+
+rat_mul :: (a: Rational, b: Rational) -> Rational {
+    r: Rational;
+    r.num = poly_mul(a.num, b.num);
+    r.den = poly_mul(a.den, b.den);
+    return r;
+}
+
+rat_div :: (a: Rational, b: Rational) -> Rational {
+    r: Rational;
+    r.num = poly_mul(a.num, b.den);
+    r.den = poly_mul(a.den, b.num);
+    return r;
+}
+
+// Converts `e` into canonical (numerator poly)/(denominator poly) form.
+// Memoized by Expr_ID: the DAG built by symbolic_det's cofactor-expansion
+// cache shares sub-expressions extensively, and without memoization here
+// that sharing would turn into redundant (potentially exponential) work.
+to_rational :: (e: Expr_ID, exprs: [] Expr, valid: *[..] bool, cache: *[..] Rational) -> Rational {
+    if e < valid.count && valid.*[e]  return cache.*[e];
+
+    expr := exprs[e];
+    r: Rational;
+    if expr.kind == {
+        case .CONST;  r = rat_from_const(expr.value);
+        case .SYMBOL; r = rat_from_symbol(expr.name);
+        case .NEG;    r = rat_neg(to_rational(expr.left, exprs, valid, cache));
+        case .ADD;    r = rat_add(to_rational(expr.left, exprs, valid, cache), to_rational(expr.right, exprs, valid, cache),  1);
+        case .SUB;    r = rat_add(to_rational(expr.left, exprs, valid, cache), to_rational(expr.right, exprs, valid, cache), -1);
+        case .MUL;    r = rat_mul(to_rational(expr.left, exprs, valid, cache), to_rational(expr.right, exprs, valid, cache));
+        case .DIV;    r = rat_div(to_rational(expr.left, exprs, valid, cache), to_rational(expr.right, exprs, valid, cache));
+    }
+
+    if e >= valid.count {
+        array_resize(valid, e + 1, initialize=true);
+        array_resize(cache, e + 1, initialize=true);
+    }
+    valid.*[e] = true;
+    cache.*[e] = r;
+    return r;
+}
+
+poly_to_expr :: (p: Poly, exprs: *[..] Expr) -> Expr_ID {
+    result: Expr_ID = NO_EXPR;
+    for term : p {
+        if term.coeff == 0  continue;
+
+        mono_expr: Expr_ID = NO_EXPR;
+        for factor : term.mono {
+            for i: 0..factor.exp-1 {
+                sym := expr_symbol(factor.name, exprs);
+                mono_expr = ifx mono_expr == NO_EXPR then sym else expr_bin(.MUL, mono_expr, sym, exprs);
+            }
+        }
+
+        term_expr: Expr_ID;
+        if mono_expr == NO_EXPR {
+            term_expr = expr_const(term.coeff, exprs);
+        } else if term.coeff == 1 {
+            term_expr = mono_expr;
+        } else if term.coeff == -1 {
+            term_expr = expr_neg(mono_expr, exprs);
+        } else {
+            term_expr = expr_bin(.MUL, expr_const(term.coeff, exprs), mono_expr, exprs);
+        }
+
+        result = ifx result == NO_EXPR then term_expr else expr_bin(.ADD, result, term_expr, exprs);
+    }
+    if result == NO_EXPR  return expr_const(0, exprs);
+    return result;
+}
+
+rational_to_expr :: (r: Rational, exprs: *[..] Expr) -> Expr_ID {
+    num_expr := poly_to_expr(r.num, exprs);
+    den_is_one := r.den.count == 1 && r.den[0].coeff == 1 && r.den[0].mono.count == 0;
+    if den_is_one  return num_expr;
+    den_expr := poly_to_expr(r.den, exprs);
+    return expr_bin(.DIV, num_expr, den_expr, exprs);
+}
+
+// Puts `e` over one canonical fraction with every product expanded and every
+// like monomial collected, so algebraically-cancelling terms are actually
+// removed instead of computed and subtracted at runtime. Overwrites `e`'s
+// slot in place (like fold()/simplify()) so existing references by ID stay
+// valid; the fresh nodes it builds only ever reference newly-allocated or
+// pre-existing leaf symbols, so this can't introduce a self-reference.
+rational_simplify :: (e: Expr_ID, exprs: *[..] Expr) -> Expr_ID {
+    valid: [..] bool;
+    cache: [..] Rational;
+    r := to_rational(e, exprs.*, *valid, *cache);
+    canonical := rational_to_expr(r, exprs);
+    exprs.*[e] = exprs.*[canonical];
     return e;
 }
 
