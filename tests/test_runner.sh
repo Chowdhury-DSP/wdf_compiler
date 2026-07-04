@@ -185,7 +185,7 @@ else
    test preamp_eq_comb cpp jai c_lang rust
    test hard_clipper cpp jai c_lang rust
    test diode_clipper cpp jai
-   test diode_circuit cpp jai # netlist @TODO!!
+   test diode_circuit cpp jai netlist
    test simple_triode cpp jai
    test bassman_tone_stack cpp jai c_lang rust netlist
    test sk_lpf cpp netlist

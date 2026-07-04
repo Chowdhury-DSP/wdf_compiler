@@ -537,10 +537,12 @@ generate_wdf_string :: (nodes: []SPQR_Node, root: int, meta: []string) -> string
             } else if child1.kind == .LEAF && child1.leaf == .VOLTAGE_SOURCE && !child1.is_root && child0.kind == .LEAF && child0.leaf == .CAPACITOR {
                 vs_idx  = node.children[1];
                 cap_idx = node.children[0];
-            } else if child0.kind == .LEAF && child0.leaf == .VOLTAGE_SOURCE && !child0.is_root && child1.kind == .LEAF && child1.leaf == .RESISTOR {
+            } else if child0.kind == .LEAF && child0.leaf == .VOLTAGE_SOURCE && !child0.is_root && !child0.is_input
+                    && child1.kind == .LEAF && child1.leaf == .RESISTOR && child1.value.count > 0 {
                 vs_idx  = node.children[0];
                 res_idx = node.children[1];
-            } else if child1.kind == .LEAF && child1.leaf == .VOLTAGE_SOURCE && !child1.is_root && child0.kind == .LEAF && child0.leaf == .RESISTOR {
+            } else if child1.kind == .LEAF && child1.leaf == .VOLTAGE_SOURCE && !child1.is_root && !child1.is_input
+                    && child0.kind == .LEAF && child0.leaf == .RESISTOR && child0.value.count > 0 {
                 vs_idx  = node.children[1];
                 res_idx = node.children[0];
             }
