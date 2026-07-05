@@ -1,11 +1,15 @@
 #import "Basic";
 CLI :: #import "Command_Line";
 File :: #import "File";
+Math :: #import "Math";
 Process :: #import "Process";
-#import "Print_Color";
-#load "wdf_parser.jai";
-#load "scratch.jai";
-#load "netlist_converter.jai";
+String :: #import "String";
+Sort :: #import "Sort";
+#import "wdf_parser";
+#import "scratch";
+#import "utils";
+#import "netlist_converter";
+#import "r_solver";
 
 Args :: struct {
     verbose      : bool = false;     @"?Verbose"
@@ -67,13 +71,119 @@ main :: () {
 
     if args.netlist {
         verbose_print("Converting input from netlist...\n");
-        graph, sp_nodes := parse_netlist(file_str);
-        root := reduce_to_sp_tree(*graph, *sp_nodes);
-        root = reroot(sp_nodes);
-        file_str = generate_wdf_string(sp_nodes, root);
-        if (global_args.verbose) {
-            print_sp_graph(sp_nodes, root);
+        graph, spqr_nodes, op_amps, circuit_meta := parse_netlist(file_str);
+
+        // ".meta root:rigid" makes the RIGID (R-type) node the literal tree
+        // root (a single compute() step) instead of adapting it under
+        // whichever leaf is annotated "; ... root". Mutually exclusive with
+        // that leaf annotation.
+        root_at_rigid := false;
+        for i : 0..circuit_meta.count-1 {
+            if circuit_meta[i] == "root:rigid" {
+                root_at_rigid = true;
+                array_ordered_remove_by_index(*circuit_meta, i);
+                break;
+            }
         }
+        if root_at_rigid {
+            for node : spqr_nodes {
+                error_assert(!node.is_root,
+                       tprint("Netlist Error: '.meta root:rigid' was specified, but component '%' is also annotated as root. These are mutually exclusive.", node.component_id));
+            }
+        }
+
+        root := reduce_to_spqr_tree(*graph, *spqr_nodes);
+        root = reroot(spqr_nodes, root, prefer_rigid_root = root_at_rigid);
+        if (global_args.verbose) {
+            print_spqr_graph(spqr_nodes, root);
+        }
+
+        // Steps A+B: symbolically solve each RIGID node and emit a C++ sidecar header.
+        //
+        // ordered_child_names is built by mapping node.children (in the order that
+        // wdf_compiler will pass R/G pairs to update_vars) to port impedance names.
+        // This order may differ from rigid_edges order when reroot() used an
+        // unordered-remove, so we look up each child in rigid_edges explicitly.
+        //
+        // The sidecar header is written next to output_file; an include: directive
+        // is added to circuit_meta so generate_wdf_string injects it into meta:.
+
+        // Determine output directory once (everything up to and including last '/').
+        output_dir := "";
+        for i : 0..output_file.count-1 {
+            c := output_file[output_file.count - 1 - i];
+            if c == #char "/" || c == #char "\\" {
+                output_dir = String.slice(output_file, 0, output_file.count - i);
+                break;
+            }
+        }
+
+        rigid_solve_count := 0;
+        for node : spqr_nodes {
+            if node.kind != .RIGID  continue;
+            rigid_idx := it_index;  // capture before any nested loops shadow it_index
+
+            topo   := rtype_topology_from_spqr(spqr_nodes, op_amps, rigid_idx);
+            result := solve_rtype_scattering(topo);
+            rigid_solve_count += 1;
+
+            node_name := get_element_name(node, rigid_idx);
+            print("Solved RIGID node %: ports=%, adapt_port=%\n",
+                  node_name, result.n_ports, result.adapt_port);
+
+            // Build ordered_child_names: port impedance name for each entry in
+            // node.children, looked up via rigid_edges (which share the same order
+            // as port_impedance_names from the topology).
+            ordered_child_names: [..] string;
+            for child_idx : node.children {
+                for edge, k : node.rigid_edges {
+                    if edge.child == child_idx {
+                        array_add(*ordered_child_names, result.port_impedance_names[k]);
+                        break;
+                    }
+                }
+            }
+            assert(ordered_child_names.count == node.children.count,
+                   "RIGID node child/edge mismatch");
+
+            // Generate the sidecar header string. The wdf_lib_rtype_helpers.h
+            // matmul helpers are only available in C++; other languages fall
+            // back to the manual-loop codegen inside generate_rtype_header.
+            header_str := generate_rtype_header(node_name, *result, ordered_child_names, args.lang);
+
+            // Write the sidecar file next to the output file.
+            sidecar_name := tprint("%_rtype.h", node_name);
+            sidecar_path := tprint("%%", output_dir, sidecar_name);
+            sidecar_file, ok := File.file_open(sidecar_path, true);
+            if ok {
+                File.file_write(*sidecar_file, header_str);
+                print("Wrote rtype header: %\n", sidecar_path);
+            } else {
+                print("Warning: could not write rtype header '%'\n", sidecar_path);
+            }
+
+            // Set node.value so generate_wdf_string emits the Custom(...) args.
+            // Adapted (non-root) nodes need the incident=/reflected= split;
+            // a root node has no parent to defer to, so it resolves
+            // everything in one stateless compute= step.
+            if result.adapt_port >= 0 {
+                n_children := result.n_ports - 1;
+                spqr_nodes[rigid_idx].value = tprint(
+                    "%, cpp_prefix=rtype_%::, params=R_Params, vars=R_Vars, updater=update_vars, incident=incident, reflected=reflected",
+                    n_children, node_name);
+            } else {
+                spqr_nodes[rigid_idx].value = tprint(
+                    "%, cpp_prefix=rtype_%::, params=R_Params, vars=R_Vars, updater=update_vars, compute=compute",
+                    result.n_ports, node_name);
+            }
+
+            // Inject include: directive so the meta: section picks up the sidecar.
+            array_add(*circuit_meta, tprint("include:\"%\"", sidecar_name));
+        }
+        if rigid_solve_count > 0 { print("Total RIGID nodes solved: %\n", rigid_solve_count); }
+
+        file_str = generate_wdf_string(spqr_nodes, root, circuit_meta);
+        // print(file_str);
     }
 
     file_str = remove_comments(file_str);
@@ -88,7 +198,7 @@ main :: () {
     for *output : outputs { output.* = String.trim(output.*); }
 
     meta_info := parse_meta_info(sections.meta);
-    circuit_tokens := parse_circuit(sections.circuit);
+    circuit_tokens := parse_circuit(sections.circuit, args.lang);
 
     if ! args.no_reduce {
         circuit_tokens = reduce_circuit(circuit_tokens, inputs, outputs);
@@ -996,6 +1106,10 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
         for *token : tokens {
             if token.name == output_info[1] {
                 output_token = token;
+                if (token.type == .Custom) {
+                    error_assert(token.children.count == 1, "Only custom nodes with 1 child may be used for outputs!");
+                    output_token = *tokens[token.children[0]];
+                }
                 break;
             }
         }
@@ -1142,6 +1256,18 @@ write_param :: (params_vars : *[..] string, token: *Token, idx := 0, suffix := "
     return write_param_named(params_vars, token, tprint("%1_%2", token.name, suffix), idx);
 }
 
+// Like write_param, but names the field after param_names[idx] instead of
+// token.name -- keeps a merged token's voltage param named after its
+// original leaf (e.g. "Vplus_v_value") rather than the merge's auto-generated
+// label (e.g. "S16"), consistent with every other param index on the token.
+// Returns (is_known, declared_name) so callers can look the constexpr up
+// under the name actually declared.
+write_param_own_name :: (params_vars : *[..] string, token: *Token, idx := 0) -> bool, string {
+    name := token.param_names[idx];
+    is_known := write_param_named(params_vars, token, name, idx);
+    return is_known, name;
+}
+
 get_constexpr_var :: (prefix: string, name: string) -> string {
     if global_args.lang == {
         case "cpp";
@@ -1222,10 +1348,10 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
 
             case .Ideal_Voltage_Source;
                 if ! is_input(token, inputs) {
-                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    is_known, v_param_name := write_param_own_name(*params_vars, token, 0);
                     if is_known {
                         array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
-                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
+                                                                       get_constexpr_var("Params", v_param_name)));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
@@ -1254,10 +1380,10 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
             case .Resistive_Voltage_Source;
                 is_input_source := is_input(token, inputs);
                 if ! is_input_source {
-                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    is_known, v_param_name := write_param_own_name(*params_vars, token, 0);
                     if is_known {
                         array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
-                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
+                                                                       get_constexpr_var("Params", v_param_name)));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
@@ -1274,10 +1400,10 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
             case .Root_Resistive_Voltage_Source;
                 is_input_source := is_input(token, inputs);
                 if ! is_input_source {
-                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    is_known, v_param_name := write_param_own_name(*params_vars, token, 0);
                     if is_known {
                         array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
-                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
+                                                                       get_constexpr_var("Params", v_param_name)));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
@@ -1294,10 +1420,10 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
             case .Capacitive_Voltage_Source;
                 is_input_source := is_input(token, inputs);
                 if ! is_input_source {
-                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    is_known, v_param_name := write_param_own_name(*params_vars, token, 0);
                     if is_known {
                         array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
-                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
+                                                                       get_constexpr_var("Params", v_param_name)));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
@@ -1314,10 +1440,10 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
             case .Root_Capacitive_Voltage_Source;
                 is_input_source := is_input(token, inputs);
                 if ! is_input_source {
-                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    is_known, v_param_name := write_param_own_name(*params_vars, token, 0);
                     if is_known {
                         array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
-                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
+                                                                       get_constexpr_var("Params", v_param_name)));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
@@ -1336,10 +1462,10 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
             case .Root_Capacitive_Voltage_Source_par_Resistor;
                 is_input_source := is_input(token, inputs);
                 if ! is_input_source {
-                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    is_known, v_param_name := write_param_own_name(*params_vars, token, 0);
                     if is_known {
                         array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
-                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
+                                                                       get_constexpr_var("Params", v_param_name)));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
@@ -1359,10 +1485,10 @@ generate_circuit_vars :: (tokens: [] Token, inputs: [] string, required_impedanc
             case .Resistive_Capacitive_Voltage_Source;
                 is_input_source := is_input(token, inputs);
                 if ! is_input_source {
-                    is_known := write_param(*params_vars, token, 0, "v_value");
+                    is_known, v_param_name := write_param_own_name(*params_vars, token, 0);
                     if is_known {
                         array_add(*impedance_vars, write_constexpr_var(tprint("%_V", token.name),
-                                                                       get_constexpr_var("Params", tprint("%1_v_value", token.name))));
+                                                                       get_constexpr_var("Params", v_param_name)));
                     } else {
                         array_add(*impedance_vars, write_struct_field(tprint("%_V", token.name)));
                     }
@@ -1639,7 +1765,7 @@ generate_updater :: (tokens: [] Token,
                     is_known := is_param_defined(token, 0);
                     if ! is_known {
                         array_add(*root_impedance_updates, tprint("// Computing voltage for: %1;", token.name));
-                        array_add(*root_impedance_updates, tprint("%2%1_V = params.%1_v_value;\n", token.name, impedances_str));
+                        array_add(*root_impedance_updates, tprint("%2%1_V = params.%3;\n", token.name, impedances_str, token.param_names[0]));
                     }
                 }
 
@@ -1664,7 +1790,7 @@ generate_updater :: (tokens: [] Token,
                     is_known := is_param_defined(token, 0);
                     if ! is_known {
                         array_add(*impedance_updates, tprint("// Computing voltage for: %1;", token.name));
-                        array_add(*impedance_updates, tprint("%2%1_V = params.%1_v_value;\n", token.name, impedances_str));
+                        array_add(*impedance_updates, tprint("%2%1_V = params.%3;\n", token.name, impedances_str, token.param_names[0]));
                     }
                 }
 
@@ -1679,7 +1805,7 @@ generate_updater :: (tokens: [] Token,
                     is_known := is_param_defined(token, 0);
                     if ! is_known {
                         array_add(*root_impedance_updates, tprint("// Computing voltage for: %1;", token.name));
-                        array_add(*root_impedance_updates, tprint("%2%1_V = params.%1_v_value;\n", token.name, impedances_str));
+                        array_add(*root_impedance_updates, tprint("%2%1_V = params.%3;\n", token.name, impedances_str, token.param_names[0]));
                     }
                 }
 
@@ -1694,7 +1820,7 @@ generate_updater :: (tokens: [] Token,
                     is_known := is_param_defined(token, 0);
                     if ! is_known {
                         array_add(*impedance_updates, tprint("// Computing voltage for: %1;", token.name));
-                        array_add(*impedance_updates, tprint("%2%1_V = params.%1_v_value;\n", token.name, impedances_str));
+                        array_add(*impedance_updates, tprint("%2%1_V = params.%3;\n", token.name, impedances_str, token.param_names[0]));
                     }
                 }
 
@@ -1709,7 +1835,7 @@ generate_updater :: (tokens: [] Token,
                     is_known := is_param_defined(token, 0);
                     if ! is_known {
                         array_add(*root_impedance_updates, tprint("// Computing voltage for: %1;", token.name));
-                        array_add(*root_impedance_updates, tprint("%2%1_V = params.%1_v_value;\n", token.name, impedances_str));
+                        array_add(*root_impedance_updates, tprint("%2%1_V = params.%3;\n", token.name, impedances_str, token.param_names[0]));
                     }
                 }
 
@@ -1724,7 +1850,7 @@ generate_updater :: (tokens: [] Token,
                     is_known := is_param_defined(token, 0);
                     if ! is_known {
                         array_add(*root_impedance_updates, tprint("// Computing voltage for: %1;", token.name));
-                        array_add(*root_impedance_updates, tprint("%2%1_V = params.%1_v_value;\n", token.name, impedances_str));
+                        array_add(*root_impedance_updates, tprint("%2%1_V = params.%3;\n", token.name, impedances_str, token.param_names[0]));
                     }
                 }
 
@@ -1743,7 +1869,7 @@ generate_updater :: (tokens: [] Token,
                     is_known := is_param_defined(token, 0);
                     if ! is_known {
                         array_add(*impedance_updates, tprint("// Computing voltage for: %1;", token.name));
-                        array_add(*impedance_updates, tprint("%2%1_V = params.%1_v_value;\n", token.name, impedances_str));
+                        array_add(*impedance_updates, tprint("%2%1_V = params.%3;\n", token.name, impedances_str, token.param_names[0]));
                     }
                 }
 

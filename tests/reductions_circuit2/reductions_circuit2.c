@@ -35,7 +35,7 @@ int main()
         .L1_value = 2.0e-01f,
         .Rl2_value = 1.0e+04f,
         .Rp_value = 4.0e+03f,
-        .S4_v_value = 1.2e+00f,
+        .Vcc_v_value = 1.2e+00f,
         .Vcc_cap_value = 1.0e-6f,
         .C1_value = 1.0e-08f,
         .Cp2_value = 7.0e-09f,

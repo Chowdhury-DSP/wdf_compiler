@@ -1,0 +1,21 @@
+circuit:
+IVs(Vin);
+    Series(S1);
+        R(R1, 10k);
+        Custom(R, 6, prefix=SK_LPF_, params=R_Params, vars=R_Vars, updater=update_vars, incident=incident, reflected=reflected);
+            R(R2, 10k);
+            C(C2, 100n);
+            C(C1, 100n);
+            R(Rg, 6k);
+            R(Rf, 8k);
+            R(Rload, 100k);
+
+inputs:
+Vin
+
+outputs:
+V:Rload
+
+meta:
+include_cpp:"custom_sk_lpf_rtype.h"
+load:"custom_sk_lpf_rtype.jai"

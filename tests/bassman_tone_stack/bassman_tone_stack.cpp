@@ -1,6 +1,7 @@
 #include "bassman_tone_stack.h"
 
 #include "../chowdsp_wdf.h"
+#include <cmath>
 #include <iostream>
 #include <fstream>
 #include <random>
@@ -190,20 +191,32 @@ int main()
     ref.prepare (fs);
 
     Impedances impedances {};
+#if NETLIST
+    Params params {
+        .R3m_value = ref.Vin_Res3m.wdf.R,
+        .R2_value = ref.Res2.wdf.R,
+        .R3p_value = ref.Res3p.wdf.R,
+        .R1m_value = ref.Res1m.wdf.R,
+        .R1p_value = ref.Res1p.wdf.R,
+    };
+#else
     Params params {
         .Vin_Res3m_res_value = ref.Vin_Res3m.wdf.R,
         .Res2_Res3p_value = ref.Res2.wdf.R + ref.Res3p.wdf.R,
         .Res1p_Res1m_value = ref.Res1p.wdf.R + ref.Res1m.wdf.R,
     };
-    // printf ("%f\n", params.Vin_Res3m_res_value);
-    // printf ("%f\n", params.Res2_Res3p_value);
-    // printf ("%f\n", params.Res1p_Res1m_Cap1_res_value);
+#endif
     calc_impedances (impedances, fs, params);
     State state {};
     const auto process_multi = [&state, &impedances] (float v) -> float
     {
-        const auto [v_Vin_Res3m, v_Res1p_Res1m_Cap1] = process (state, impedances, 1.0f);
+#if NETLIST
+        const auto [v_C1, v_R1p, v_R1m, v_R3m] = process (state, impedances, v);
+        return v_C1 + v_R1p - v_R1m + v_R3m;
+#else
+        const auto [v_Vin_Res3m, v_Res1p_Res1m_Cap1] = process (state, impedances, v);
         return v_Res1p_Res1m_Cap1 + (v_Vin_Res3m - v);
+#endif
     };
 
     static constexpr int N = 100;

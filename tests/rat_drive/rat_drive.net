@@ -1,0 +1,35 @@
+* ProCo Rat - Clipping Stage Only
+
+* INPUTS
+Vplus Vp 0 DC 4.5
+Vin   Vi 0 PULSE(0 1 1m 1u 1u 10m 20m 0) ; input
+
+* INPUT NETWORK
+C1    Vi    n1 22n
+R2    n1    Vp 1M
+R3    n1 nplus 1k
+C2 nplus     0 1n
+
+* GROUND NETWORK
+R4 nmin n2 47
+C5   n2  0 2.2u
+R5 nmin n3 560
+C6   n3  0 4.7u
+
+* Op-amp
+* [out, 0, pos, neg, gain]
+Eop nop 0 nplus nmin 1e6
+
+* FEEDBACK NETWORK
+Rd nmin nop 50k ; pot @TODO!!!
+C4 nmin nop 100p
+
+* OUTPUT NETWORK
+C7  nop   n4 4.7u
+R6   n4 nout 1k
+DP nout    0 ; root output:V custom:1,prefix=wdf_lib::diode_pair::,params=Diode_Pair_Params,vars=Diode_Pair_Vars,updater=update_vars,compute=root_compute
+
+.tran 0 50m 0 10u
+.meta:include:<wdf_lib_diode_pair.h>
+.backanno
+.end

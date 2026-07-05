@@ -90,4 +90,16 @@ for (int c = 0; c < num_ports_padded; c += simd_size)
     unaligned_matmul (S, a, b);
 #endif
 }
+
+// Computes a single output of the matmul: b[out_index] = sum_r S[r * num_ports_padded + out_index] * a[r].
+template <int num_ports, int num_ports_padded = num_ports>
+inline static float single_output_matmul (const float* WDF_LIB_RESTRICT S,
+                                          const float* WDF_LIB_RESTRICT a,
+                                          int out_index)
+{
+    float b = S[out_index] * a[0];
+    for (int r = 1; r < num_ports; ++r)
+        b += S[r * num_ports_padded + out_index] * a[r];
+    return b;
+}
 }

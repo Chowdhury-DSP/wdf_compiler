@@ -1,3 +1,5 @@
+#import "Basic";
+
 error_assert :: (cond: bool, message: string) #expand {
     if ! cond {
         print("Compilation error: %\n", message);

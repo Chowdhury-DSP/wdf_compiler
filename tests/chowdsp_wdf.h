@@ -226,10 +226,10 @@ namespace wdft
     public:
         /** Creates a new WDF Capacitor.
          * @param value: Capacitance value in Farads
-         * @param fs: WDF sample rate
+         * @param _fs: WDF sample rate
          */
-        explicit CapacitorT (T value, T fs = (T) 48000.0) : C_value (value),
-                                                            fs (fs)
+        explicit CapacitorT (T value, T _fs = (T) 48000.0) : C_value (value),
+                                                             fs (_fs)
         {
             calcImpedance();
         }
@@ -286,6 +286,7 @@ namespace wdft
 
         WDFMembers<T> wdf;
 
+    // private:
         T C_value = (T) 1.0e-6;
         T z = (T) 0.0;
 
@@ -795,7 +796,7 @@ namespace wdft
         /** Sets the resistance value of the series resistor, in Ohms. */
         void setResistanceValue (T newR)
         {
-            if (newR == R_value)
+            if (all (newR == R_value))
                 return;
 
             R_value = newR;
@@ -868,7 +869,7 @@ namespace wdft
         /** Sets the capacitance value of the series resistor, in Farads. */
         void setCapacitanceValue (T newC)
         {
-            if (newC == C_value)
+            if (all (newC == C_value))
                 return;
 
             C_value = newC;
@@ -982,7 +983,7 @@ namespace wdft
         /** Sets the resistance value of the parallel resistor, in Ohms. */
         void setResistanceValue (T newR)
         {
-            if (newR == R_value)
+            if (all (newR == R_value))
                 return;
 
             R_value = newR;
@@ -2196,10 +2197,10 @@ namespace wdft
     public:
         /** Creates a new WDF Capacitor.
          * @param value: Capacitance value in Farads
-         * @param fs: WDF sample rate
+         * @param _fs: WDF sample rate
          */
-        explicit CapacitorT (T value, T fs = (T) 48000.0) : C_value (value),
-                                                            fs (fs)
+        explicit CapacitorT (T value, T _fs = (T) 48000.0) : C_value (value),
+                                                             fs (_fs)
         {
             calcImpedance();
         }
@@ -2766,7 +2767,7 @@ namespace wdft
         /** Sets the resistance value of the series resistor, in Ohms. */
         void setResistanceValue (T newR)
         {
-            if (newR == R_value)
+            if (all (newR == R_value))
                 return;
 
             R_value = newR;
@@ -2839,7 +2840,7 @@ namespace wdft
         /** Sets the capacitance value of the series resistor, in Farads. */
         void setCapacitanceValue (T newC)
         {
-            if (newC == C_value)
+            if (all (newC == C_value))
                 return;
 
             C_value = newC;
@@ -2953,7 +2954,7 @@ namespace wdft
         /** Sets the resistance value of the parallel resistor, in Ohms. */
         void setResistanceValue (T newR)
         {
-            if (newR == R_value)
+            if (all (newR == R_value))
                 return;
 
             R_value = newR;
@@ -4519,8 +4520,8 @@ namespace wdf
     public:
         Open() : WDF<T> ("Open")
         {
-            this->R = (T) 1.0e15;
-            this->G = (T) 1.0 / this->R;
+            this->wdf.R = (T) 1.0e15;
+            this->wdf.G = (T) 1.0 / this->wdf.R;
         }
 
         inline void calcImpedance() override {}
@@ -4528,14 +4529,14 @@ namespace wdf
         /** Accepts an incident wave into a WDF open. */
         inline void incident (T x) noexcept override
         {
-            this->a = x;
+            this->wdf.a = x;
         }
 
         /** Propogates a reflected wave from a WDF open. */
         inline T reflected() noexcept override
         {
-            this->b = this->a;
-            return this->b;
+            this->wdf.b = this->wdf.a;
+            return this->wdf.b;
         }
     };
 
@@ -4546,8 +4547,8 @@ namespace wdf
     public:
         Short() : WDF<T> ("Short")
         {
-            this->R = (T) 1.0e-15;
-            this->G = (T) 1.0 / this->R;
+            this->wdf.R = (T) 1.0e-15;
+            this->wdf.G = (T) 1.0 / this->wdf.R;
         }
 
         inline void calcImpedance() override {}
@@ -4555,14 +4556,14 @@ namespace wdf
         /** Accepts an incident wave into a WDF short. */
         inline void incident (T x) noexcept override
         {
-            this->a = x;
+            this->wdf.a = x;
         }
 
         /** Propogates a reflected wave from a WDF short. */
         inline T reflected() noexcept override
         {
-            this->b = -this->a;
-            return this->b;
+            this->wdf.b = -this->wdf.a;
+            return this->wdf.b;
         }
     };
 
@@ -4899,6 +4900,16 @@ namespace wdft
             }
         }
 #endif // XSIMD
+
+        /** Computes a single output of the scattering matrix: b[outIndex] = sum_r S_[r][outIndex] * a_[r]. */
+        template <typename T, int numPorts>
+        constexpr T RtypeScatterSingle (const Matrix<T, numPorts>& S_, const AlignedArray<T, numPorts>& a_, int outIndex)
+        {
+            T b = S_[0][outIndex] * a_[0];
+            for (int r = 1; r < numPorts; ++r)
+                b += S_[r][outIndex] * a_[r];
+            return b;
+        }
     } // namespace rtype_detail
 } // namespace wdft
 
@@ -5017,6 +5028,17 @@ namespace wdf
             }
         }
 #endif // XSIMD
+
+        /** Computes a single output of the scattering matrix: b[outIndex] = sum_r S_[r][outIndex] * a_[r]. */
+        template <typename T>
+        T RtypeScatterSingle (const Matrix<T>& S_, const AlignedArray<T>& a_, int outIndex)
+        {
+            const auto numPorts = a_.size();
+            T b = S_[0][outIndex] * a_[0];
+            for (int r = 1; r < numPorts; ++r)
+                b += S_[r][outIndex] * a_[r];
+            return b;
+        }
     } // namespace rtype_detail
 } // namespace wdf
 #endif // DOXYGEN
@@ -5111,7 +5133,8 @@ namespace wdft
                                               a_vec[portIndex] = port.reflected(); },
                                           downPorts);
 
-            wdf.b = b_vec[upPortIndex];
+            // S_matrix[upPortIndex][upPortIndex] is zero, so this is fine without a fresh a_vec[upPortIndex].
+            wdf.b = rtype_detail::RtypeScatterSingle (S_matrix, a_vec, upPortIndex);
             return wdf.b;
         }
 
@@ -5446,10 +5469,10 @@ namespace wdft
     public:
         /** Creates a new WDF Capacitor.
          * @param value: Capacitance value in Farads
-         * @param fs: WDF sample rate
+         * @param _fs: WDF sample rate
          */
-        explicit CapacitorT (T value, T fs = (T) 48000.0) : C_value (value),
-                                                            fs (fs)
+        explicit CapacitorT (T value, T _fs = (T) 48000.0) : C_value (value),
+                                                             fs (_fs)
         {
             calcImpedance();
         }
@@ -6016,7 +6039,7 @@ namespace wdft
         /** Sets the resistance value of the series resistor, in Ohms. */
         void setResistanceValue (T newR)
         {
-            if (newR == R_value)
+            if (all (newR == R_value))
                 return;
 
             R_value = newR;
@@ -6089,7 +6112,7 @@ namespace wdft
         /** Sets the capacitance value of the series resistor, in Farads. */
         void setCapacitanceValue (T newC)
         {
-            if (newC == C_value)
+            if (all (newC == C_value))
                 return;
 
             C_value = newC;
@@ -6203,7 +6226,7 @@ namespace wdft
         /** Sets the resistance value of the parallel resistor, in Ohms. */
         void setResistanceValue (T newR)
         {
-            if (newR == R_value)
+            if (all (newR == R_value))
                 return;
 
             R_value = newR;
@@ -7466,7 +7489,8 @@ namespace wdf
                 i++;
             }
 
-            this->wdf.b = b_vec[m_upPortIndex];
+            // S_matrix[m_upPortIndex][m_upPortIndex] is zero, so this is fine without a fresh a_vec[m_upPortIndex].
+            this->wdf.b = rtype_detail::RtypeScatterSingle (S_matrix, a_vec, m_upPortIndex);
             return this->wdf.b;
         }
 

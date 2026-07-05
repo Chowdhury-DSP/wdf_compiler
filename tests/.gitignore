@@ -3,6 +3,7 @@
 */*.rs
 */*.bin
 */*_test
+*/*_net.wdf
 
 !*/custom_*.h
 !*/custom_*.jai

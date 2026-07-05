@@ -1,3 +1,5 @@
+#import "Basic";
+
 SCRATCH_SIZE :: 1 << 13;
 scratch: Temporary_Storage;
 reset_scratch :: () {

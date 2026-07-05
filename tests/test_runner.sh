@@ -73,7 +73,7 @@ netlist_test () {
    cpp_compiler_flags=${libcpp_flag}
 
    $wdf_compiler "${test}.net" "${test}.h" ${wdf_compiler_flags}
-   $cpp_compiler "${test}.cpp" ${cpp_bench_flags} -I../../lib --std=c++20 ${cpp_compiler_flags} -o "${test}.exe"
+   $cpp_compiler "${test}.cpp" ${cpp_bench_flags} -DNETLIST=1 -I../../lib --std=c++20 ${cpp_compiler_flags} -o "${test}.exe"
    if [[ "$OSTYPE" == "darwin"* ]]; then
       echo ${sudo_pass} | sudo -S "./${test}.exe"
    else
@@ -172,7 +172,7 @@ elif [[ "$*" = *lang-perf* ]]; then
     c_test baxandall_eq
     rust_test baxandall_eq
 else
-   test rc_lowpass  cpp jai c_lang rust netlist
+   test rc_lowpass cpp jai c_lang rust netlist
    test rc_lowpass_double cpp jai c_lang rust
    test rc_lowpass_simd cpp
    test rc_bandpass cpp jai c_lang rust netlist
@@ -185,15 +185,17 @@ else
    test preamp_eq_comb cpp jai c_lang rust
    test hard_clipper cpp jai c_lang rust
    test diode_clipper cpp jai
-   test diode_circuit cpp jai
+   test diode_circuit cpp jai netlist
    test simple_triode cpp jai
-   test bassman_tone_stack cpp jai c_lang rust
+   test bassman_tone_stack cpp jai c_lang rust netlist
+   test sk_lpf cpp netlist
    test baxandall_eq cpp jai c_lang rust
    test pulse_shaper cpp jai
    test reductions_circuit cpp jai c_lang rust
    test reductions_circuit2 cpp jai c_lang rust
    test analog_eq cpp jai rust
    test channel_hpf cpp jai c_lang rust
+   test rat_drive cpp netlist
 fi
 
 if [[ "$*" = *bad_configs* ]]; then

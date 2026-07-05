@@ -1,35 +1,72 @@
 #import "Basic";
 File :: #import "File";
 String :: #import "String";
+Math :: #import "Math";
 #import "Print_Color";
-#load "netlist_converter.jai";
+#import "netlist_converter";
+#import "r_solver";
+#import "sym_algebra";
 
 main :: () {
+
     args := get_command_line_arguments();
-    netlist_file := args[1];
-    wdf_file := args[2];
+
+    positional_args: [..] string;
+    print_rtype_flag := false;
+    print_wdf_flag   := false;
+    for i : 1..args.count-1 {
+        arg := args[i];
+        if arg == {
+            case "-print_rtype"; print_rtype_flag = true;
+            case "-print_wdf";   print_wdf_flag   = true;
+            case;                array_add(*positional_args, arg);
+        }
+    }
+    if positional_args.count < 1  return;
+
+    netlist_file := positional_args[0];
+    wdf_file := ifx positional_args.count >= 2 then positional_args[1] else "";
     print("Converting netlist file % to %\n\n", netlist_file, wdf_file);
 
     netlist_file_str, fread_success := File.read_entire_file(netlist_file);
     assert(fread_success, "Unable to open file!");
 
-    graph, sp_nodes := parse_netlist(netlist_file_str);
+    graph, spqr_nodes, op_amps, circuit_meta := parse_netlist(netlist_file_str);
     // print("%\n", graph);
-    // print("%\n", sp_nodes);
+    // print("%\n", spqr_nodes);
 
-    root := reduce_to_sp_tree(*graph, *sp_nodes);
+    root := reduce_to_spqr_tree(*graph, *spqr_nodes);
     // print("%\n", graph);
-    // print("%\n", sp_nodes);
-    // print_sp_graph(sp_nodes, root);
+    // print("%\n", spqr_nodes);
+    // print_spqr_graph(spqr_nodes, root);
 
-    root = reroot(sp_nodes);
-    // print("%\n", sp_nodes);
-    print_sp_graph(sp_nodes, root);
+    root = reroot(spqr_nodes, root);
+    // print("%\n", spqr_nodes);
+    print_spqr_graph(spqr_nodes, root);
 
-    wdf_str := generate_wdf_string(sp_nodes, root);
-    // print(wdf_str);
+    r_node := find_rigid_node(spqr_nodes);
+    if r_node >= 0 {
+        // Print the raw MNA netlist for debugging.
+        rtype_netlist := generate_rtype_netlist_string(spqr_nodes, op_amps, r_node);
+        print(rtype_netlist);
 
-    out_file, success := File.file_open(wdf_file, true);
-    assert(success, "Unable to open output file!");
-    File.file_write(*out_file, wdf_str);
+        // Symbolically solve the scattering matrix.
+        // @TODO: pass the result into the code generator once wdf_compiler
+        //        is updated to consume R_Solver_Result for RIGID nodes.
+        topo   := rtype_topology_from_spqr(spqr_nodes, op_amps, r_node);
+        topo.adapt_port = -1;
+        result := solve_rtype_scattering(topo);
+        print("R-type adaptor: % ports, adapt port = %\n",
+              result.n_ports, result.adapt_port);
+        if print_rtype_flag  print_rtype(result, topo);
+    }
+
+    wdf_str := generate_wdf_string(spqr_nodes, root, circuit_meta);
+    if print_wdf_flag  print(wdf_str);
+
+    if wdf_file.count > 0 {
+        out_file, success := File.file_open(wdf_file, true);
+        assert(success, "Unable to open output file!");
+        File.file_write(*out_file, wdf_str);
+    }
 }

@@ -1,8 +1,3 @@
-#import "Basic";
-String :: #import "String";
-Sort :: #import "Sort";
-#load "utils.jai";
-
 Token_Type :: enum {
     Ideal_Voltage_Source;
     Ideal_Current_Source;
@@ -88,7 +83,7 @@ remove_comments :: (input_str: string) -> string {
     return str;
 }
 
-parse_custom_token_args :: (args: [] string) -> *Token.Custom_Token_Info {
+parse_custom_token_args :: (args: [] string, lang: string) -> *Token.Custom_Token_Info {
     info := New(Token.Custom_Token_Info);
     name_prefix := "";
     for arg : args {
@@ -111,18 +106,14 @@ parse_custom_token_args :: (args: [] string) -> *Token.Custom_Token_Info {
                 info.reflected_name = value;
             case "prefix";
                 name_prefix = value;
-        }
-        #if #exists(global_args) {
-            if key == {
-                case "cpp_prefix";
-                    if global_args.lang == "cpp" { name_prefix = value; }
-                case "c_prefix";
-                    if global_args.lang == "c" { name_prefix = value; }
-                case "jai_prefix";
-                    if global_args.lang == "jai" { name_prefix = value; }
-                case "rust_prefix";
-                    if global_args.lang == "rust" { name_prefix = value; }
-            }
+            case "cpp_prefix";
+                if lang == "cpp" { name_prefix = value; }
+            case "c_prefix";
+                if lang == "c" { name_prefix = value; }
+            case "jai_prefix";
+                if lang == "jai" { name_prefix = value; }
+            case "rust_prefix";
+                if lang == "rust" { name_prefix = value; }
         }
     }
 
@@ -143,7 +134,7 @@ parse_custom_token_args :: (args: [] string) -> *Token.Custom_Token_Info {
     return info;
 }
 
-parse_circuit :: (circuit_str: string) -> [] Token {
+parse_circuit :: (circuit_str: string, lang: string) -> [] Token {
     make_array :: ($T: Type, count: s64) -> [] T {
         array: []T;
         array.data = cast(*T) alloc(count * size_of(T));
@@ -361,7 +352,7 @@ parse_circuit :: (circuit_str: string) -> [] Token {
             num_children = string_to_int(new_token.args[0]);
             new_token.args.data = new_token.args.data + 1;
             new_token.args.count = new_token.args.count - 1;
-            new_token.custom_info = parse_custom_token_args(new_token.args);
+            new_token.custom_info = parse_custom_token_args(new_token.args, lang);
             verbose_print("Custom token: %\n", new_token.custom_info.*);
         }
 
@@ -464,3 +455,9 @@ get_value :: (val_str: string) -> float32 {
     }
     return val;
 }
+
+#scope_file
+#import "Basic";
+String :: #import "String";
+Sort :: #import "Sort";
+#import "utils";

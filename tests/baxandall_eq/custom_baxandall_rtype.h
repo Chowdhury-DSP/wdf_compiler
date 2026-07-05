@@ -17,11 +17,6 @@ struct R_Vars
     alignas (16) float S[num_ports * num_ports_padded] {};
 };
 
-struct R_State
-{
-    float b_up {};
-};
-
 static inline float update_vars (R_Vars* vars,
                                 [[maybe_unused]] const R_Params* params,
                                 float Ra,
@@ -52,12 +47,23 @@ static inline float update_vars (R_Vars* vars,
     return Rf;
 }
 
-static inline float reflected (const R_Vars* vars, const R_State* state, const float* a_in)
+static inline float reflected (const R_Vars* vars, const float* a_in)
 {
-    return state->b_up;
+    // S[up_port][up_port] == 0, so this doesn't need a fresh a[up_port].
+    alignas (16) float a[num_ports] {};
+    for (int i = 0, j = 0; i < num_ports; ++i)
+    {
+        if (i != up_port)
+        {
+            a[i] = a_in[j];
+            j++;
+        }
+    }
+
+    return wdf_lib::single_output_matmul<num_ports, num_ports_padded> (vars->S, a, up_port);
 }
 
-static inline void incident (const R_Vars* vars, R_State* state, float a_up, const float* a_in, float* b_out)
+static inline void incident (const R_Vars* vars, float a_up, const float* a_in, float* b_out)
 {
     alignas (16) float a[num_ports];
     alignas (16) float b[num_ports_padded];
@@ -79,11 +85,7 @@ static inline void incident (const R_Vars* vars, R_State* state, float a_up, con
 
     for (int i = 0, j = 0; i < num_ports; ++i)
     {
-        if (i == up_port)
-        {
-            state->b_up = b[i];
-        }
-        else
+        if (i != up_port)
         {
             b_out[j] = b[i];
             j++;

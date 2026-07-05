@@ -42,7 +42,7 @@ static inline void update_vars (Diode_Pair_Vars* vars,
 static inline float root_compute (const Diode_Pair_Vars* vars, float a)
 {
     // See eqn (39) from reference paper
-    const auto lambda = a >= 0.0f ? 1.0f : 0.0f;
+    const auto lambda = a > 0.0f ? 1.0f : (a < 0.0f ? -1.0f : 0.0f);
     const auto lambda_a_over_vt = lambda * a * vars->vt_recip;
     const auto b = a - vars->vt_2 * lambda * (wdf_lib::Omega::omega4 (vars->logR_Is_over_vt + lambda_a_over_vt)
                                             - wdf_lib::Omega::omega4 (vars->logR_Is_over_vt - lambda_a_over_vt));
