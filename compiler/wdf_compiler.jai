@@ -153,6 +153,9 @@ main :: () {
 
             // Write the sidecar file next to the output file.
             sidecar_name := tprint("%_rtype.h", node_name);
+            if global_args.lang == "jai" {
+                sidecar_name = tprint("%_rtype.jai", node_name);
+            }
             sidecar_path := tprint("%%", output_dir, sidecar_name);
             sidecar_file, ok := File.file_open(sidecar_path, true);
             if ok {
@@ -169,16 +172,20 @@ main :: () {
             if result.adapt_port >= 0 {
                 n_children := result.n_ports - 1;
                 spqr_nodes[rigid_idx].value = tprint(
-                    "%, cpp_prefix=rtype_%::, params=R_Params, vars=R_Vars, updater=update_vars, incident=incident, reflected=reflected",
+                    "%1, cpp_prefix=rtype_%2::, jai_prefix=rtype_%2_, params=R_Params, vars=R_Vars, updater=update_vars, incident=incident, reflected=reflected",
                     n_children, node_name);
             } else {
                 spqr_nodes[rigid_idx].value = tprint(
-                    "%, cpp_prefix=rtype_%::, params=R_Params, vars=R_Vars, updater=update_vars, compute=compute",
+                    "%1, cpp_prefix=rtype_%2::, jai_prefix=rtype_%2_, params=R_Params, vars=R_Vars, updater=update_vars, compute=compute",
                     result.n_ports, node_name);
             }
 
             // Inject include: directive so the meta: section picks up the sidecar.
-            array_add(*circuit_meta, tprint("include:\"%\"", sidecar_name));
+            if global_args.lang == "cpp" || global_args.lang == "c" {
+                array_add(*circuit_meta, tprint("include:\"%\"", sidecar_name));
+            } else if global_args.lang == "jai" {
+                array_add(*circuit_meta, tprint("load:\"%\"", sidecar_name));
+            }
         }
         if rigid_solve_count > 0 { print("Total RIGID nodes solved: %\n", rigid_solve_count); }
 

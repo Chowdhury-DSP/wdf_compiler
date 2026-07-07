@@ -65,9 +65,8 @@ cpp_test () {
 
 netlist_test () {
    test="$1"
-   echo "Running CPP Test: $test"
+   echo "Running netlist CPP Test: $test"
    cd "${SCRIPT_DIR}/${test}"
-   rm -f data.bin
 
    wdf_compiler_flags="-netlist"
    cpp_compiler_flags=${libcpp_flag}
@@ -107,7 +106,26 @@ jai_test () {
    fi
 
    $wdf_compiler "${test}.wdf" "${test}.jai" ${wdf_compiler_flags}
-   jai ${jai_compile_bench_flags} -quiet "${test}_test.jai"
+   jai ${jai_compile_bench_flags} -quiet "${test}_test.jai" -add "NETLIST :: false"
+   if [[ "$OSTYPE" == "win32" || "$OSTYPE" == "msys" ]]; then
+      "./${test}_test.exe" ${jai_run_bench_flags}
+   else
+      "./${test}_test" ${jai_run_bench_flags}
+   fi
+}
+
+netlist_jai_test () {
+   test="$1"
+   echo "Running netlist JAI Test: $test"
+   cd "${SCRIPT_DIR}/${test}"
+
+   wdf_compiler_flags="-lang jai -netlist"
+   if [[ "$test" == *"double"* ]]; then
+       wdf_compiler_flags="${wdf_compiler_flags} -dtype float64"
+   fi
+
+   $wdf_compiler "${test}.net" "${test}.jai" ${wdf_compiler_flags}
+   jai ${jai_compile_bench_flags} -quiet "${test}_test.jai" -add "NETLIST :: true"
    if [[ "$OSTYPE" == "win32" || "$OSTYPE" == "msys" ]]; then
       "./${test}_test.exe" ${jai_run_bench_flags}
    else
@@ -132,13 +150,15 @@ rust_test () {
 
 test () {
    test="$1"
+   args=" $* "
    # The C++ test needs to run first,
    # since it generates the reference data.
-   if [[ "$*" = *cpp* ]]; then cpp_test $test; fi
-   if [[ "$*" = *jai* ]]; then jai_test $test; fi
-   if [[ "$*" = *c_lang* ]]; then c_test $test; fi
-   if [[ "$*" = *rust* ]]; then rust_test $test; fi
-   if [[ "$*" = *netlist* ]]; then netlist_test $test; fi
+   if [[ "$args" = *" cpp "* ]]; then cpp_test $test; fi
+   if [[ "$args" = *" jai "* ]]; then jai_test $test; fi
+   if [[ "$args" = *" c_lang "* ]]; then c_test $test; fi
+   if [[ "$args" = *" rust "* ]]; then rust_test $test; fi
+   if [[ "$args" = *" netlist "* ]]; then netlist_test $test; fi
+   if [[ "$args" = *" netlist_jai "* ]]; then netlist_jai_test $test; fi
 }
 
 if [[ "$*" = *bench* ]]; then
@@ -172,30 +192,29 @@ elif [[ "$*" = *lang-perf* ]]; then
     c_test baxandall_eq
     rust_test baxandall_eq
 else
-   test rc_lowpass cpp jai c_lang rust netlist
+   test rc_lowpass cpp jai c_lang rust netlist netlist_jai
    test rc_lowpass_double cpp jai c_lang rust
    test rc_lowpass_simd cpp
-   test rc_bandpass cpp jai c_lang rust netlist
+   test rc_bandpass cpp jai c_lang rust netlist netlist_jai
    test rl_lowpass cpp jai c_lang rust
    test rc_lowpass_var cpp jai c_lang rust
-   test rl_lowpass_var cpp jai c_lang rust netlist
+   test rl_lowpass_var cpp jai c_lang rust netlist netlist_jai
    test rc_bandpass_var cpp jai c_lang rust
    test rc_lowpass_2ins cpp jai c_lang rust
    test preamp_eq cpp jai c_lang rust
    test preamp_eq_comb cpp jai c_lang rust
    test hard_clipper cpp jai c_lang rust
-   test diode_clipper cpp jai
-   test diode_circuit cpp jai netlist
+   test diode_circuit cpp jai netlist netlist_jai
    test simple_triode cpp jai
-   test bassman_tone_stack cpp jai c_lang rust netlist
-   test sk_lpf cpp netlist
+   test bassman_tone_stack cpp jai c_lang rust netlist netlist_jai
+   test sk_lpf cpp netlist netlist_jai
    test baxandall_eq cpp jai c_lang rust
    test pulse_shaper cpp jai
    test reductions_circuit cpp jai c_lang rust
    test reductions_circuit2 cpp jai c_lang rust
    test analog_eq cpp jai rust
    test channel_hpf cpp jai c_lang rust
-   test rat_drive cpp netlist
+   test rat_drive cpp netlist netlist_jai
 fi
 
 if [[ "$*" = *bad_configs* ]]; then

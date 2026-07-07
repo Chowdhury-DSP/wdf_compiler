@@ -56,13 +56,7 @@ int main()
     for (int i = 0; i < N; ++i)
     {
         input[i] = 10.0f * std::sin ((float) i * 0.1f);
-#if NETLIST
-        input[i] = -input[i];
-#endif
         const auto test_output = process (state, impedances, input[i]);
-#if NETLIST
-        input[i] = -input[i];
-#endif
         ref_output[i] = ref.process (input[i]);
         const auto error = std::abs (test_output - ref_output[i]);
         max_error = std::max (error, max_error);

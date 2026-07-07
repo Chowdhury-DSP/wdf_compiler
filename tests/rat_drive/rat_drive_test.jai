@@ -1,35 +1,35 @@
 #import "Basic";
 #import "File";
 #import "Math";
-#load "diode_circuit.jai";
+#load "rat_drive.jai";
 
 main :: () {
-    print("Diode Circuit test\n");
+    print("RAT Drive test\n");
     context.print_style.default_format_float.mode = .SCIENTIFIC;
 
     fs : float32 : 48000.0;
-
     params := Params.{
+        Vplus_v_value = 4.5,
+        R26_params = .{ Ag = 100.0, Ro = 0.1, Ri = 10.0e6 },
+        Rd_value = 50.0e3,
         DP_params = .{
-            Is = 1.0e-9,
+            Is = 5.0e-9,
+            Vt = 25.85e-3,
+            nabla = 2.0,
         },
     };
-
     impedances: Impedances;
     calc_impedances(*impedances, fs, params);
-    state: State;
+    state := State.{};
 
     data_str, _ := read_entire_file("data.bin");
-    input : [] float32 = .{data=cast(*float32)data_str.data,
-                           count=data_str.count/size_of(float32)/2};
-    ref_output : [] float32 = .{data=cast(*float32)data_str.data + data_str.count/size_of(float32)/2,
-                                count=data_str.count/size_of(float32)/2};
+    ref_output : [] float32 = .{data=cast(*float32)data_str.data,
+                                count=data_str.count/size_of(float32)};
 
     max_error : float32 = 0.0;
-    // for 0..10
     for 0..(ref_output.count-1)
     {
-        test_output := process(*state, *impedances, input[it]);
+        test_output := process(*state, *impedances, 0.1);
         error := abs(test_output - ref_output[it]);
         max_error = max(error, max_error);
     }

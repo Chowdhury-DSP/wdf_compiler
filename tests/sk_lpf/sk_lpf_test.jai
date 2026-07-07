@@ -1,35 +1,26 @@
 #import "Basic";
 #import "File";
 #import "Math";
-#load "diode_circuit.jai";
+#load "sk_lpf.jai";
 
 main :: () {
-    print("Diode Circuit test\n");
+    print("Sallen-Key Lowpass test\n");
     context.print_style.default_format_float.mode = .SCIENTIFIC;
 
     fs : float32 : 48000.0;
-
-    params := Params.{
-        DP_params = .{
-            Is = 1.0e-9,
-        },
-    };
-
+    params := Params.{ R9_params = .{ Ag = 1.0e6, Ro = 10.0, Ri = 100.0e3 } };
     impedances: Impedances;
     calc_impedances(*impedances, fs, params);
-    state: State;
+    state := State.{};
 
     data_str, _ := read_entire_file("data.bin");
-    input : [] float32 = .{data=cast(*float32)data_str.data,
-                           count=data_str.count/size_of(float32)/2};
-    ref_output : [] float32 = .{data=cast(*float32)data_str.data + data_str.count/size_of(float32)/2,
-                                count=data_str.count/size_of(float32)/2};
+    ref_output : [] float32 = .{data=cast(*float32)data_str.data,
+                                count=data_str.count/size_of(float32)};
 
     max_error : float32 = 0.0;
-    // for 0..10
     for 0..(ref_output.count-1)
     {
-        test_output := process(*state, *impedances, input[it]);
+        test_output := process(*state, *impedances, 1.0);
         error := abs(test_output - ref_output[it]);
         max_error = max(error, max_error);
     }

@@ -199,6 +199,11 @@ int main()
         .R1m_value = ref.Res1m.wdf.R,
         .R1p_value = ref.Res1p.wdf.R,
     };
+    // std::cout << "ref.Vin_Res3m.wdf.R: " << ref.Vin_Res3m.wdf.R << std::endl;
+    // std::cout << "ref.Res2.wdf.R: " << ref.Res2.wdf.R << std::endl;
+    // std::cout << "ref.Res3p.wdf.R: " << ref.Res3p.wdf.R << std::endl;
+    // std::cout << "ref.Res1m.wdf.R: " << ref.Res1m.wdf.R << std::endl;
+    // std::cout << "ref.Res1p.wdf.R: " << ref.Res1p.wdf.R << std::endl;
 #else
     Params params {
         .Vin_Res3m_res_value = ref.Vin_Res3m.wdf.R,

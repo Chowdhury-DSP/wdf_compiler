@@ -104,9 +104,8 @@ int main()
             .Ag = 100.0f,
             .Ri = 10.0e6f
         },
-#else
-        .Rd_value = 0.5f * Reference_WDF::Rdistortion,
 #endif
+        .Rd_value = 0.5f * Reference_WDF::Rdistortion,
         .DP_params = {
             .Is = 5.0e-9f,
             .Vt = 25.85e-3f,
@@ -134,9 +133,11 @@ int main()
         return 1;
     }
 
+#if !NETLIST
     std::ofstream ofp { "data.bin", std::ios::out | std::ios::binary };
     ofp.write(reinterpret_cast<const char*>(ref_output.data()), N * sizeof (float));
     ofp.close();
+#endif
 
 #if RUN_BENCH
     static constexpr int M = 10'000'000;
