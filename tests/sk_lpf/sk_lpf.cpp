@@ -93,8 +93,18 @@ int main()
     Reference_WDF ref {};
     ref.prepare (fs);
 
+    Params params {
+#if NETLIST
+        .R9_params {
+#else
+        .R_params {
+#endif
+            .Ag = 1.0e6f,
+            .Ro = 1.0e-3f,
+            .Ri = 1.0e6f,
+        },
+    };
     Impedances impedances {};
-    Params params {};
     calc_impedances (impedances, fs, params);
     State state {};
 

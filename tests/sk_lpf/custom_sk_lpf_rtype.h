@@ -1,16 +1,21 @@
 #pragma once
 
+#include <wdf_lib_rtype_helpers.h>
+
 static constexpr int num_ports = 7;
-static constexpr int num_ports_padded = num_ports;
+static constexpr int num_ports_padded = wdf_lib::pad_to_multiple (num_ports, 4);
 static constexpr int up_port = 0;
 
 struct SK_LPF_R_Params
 {
+    float Ag = 1.0e6f;
+    float Ro = 1.0e-3f;
+    float Ri = 1.0e6f;
 };
 
 struct SK_LPF_R_Vars
 {
-    float S[num_ports * num_ports] {};
+    alignas (16) float S[num_ports * num_ports_padded] {};
 };
 
 // Note: sk_lpf.wdf's Custom(...) declares 6 children (R2, C2, C1, Rg, Rf,
@@ -18,23 +23,23 @@ struct SK_LPF_R_Vars
 // adapt port itself (up_port), since that impedance is what's being solved
 // for here, not a known input.
 static inline float SK_LPF_update_vars (SK_LPF_R_Vars* vars,
-                                 const SK_LPF_R_Params* /*params*/,
-                                 float R2,
-                                 float G2,
-                                 float R3,
-                                 float G3,
-                                 float R4,
-                                 float G4,
-                                 float R5,
-                                 float G5,
-                                 float R6,
-                                 float G6,
-                                 float R7,
-                                 float G7)
+                                        const SK_LPF_R_Params* params,
+                                        float R2,
+                                        float G2,
+                                        float R3,
+                                        float G3,
+                                        float R4,
+                                        float G4,
+                                        float R5,
+                                        float G5,
+                                        float R6,
+                                        float G6,
+                                        float R7,
+                                        float G7)
 {
-    static constexpr float Ri = 100.0e3f;
-    static constexpr float Ro = 10.0f;
-    static constexpr float Ag = 1.0e6f;
+    const auto Ri = params->Ri;
+    const auto Ro = params->Ro;
+    const auto Ag = params->Ag;
 
     const auto R1 = (R3*R7*(R2*R4*R5 + R2*R4*R6 + R2*R5*R6 + R4*R5*R6 - (R2 + R4)*((-1 + Ag)*R5 - R6)*Ri) - (R4*R5*R6*R7 + R3*R4*R5*(R6 + R7) + R4*(R5 + R6)*R7*Ri + R3*R4*(R5 + R6 + R7)*Ri + R2*R7*(R4*(R5 + R6) + R6*Ri + R5*(R6 + Ri)) + R2*R3*(R4*(R5 + R6 + R7) + (R6 + R7)*Ri + R5*(R6 + R7 + Ri)))*Ro)/(R7*(R4*R5*R6 + R4*(R5 + R6 + Ag*R6)*Ri + R2*(R4*(R5 + R6) + R6*Ri + R5*(R6 + Ri - Ag*Ri)) + R3*(R4*(R5 + R6) + R6*Ri + R5*(R6 + Ri - Ag*Ri))) - (R4*R5*R6 + (R4 + R5)*R6*R7 + R4*(R5 + R6)*Ri + (R4 + R5 + R6)*R7*Ri + R2*(R5*(R6 + R7) + R4*(R5 + R6 + R7) + (R5 + R6 + R7)*Ri) + R3*(R5*(R6 + R7) + R4*(R5 + R6 + R7) + (R5 + R6 + R7)*Ri))*Ro);
 
@@ -43,58 +48,54 @@ static inline float SK_LPF_update_vars (SK_LPF_R_Vars* vars,
     for (int c = 0; c < num_ports; ++c)
     {
         for (int r = 0; r < num_ports; ++r)
-            vars->S[r * num_ports + c] = S_transpose[c][r];
+            vars->S[r * num_ports_padded + c] = S_transpose[c][r];
     }
 
     return R1;
 }
 
-// S[up_port][up_port] == 0 (up_port is fully adapted), so b_up never
-// depends on a_up. That means it can be computed here, directly from the
-// down-ports' current-sample a values, instead of returning a value cached
-// by the previous sample's SK_LPF_incident() call -- which would otherwise
-// introduce a spurious 1-sample delay into the R-type junction's upward
-// wave (this matches how the netlist-generated rtype_R9::reflected()
-// recomputes fresh every call, with no state caching).
 static inline float SK_LPF_reflected (const SK_LPF_R_Vars* vars, const float* a_in)
 {
-    float b_up = 0.0f;
-    int j = 0;
-    for (int r = 0; r < num_ports; ++r)
+    // S[up_port][up_port] == 0, so this doesn't need a fresh a[up_port].
+    alignas (16) float a[num_ports] {};
+    for (int i = 0, j = 0; i < num_ports; ++i)
     {
-        if (r == up_port)
-            continue;
-        b_up += vars->S[r * num_ports_padded + up_port] * a_in[j++];
+        if (i != up_port)
+        {
+            a[i] = a_in[j];
+            j++;
+        }
     }
-    return b_up;
+
+    return wdf_lib::single_output_matmul<num_ports, num_ports_padded> (vars->S, a, up_port);
 }
 
 static inline void SK_LPF_incident (const SK_LPF_R_Vars* vars, float a_up, const float* a_in, float* b_out)
 {
-    float a[num_ports];
-    float b[num_ports_padded];
+    alignas (16) float a[num_ports];
+    alignas (16) float b[num_ports_padded];
 
-    int j = 0;
-    for (int i = 0; i < num_ports; ++i)
+    for (int i = 0, j = 0; i < num_ports; ++i)
     {
         if (i == up_port)
+        {
             a[i] = a_up;
+        }
         else
-            a[i] = a_in[j++];
+        {
+            a[i] = a_in[j];
+            j++;
+        }
     }
 
-    for (int c = 0; c < num_ports; ++c)
-    {
-        b[c] = vars->S[c] * a[0];
-        for (int r = 1; r < num_ports; ++r)
-            b[c] += vars->S[r * num_ports_padded + c] * a[r];
-    }
+    wdf_lib::aligned_matmul<num_ports, num_ports_padded> (vars->S, a, b);
 
-    j = 0;
-    for (int i = 0; i < num_ports; ++i)
+    for (int i = 0, j = 0; i < num_ports; ++i)
     {
-        if (i == up_port)
-            continue;
-        b_out[j++] = b[i];
+        if (i != up_port)
+        {
+            b_out[j] = b[i];
+            j++;
+        }
     }
 }

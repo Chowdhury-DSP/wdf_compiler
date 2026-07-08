@@ -66,12 +66,20 @@ Graph :: struct {
     pinned: [..] bool;
 }
 
+// Selects which op-amp macromodel an "E"/"e" netlist component uses,
+// set via a ".meta macromodel:<name>" comment token on that line.
+Op_Amp_Model :: enum {
+    FINITE_GAIN; // 3-parameter model: input/output impedance + open-loop gain (Ri/Ro/Ag)
+    IDEAL;       // zero-parameter nullor model: V+ = V-, no input current
+}
+
 Op_Amp :: struct {
     component_id: string;
     n_pos: int;
     n_neg: int;
     n_out: int;
     n_gnd: int;
+    model := Op_Amp_Model.FINITE_GAIN;
 }
 
 get_node_idx :: (node_names: *[..]string, name: string) -> int {
@@ -95,6 +103,22 @@ add_component :: (graph: *Graph, spqr_nodes: *[..] SPQR_Node,
             }
         }
         return .{};
+    }
+
+    // Reads an op-amp's "macromodel:<name>" meta token. No token means the
+    // existing 3-parameter finite-gain model, for backwards compatibility.
+    get_macromodel_meta :: (meta: []string) -> Op_Amp_Model {
+        for m_str : meta {
+            if String.begins_with(m_str, "macromodel:") {
+                name := String.slice(m_str, 11, m_str.count - 11);
+                if name == {
+                    case "finite-gain"; return .FINITE_GAIN;
+                    case "ideal";       return .IDEAL;
+                    case; assert(false, tprint("Unknown op-amp macromodel '%'", name));
+                }
+            }
+        }
+        return .FINITE_GAIN;
     }
 
     component_id := parts[0];
@@ -123,6 +147,7 @@ add_component :: (graph: *Graph, spqr_nodes: *[..] SPQR_Node,
                 n_neg = get_node_idx(node_names, parts[4]),
                 n_out = get_node_idx(node_names, parts[1]),
                 n_gnd = get_node_idx(node_names, parts[2]),
+                model = get_macromodel_meta(meta),
             };
             array_add(op_amps, op_amp);
             return;
@@ -727,25 +752,36 @@ rtype_topology_from_spqr :: (nodes: []SPQR_Node, op_amps: []Op_Amp, r_node_idx: 
         assert(n_pos >= 0 && n_neg >= 0 && n_out >= 0 && n_gnd >= 0,
                tprint("Op-amp % references a node outside the rigid component", op_amp.component_id));
 
-        // r_solver's R_VCVS names are swapped from what they sound like:
-        // its "out_n1/out_n2" pair takes the admittance (1/Ri) stamp and the
-        // constraint row's Ag coefficient lands on "ctrl_n1/ctrl_n2" -- i.e.
-        // "ctrl" is the terminal pair that actually carries the branch
-        // current and follows Ag*V_ctrl, which is the op-amp's real output.
-        // So the real output pins go into ctrl_n1/ctrl_n2 and the real
-        // (high-impedance) input pins go into out_n1/out_n2. This also
-        // matches R_VCVS's own doc comment, which only allows ctrl_n2 (not
-        // out_n2) to be grounded -- exactly where n_gnd (the op-amp's output
-        // return) lands here.
-        array_add(*topo.vcvs,
-                  .{ out_n1 = n_pos,
-                     out_n2 = n_neg,
-                     ctrl_n1 = n_out,
-                     ctrl_n2 = n_gnd,
-                     gain_name = "Ag",
-                     ri_name = "Ri",
-                     ro_name = "Ro",
-                   });
+        if op_amp.model == {
+            case .FINITE_GAIN;
+                // r_solver's R_VCVS names are swapped from what they sound
+                // like: its "out_n1/out_n2" pair takes the admittance
+                // (1/Ri) stamp and the constraint row's Ag coefficient
+                // lands on "ctrl_n1/ctrl_n2" -- i.e. "ctrl" is the terminal
+                // pair that actually carries the branch current and
+                // follows Ag*V_ctrl, which is the op-amp's real output. So
+                // the real output pins go into ctrl_n1/ctrl_n2 and the real
+                // (high-impedance) input pins go into out_n1/out_n2. This
+                // also matches R_VCVS's own doc comment, which only allows
+                // ctrl_n2 (not out_n2) to be grounded -- exactly where
+                // n_gnd (the op-amp's output return) lands here.
+                array_add(*topo.vcvs,
+                          .{ out_n1 = n_pos,
+                             out_n2 = n_neg,
+                             ctrl_n1 = n_out,
+                             ctrl_n2 = n_gnd,
+                             gain_name = "Ag",
+                             ri_name = "Ri",
+                             ro_name = "Ro",
+                           });
+            case .IDEAL;
+                array_add(*topo.nullors,
+                          .{ in_n1 = n_pos,
+                             in_n2 = n_neg,
+                             out_n1 = n_out,
+                             out_n2 = n_gnd,
+                           });
+        }
     }
 
     return topo;
@@ -779,13 +815,24 @@ generate_rtype_netlist_string :: (nodes: []SPQR_Node, op_amps: []Op_Amp, r_node_
         assert(n_pos >= 0 && n_neg >= 0 && n_out >= 0 && n_gnd >= 0,
                tprint("Op-amp % references a node outside the rigid component", op_amp.component_id));
 
-        print_to_builder(*builder,
-                         "%1 %2 %3 %4 %5 Ag\n",
-                         op_amp.component_id,
-                         n_neg + 1,
-                         n_pos + 1,
-                         n_out + 1,
-                         n_gnd + 1);
+        if op_amp.model == {
+            case .FINITE_GAIN;
+                print_to_builder(*builder,
+                                 "%1 %2 %3 %4 %5 Ag\n",
+                                 op_amp.component_id,
+                                 n_neg + 1,
+                                 n_pos + 1,
+                                 n_out + 1,
+                                 n_gnd + 1);
+            case .IDEAL;
+                print_to_builder(*builder,
+                                 "%1 %2 %3 %4 %5 ; macromodel:ideal\n",
+                                 op_amp.component_id,
+                                 n_neg + 1,
+                                 n_pos + 1,
+                                 n_out + 1,
+                                 n_gnd + 1);
+        }
     }
 
     print_to_builder(*builder, ".adapt = %\n", adapt_node);

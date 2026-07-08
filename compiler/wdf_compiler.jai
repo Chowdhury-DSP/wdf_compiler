@@ -70,127 +70,7 @@ main :: () {
     if !fread_success { exit (1); }
 
     if args.netlist {
-        verbose_print("Converting input from netlist...\n");
-        graph, spqr_nodes, op_amps, circuit_meta := parse_netlist(file_str);
-
-        // ".meta root:rigid" makes the RIGID (R-type) node the literal tree
-        // root (a single compute() step) instead of adapting it under
-        // whichever leaf is annotated "; ... root". Mutually exclusive with
-        // that leaf annotation.
-        root_at_rigid := false;
-        for i : 0..circuit_meta.count-1 {
-            if circuit_meta[i] == "root:rigid" {
-                root_at_rigid = true;
-                array_ordered_remove_by_index(*circuit_meta, i);
-                break;
-            }
-        }
-        if root_at_rigid {
-            for node : spqr_nodes {
-                error_assert(!node.is_root,
-                       tprint("Netlist Error: '.meta root:rigid' was specified, but component '%' is also annotated as root. These are mutually exclusive.", node.component_id));
-            }
-        }
-
-        root := reduce_to_spqr_tree(*graph, *spqr_nodes);
-        root = reroot(spqr_nodes, root, prefer_rigid_root = root_at_rigid);
-        if (global_args.verbose) {
-            print_spqr_graph(spqr_nodes, root);
-        }
-
-        // Steps A+B: symbolically solve each RIGID node and emit a C++ sidecar header.
-        //
-        // ordered_child_names is built by mapping node.children (in the order that
-        // wdf_compiler will pass R/G pairs to update_vars) to port impedance names.
-        // This order may differ from rigid_edges order when reroot() used an
-        // unordered-remove, so we look up each child in rigid_edges explicitly.
-        //
-        // The sidecar header is written next to output_file; an include: directive
-        // is added to circuit_meta so generate_wdf_string injects it into meta:.
-
-        // Determine output directory once (everything up to and including last '/').
-        output_dir := "";
-        for i : 0..output_file.count-1 {
-            c := output_file[output_file.count - 1 - i];
-            if c == #char "/" || c == #char "\\" {
-                output_dir = String.slice(output_file, 0, output_file.count - i);
-                break;
-            }
-        }
-
-        rigid_solve_count := 0;
-        for node : spqr_nodes {
-            if node.kind != .RIGID  continue;
-            rigid_idx := it_index;  // capture before any nested loops shadow it_index
-
-            topo   := rtype_topology_from_spqr(spqr_nodes, op_amps, rigid_idx);
-            result := solve_rtype_scattering(topo);
-            rigid_solve_count += 1;
-
-            node_name := get_element_name(node, rigid_idx);
-            print("Solved RIGID node %: ports=%, adapt_port=%\n",
-                  node_name, result.n_ports, result.adapt_port);
-
-            // Build ordered_child_names: port impedance name for each entry in
-            // node.children, looked up via rigid_edges (which share the same order
-            // as port_impedance_names from the topology).
-            ordered_child_names: [..] string;
-            for child_idx : node.children {
-                for edge, k : node.rigid_edges {
-                    if edge.child == child_idx {
-                        array_add(*ordered_child_names, result.port_impedance_names[k]);
-                        break;
-                    }
-                }
-            }
-            assert(ordered_child_names.count == node.children.count,
-                   "RIGID node child/edge mismatch");
-
-            // Generate the sidecar header string. The wdf_lib_rtype_helpers.h
-            // matmul helpers are only available in C++; other languages fall
-            // back to the manual-loop codegen inside generate_rtype_header.
-            header_str := generate_rtype_header(node_name, *result, ordered_child_names, args.lang);
-
-            // Write the sidecar file next to the output file.
-            sidecar_name := tprint("%_rtype.h", node_name);
-            if global_args.lang == "jai" {
-                sidecar_name = tprint("%_rtype.jai", node_name);
-            }
-            sidecar_path := tprint("%%", output_dir, sidecar_name);
-            sidecar_file, ok := File.file_open(sidecar_path, true);
-            if ok {
-                File.file_write(*sidecar_file, header_str);
-                print("Wrote rtype header: %\n", sidecar_path);
-            } else {
-                print("Warning: could not write rtype header '%'\n", sidecar_path);
-            }
-
-            // Set node.value so generate_wdf_string emits the Custom(...) args.
-            // Adapted (non-root) nodes need the incident=/reflected= split;
-            // a root node has no parent to defer to, so it resolves
-            // everything in one stateless compute= step.
-            if result.adapt_port >= 0 {
-                n_children := result.n_ports - 1;
-                spqr_nodes[rigid_idx].value = tprint(
-                    "%1, cpp_prefix=rtype_%2::, jai_prefix=rtype_%2_, params=R_Params, vars=R_Vars, updater=update_vars, incident=incident, reflected=reflected",
-                    n_children, node_name);
-            } else {
-                spqr_nodes[rigid_idx].value = tprint(
-                    "%1, cpp_prefix=rtype_%2::, jai_prefix=rtype_%2_, params=R_Params, vars=R_Vars, updater=update_vars, compute=compute",
-                    result.n_ports, node_name);
-            }
-
-            // Inject include: directive so the meta: section picks up the sidecar.
-            if global_args.lang == "cpp" || global_args.lang == "c" {
-                array_add(*circuit_meta, tprint("include:\"%\"", sidecar_name));
-            } else if global_args.lang == "jai" {
-                array_add(*circuit_meta, tprint("load:\"%\"", sidecar_name));
-            }
-        }
-        if rigid_solve_count > 0 { print("Total RIGID nodes solved: %\n", rigid_solve_count); }
-
-        file_str = generate_wdf_string(spqr_nodes, root, circuit_meta);
-        // print(file_str);
+        file_str = convert_netlist_to_wdf(file_str, output_file);
     }
 
     file_str = remove_comments(file_str);
@@ -226,6 +106,134 @@ main :: () {
     // print(gen_code);
 
     verbose_print("Bytes allocated: %\n", context.temporary_storage.total_bytes_occupied);
+}
+
+// Converts netlist input text into the WDF circuit-description text the
+// rest of the pipeline expects. Steps A+B of the R-type adaptor solver
+// integration: symbolically solves each RIGID (non-series-parallel) SPQR
+// node and emits a sidecar header next to output_file, wiring it into the
+// generated circuit as a Custom(...) element.
+convert_netlist_to_wdf :: (file_str: string, output_file: string) -> string {
+    verbose_print("Converting input from netlist...\n");
+    graph, spqr_nodes, op_amps, circuit_meta := parse_netlist(file_str);
+
+    // ".meta root:rigid" makes the RIGID (R-type) node the literal tree
+    // root (a single compute() step) instead of adapting it under
+    // whichever leaf is annotated "; ... root". Mutually exclusive with
+    // that leaf annotation.
+    root_at_rigid := false;
+    for i : 0..circuit_meta.count-1 {
+        if circuit_meta[i] == "root:rigid" {
+            root_at_rigid = true;
+            array_ordered_remove_by_index(*circuit_meta, i);
+            break;
+        }
+    }
+    if root_at_rigid {
+        for node : spqr_nodes {
+            error_assert(!node.is_root,
+                   tprint("Netlist Error: '.meta root:rigid' was specified, but component '%' is also annotated as root. These are mutually exclusive.", node.component_id));
+        }
+    }
+
+    root := reduce_to_spqr_tree(*graph, *spqr_nodes);
+    root = reroot(spqr_nodes, root, prefer_rigid_root = root_at_rigid);
+    if (global_args.verbose) {
+        print_spqr_graph(spqr_nodes, root);
+    }
+
+    // Steps A+B: symbolically solve each RIGID node and emit a C++ sidecar header.
+    //
+    // ordered_child_names is built by mapping node.children (in the order that
+    // wdf_compiler will pass R/G pairs to update_vars) to port impedance names.
+    // This order may differ from rigid_edges order when reroot() used an
+    // unordered-remove, so we look up each child in rigid_edges explicitly.
+    //
+    // The sidecar header is written next to output_file; an include: directive
+    // is added to circuit_meta so generate_wdf_string injects it into meta:.
+
+    // Determine output directory once (everything up to and including last '/').
+    output_dir := "";
+    for i : 0..output_file.count-1 {
+        c := output_file[output_file.count - 1 - i];
+        if c == #char "/" || c == #char "\\" {
+            output_dir = String.slice(output_file, 0, output_file.count - i);
+            break;
+        }
+    }
+
+    rigid_solve_count := 0;
+    for node : spqr_nodes {
+        if node.kind != .RIGID  continue;
+        rigid_idx := it_index;  // capture before any nested loops shadow it_index
+
+        topo   := rtype_topology_from_spqr(spqr_nodes, op_amps, rigid_idx);
+        result := solve_rtype_scattering(topo);
+        rigid_solve_count += 1;
+
+        node_name := get_element_name(node, rigid_idx);
+        print("Solved RIGID node %: ports=%, adapt_port=%\n",
+              node_name, result.n_ports, result.adapt_port);
+
+        // Build ordered_child_names: port impedance name for each entry in
+        // node.children, looked up via rigid_edges (which share the same order
+        // as port_impedance_names from the topology).
+        ordered_child_names: [..] string;
+        for child_idx : node.children {
+            for edge, k : node.rigid_edges {
+                if edge.child == child_idx {
+                    array_add(*ordered_child_names, result.port_impedance_names[k]);
+                    break;
+                }
+            }
+        }
+        assert(ordered_child_names.count == node.children.count,
+               "RIGID node child/edge mismatch");
+
+        // Generate the sidecar header string. The wdf_lib_rtype_helpers.h
+        // matmul helpers are only available in C++; other languages fall
+        // back to the manual-loop codegen inside generate_rtype_header.
+        header_str := generate_rtype_header(node_name, *result, ordered_child_names, global_args.lang);
+
+        // Write the sidecar file next to the output file.
+        sidecar_name := tprint("%_rtype.h", node_name);
+        if global_args.lang == "jai" {
+            sidecar_name = tprint("%_rtype.jai", node_name);
+        }
+        sidecar_path := tprint("%%", output_dir, sidecar_name);
+        sidecar_file, ok := File.file_open(sidecar_path, true);
+        if ok {
+            File.file_write(*sidecar_file, header_str);
+            print("Wrote rtype header: %\n", sidecar_path);
+        } else {
+            print("Warning: could not write rtype header '%'\n", sidecar_path);
+        }
+
+        // Set node.value so generate_wdf_string emits the Custom(...) args.
+        // Adapted (non-root) nodes need the incident=/reflected= split;
+        // a root node has no parent to defer to, so it resolves
+        // everything in one stateless compute= step.
+        if result.adapt_port >= 0 {
+            n_children := result.n_ports - 1;
+            spqr_nodes[rigid_idx].value = tprint(
+                "%1, cpp_prefix=rtype_%2::, jai_prefix=rtype_%2_, params=R_Params, vars=R_Vars, updater=update_vars, incident=incident, reflected=reflected",
+                n_children, node_name);
+        } else {
+            spqr_nodes[rigid_idx].value = tprint(
+                "%1, cpp_prefix=rtype_%2::, jai_prefix=rtype_%2_, params=R_Params, vars=R_Vars, updater=update_vars, compute=compute",
+                result.n_ports, node_name);
+        }
+
+        // Inject include: directive so the meta: section picks up the sidecar.
+        if global_args.lang == "cpp" || global_args.lang == "c" {
+            array_add(*circuit_meta, tprint("include:\"%\"", sidecar_name));
+        } else if global_args.lang == "jai" {
+            array_add(*circuit_meta, tprint("load:\"%\"", sidecar_name));
+        }
+    }
+    if rigid_solve_count > 0 { print("Total RIGID nodes solved: %\n", rigid_solve_count); }
+
+    return generate_wdf_string(spqr_nodes, root, circuit_meta);
 }
 
 start_gen_code :: (meta_info: Meta_Info) -> string {

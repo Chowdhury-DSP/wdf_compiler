@@ -83,6 +83,28 @@ R_VCVS :: struct {
     ro_name:   string; // output-impedance symbol in the extra row
 }
 
+// An ideal op-amp (a nullor), the zero-parameter macromodel: infinite
+// input impedance, zero output impedance, infinite open-loop gain.
+// Modelled directly as a nullor rather than as a limiting case of R_VCVS,
+// to avoid the numerical ill-conditioning that near-infinite/near-zero
+// symbol values would otherwise introduce.
+//
+// MNA stamp (indices 0-based, datum = node 0):
+//   Extra-variable row:    V(in_n1) - V(in_n2) = 0        (nullator: no
+//                          constraint on in_n1/in_n2 current, so neither
+//                          appears in any KCL row)
+//   Extra-variable column: +1 at out_n1, -1 at out_n2      (norator: the
+//                          extra variable is a free current, injected at
+//                          the output pins, that makes the row true)
+//
+// in_n1/in_n2 may be the datum (0); out_n1/out_n2 may be the datum (0).
+R_Nullor :: struct {
+    in_n1:  int; // input positive node (0-indexed; may be datum)
+    in_n2:  int; // input negative node (0-indexed; may be datum)
+    out_n1: int; // output positive node (0-indexed; may be datum)
+    out_n2: int; // output negative node (0-indexed; may be datum)
+}
+
 // Complete MNA topology for one R-type adaptor.
 //   nodes  0..n_verts-1             : original circuit vertices (0 = datum)
 //   nodes  n_verts..n_verts+nports-1: per-port intermediate nodes
@@ -90,6 +112,7 @@ R_Type_Topology :: struct {
     n_verts:    int;
     ports:      [..] R_Port;
     vcvs:       [..] R_VCVS;
+    nullors:    [..] R_Nullor;
     adapt_port: int = -1; // port to make reflection-free; -1 = none
 }
 
@@ -126,7 +149,7 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
     exprs := *result.exprs;
 
     n_ports  := topo.ports.count;
-    n_extras := topo.vcvs.count;
+    n_extras := topo.vcvs.count + topo.nullors.count;
 
     // ---------------------------------------------------------------
     // Condensed MNA: analytically eliminate intermediate nodes (mid_k)
@@ -239,7 +262,7 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
 
     // VCVS elements reference original node indices, which are valid in the
     // condensed system.  Only extra_base_r and dim_r differ from the full MNA.
-    for j : 0..n_extras-1 {
+    for j : 0..topo.vcvs.count-1 {
         vcvs  := topo.vcvs[j];
         exc_r := extra_base_r + j;
 
@@ -272,6 +295,31 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
         if c1v { xadd(*X_r, exc_r, c1, dim_r, one,     exprs);  xadd(*X_r, c1, exc_r, dim_r, one,     exprs); }
         if c2v { xadd(*X_r, exc_r, c2, dim_r, neg_one, exprs);  xadd(*X_r, c2, exc_r, dim_r, neg_one, exprs); }
         xadd(*X_r, exc_r, exc_r, dim_r, Ro_sym, exprs);
+    }
+
+    // Nullors (ideal op-amps) reference original node indices too, same as
+    // VCVS above. No admittance/gain/output-impedance symbols are involved:
+    // the extra-variable row only constrains in_n1/in_n2 (nullator), and the
+    // extra-variable column only injects current at out_n1/out_n2 (norator)
+    // -- unlike R_VCVS's ctrl_n1/ctrl_n2, which do double duty in both the
+    // row and the column, in_n1/in_n2 and out_n1/out_n2 are fully decoupled.
+    for j : 0..topo.nullors.count-1 {
+        nullor := topo.nullors[j];
+        exc_r  := extra_base_r + topo.vcvs.count + j;
+
+        i1v := nullor.in_n1 != 0;
+        i2v := nullor.in_n2 != 0;
+        i1  := nullor.in_n1 - 1;
+        i2  := nullor.in_n2 - 1;
+        if i1v  xadd(*X_r, exc_r, i1, dim_r, one,     exprs);
+        if i2v  xadd(*X_r, exc_r, i2, dim_r, neg_one, exprs);
+
+        o1v := nullor.out_n1 != 0;
+        o2v := nullor.out_n2 != 0;
+        o1  := nullor.out_n1 - 1;
+        o2  := nullor.out_n2 - 1;
+        if o1v  xadd(*X_r, o1, exc_r, dim_r, one,     exprs);
+        if o2v  xadd(*X_r, o2, exc_r, dim_r, neg_one, exprs);
     }
 
     // ---------------------------------------------------------------
@@ -668,12 +716,7 @@ generate_rtype_header :: (
     // Structs.
     struct_open(*builder, is_jai, r_params_name);
     for name : extra_symbols {
-        // Near-ideal-op-amp defaults: very high input impedance, very
-        // low (but nonzero) output impedance, high open-loop gain.
-        // These exist so the generated code compiles; callers should
-        // override them with real device values.
-        default_value := ifx name == "Ro" then "1.0e-3" else "1.0e6";
-        struct_field(*builder, is_jai, name, "float", float_default(default_value, is_jai));
+        struct_field(*builder, is_jai, name, "float", float_default("0.0", is_jai));
     }
     struct_close(*builder, is_jai);
 

@@ -17,4 +17,4 @@ outputs:
 V:Rload
 
 meta:
-include_cpp:"custom_sk_lpf_rtype.h"
+include_cpp:"custom_sk_lpf_ideal_rtype.h"

@@ -208,6 +208,7 @@ else
    test simple_triode cpp jai
    test bassman_tone_stack cpp jai c_lang rust netlist netlist_jai
    test sk_lpf cpp netlist netlist_jai
+   test sk_lpf_ideal cpp netlist netlist_jai
    test baxandall_eq cpp jai c_lang rust
    test pulse_shaper cpp jai
    test reductions_circuit cpp jai c_lang rust
