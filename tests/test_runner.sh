@@ -174,6 +174,10 @@ if [[ "$*" = *bench* ]]; then
    cpp_test reductions_circuit
    cpp_test reductions_circuit2
    cpp_test analog_eq
+   cpp_test sk_lpf
+   netlist_test sk_lpf
+   cpp_test rat_drive
+   netlist_test rat_drive
 elif [[ "$*" = *lang-perf* ]]; then
     # The C++ test needs to run first,
     # since it generates the reference data.
