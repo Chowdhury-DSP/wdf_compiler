@@ -1,9 +1,11 @@
 #pragma once
 
+#include <wdf_lib_rtype_helpers.h>
+
 namespace rat_drive_rtype
 {
 static constexpr int num_ports = 4;
-static constexpr int num_ports_padded = num_ports;
+static constexpr int num_ports_padded = wdf_lib::pad_to_multiple (num_ports, 4);
 static constexpr int up_port = 3;
 
 struct R_Params
@@ -12,7 +14,7 @@ struct R_Params
 
 struct R_Vars
 {
-    float S[num_ports * num_ports] {};
+    alignas (16) float S[num_ports * num_ports_padded] {};
 };
 
 static inline float update_vars (R_Vars* vars,
@@ -48,44 +50,46 @@ static inline float update_vars (R_Vars* vars,
 
 static inline float reflected (const R_Vars* vars, const float* a_in)
 {
-    float b_up = 0.0f;
-    int j = 0;
-    for (int r = 0; r < num_ports; ++r)
+    alignas (16) float a[num_ports] {};
+    for (int i = 0, j = 0; i < num_ports; ++i)
     {
-        if (r == up_port)
-            continue;
-        b_up += vars->S[r * num_ports_padded + up_port] * a_in[j++];
+        if (i != up_port)
+        {
+            a[i] = a_in[j];
+            j++;
+        }
     }
-    return b_up;
+
+    return wdf_lib::single_output_matmul<num_ports, num_ports_padded> (vars->S, a, up_port);
 }
 
 static inline void incident (const R_Vars* vars, float a_up, const float* a_in, float* b_out)
 {
-    float a[num_ports];
-    float b[num_ports_padded];
+    alignas (16) float a[num_ports];
+    alignas (16) float b[num_ports_padded];
 
-    int j = 0;
-    for (int i = 0; i < num_ports; ++i)
+    for (int i = 0, j = 0; i < num_ports; ++i)
     {
         if (i == up_port)
+        {
             a[i] = a_up;
+        }
         else
-            a[i] = a_in[j++];
+        {
+            a[i] = a_in[j];
+            j++;
+        }
     }
 
-    for (int c = 0; c < num_ports; ++c)
-    {
-        b[c] = vars->S[c] * a[0];
-        for (int r = 1; r < num_ports; ++r)
-            b[c] += vars->S[r * num_ports_padded + c] * a[r];
-    }
+    wdf_lib::aligned_matmul<num_ports, num_ports_padded> (vars->S, a, b);
 
-    j = 0;
-    for (int i = 0; i < num_ports; ++i)
+    for (int i = 0, j = 0; i < num_ports; ++i)
     {
-        if (i == up_port)
-            continue;
-        b_out[j++] = b[i];
+        if (i != up_port)
+        {
+            b_out[j] = b[i];
+            j++;
+        }
     }
 }
 }

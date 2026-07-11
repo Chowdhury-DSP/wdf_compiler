@@ -5,7 +5,7 @@
 namespace analog_eq_r
 {
 static constexpr int num_ports = 7;
-static constexpr int num_ports_padded = wdf_lib::pad_to_multiple (6, 4);
+static constexpr int num_ports_padded = wdf_lib::pad_to_multiple (num_ports, 4);
 static constexpr int up_port = 0;
 
 struct R_Params
