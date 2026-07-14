@@ -370,6 +370,63 @@ test_r_solver_root_rtype_codegen :: () {
     print("  root RIGID codegen check ok: %\n\n", shape_ok && values_ok);
 }
 
+// Regression test for generate_rtype_header's C-language output path (see
+// PLAN.md open issue 5 -- C support). Unlike C++, C has no namespaces, no
+// `constexpr`, disallows any initializer on a struct member declaration, and
+// requires the `struct` keyword when referring to a struct type by name.
+// This checks the emitted C avoids all of the C++-only constructs the
+// shared cpp/jai codegen path relies on, for both the adapted-port
+// (incident/reflected) and root (compute) shapes.
+test_r_solver_c_codegen :: () {
+    topo := build_star_3port_topology();
+    topo.adapt_port = 0;
+
+    result := solve_rtype_scattering(topo);
+    header := generate_rtype_header("CTest", *result, .["R0", "R1", "R2"], "c");
+
+    has_namespace,    _ := String.contains(header, "namespace");
+    has_constexpr,    _ := String.contains(header, "constexpr");
+    has_brace_init,   _ := String.contains(header, "{};");
+    has_define,       _ := String.contains(header, "#define rtype_CTest_n_ports (3)");
+    has_struct_tag,   _ := String.contains(header, "struct rtype_CTest_R_Vars {");
+    has_vars_ptr,     _ := String.contains(header, "struct rtype_CTest_R_Vars* vars");
+    has_params_ptr,   _ := String.contains(header, "struct rtype_CTest_R_Params* /*params*/");
+    has_incident,     _ := String.contains(header, "static inline void rtype_CTest_incident(");
+    has_reflected,    _ := String.contains(header, "static inline float rtype_CTest_reflected(");
+
+    shape_ok := !has_namespace && !has_constexpr && !has_brace_init
+             && has_define && has_struct_tag && has_vars_ptr && has_params_ptr
+             && has_incident && has_reflected;
+
+    print("=== test_r_solver: C-language codegen (adapted port) ===\n");
+    print("  no namespace: %  (expect true)\n", !has_namespace);
+    print("  no constexpr: %  (expect true)\n", !has_constexpr);
+    print("  no brace-init struct members: %  (expect true)\n", !has_brace_init);
+    print("  has #define n_ports: %  (expect true)\n", has_define);
+    print("  has prefixed struct tag: %  (expect true)\n", has_struct_tag);
+    print("  has `struct X* vars` param: %  (expect true)\n", has_vars_ptr);
+    print("  has `struct X* /*params*/` param: %  (expect true)\n", has_params_ptr);
+    print("  has incident()/reflected(): % / %  (expect true / true)\n", has_incident, has_reflected);
+    print("  C codegen (adapted) check ok: %\n\n", shape_ok);
+
+    // Also check the root (no adapt port) shape, since it takes a
+    // different -- but equally C++-reliant if unfixed -- codegen path.
+    topo_root := build_star_3port_topology();
+    topo_root.adapt_port = -1;
+    result_root := solve_rtype_scattering(topo_root);
+    header_root := generate_rtype_header("CRoot", *result_root, .["R0", "R1", "R2"], "c");
+
+    root_has_namespace,  _ := String.contains(header_root, "namespace");
+    root_has_brace_init, _ := String.contains(header_root, "{};");
+    root_has_compute,    _ := String.contains(header_root, "static inline void rtype_CRoot_compute(");
+    root_has_vars_ptr,   _ := String.contains(header_root, "struct rtype_CRoot_R_Vars* vars");
+
+    root_shape_ok := !root_has_namespace && !root_has_brace_init && root_has_compute && root_has_vars_ptr;
+    print("  C codegen (root) check ok: %\n\n", root_shape_ok);
+
+    print("  C codegen check ok: %\n\n", shape_ok && root_shape_ok);
+}
+
 run_r_solver_tests :: () {
     test_r_solver();
     test_r_solver_adapted();
@@ -377,6 +434,7 @@ run_r_solver_tests :: () {
     test_r_solver_star_3port_no_adapt();
     test_r_solver_star_3port_adapted();
     test_r_solver_root_rtype_codegen();
+    test_r_solver_c_codegen();
 }
 
 main :: () {

@@ -29,6 +29,15 @@ int main()
 
     const float fs = 48000.0f;
 
+#if NETLIST
+    struct Params params = {
+        .R3m_value = 12.5e3f,
+        .R2_value = 500.0e3f,
+        .R3p_value = 12.5e3f,
+        .R1m_value = 125.0e3f,
+        .R1p_value = 125.0e3f,
+    };
+#else
     struct Params params = {
         .Vin_Res3m_res_value = 12.5e3f,
         .Res2_Res3p_value = 512.5e3f,
@@ -38,6 +47,7 @@ int main()
         .Res4_value = 5.6e+04f,
         .Cap3_value = 2.0e-08f,
     };
+#endif
     struct Impedances impedances;
     calc_impedances (&impedances, fs, params);
     struct State state = {};
@@ -46,9 +56,15 @@ int main()
     for (size_t n = 0; n < count; ++n)
     {
         float v = 1.0f;
+#if NETLIST
+        float v_C1, v_R1p, v_R1m, v_R3m;
+        process (&state, &impedances, v, &v_C1, &v_R1p, &v_R1m, &v_R3m);
+        float test_output = v_C1 + v_R1p - v_R1m + v_R3m;
+#else
         float v_Res1p_Res1m_Cap1, v_Vin_Res3m;
         process (&state, &impedances, v, &v_Res1p_Res1m_Cap1, &v_Vin_Res3m);
         float test_output = v_Res1p_Res1m_Cap1 + (v_Vin_Res3m - v);
+#endif
         float error = fabsf (test_output - ref_output[n]);
         max_error = fmaxf (error, max_error);
     }

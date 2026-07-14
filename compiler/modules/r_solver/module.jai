@@ -513,7 +513,8 @@ solve_rtype_scattering :: (topo: R_Type_Topology) -> R_Solver_Result {
 // ===========================================================================
 // CODE GENERATION  (generate_rtype_header)
 // ===========================================================================
-// Converts a solved R_Solver_Result into a self-contained C++ sidecar header.
+// Converts a solved R_Solver_Result into a self-contained sidecar header
+// (C++, Jai, or C -- see `lang`).
 // ordered_child_names must list port impedance names in the same order as
 // node.children (the order wdf_compiler passes R/G pairs to update_vars).
 
@@ -607,20 +608,25 @@ generate_rtype_header :: (
     }
 
     is_jai := lang == "jai";
+    is_c   := lang == "c";
     // The wdf_lib SIMD matmul helpers only exist for C++; every other
     // target language falls back to the manual-loop codegen below.
     use_helpers := lang == "cpp";
 
     // Jai has no namespaces and #load merges a file's declarations straight
-    // into the caller's scope, so (unlike C++, which wraps everything in
-    // `namespace rtype_<node_name>`) every top-level Jai symbol here needs a
-    // node-unique prefix. This must match the jai_prefix=rtype_<name>_
-    // convention wired into the Custom(...) token in wdf_compiler.jai.
-    sym_prefix := ifx is_jai then tprint("rtype_%_", node_name) else "";
+    // into the caller's scope, so (unlike C++, which wraps everything
+    // in `namespace rtype_<node_name>`) every top-level Jai/C symbol here
+    // needs a node-unique prefix. This must match the
+    // jai_prefix=rtype_<name>_ / c_prefix=rtype_<name>_ convention wired
+    // into the Custom(...) token in wdf_compiler.jai.
+    sym_prefix := ifx (is_jai || is_c) then tprint("rtype_%_", node_name) else "";
     qualify :: (prefix: string, base: string) -> string {
         if prefix.count == 0  return base;
         return tprint("%1%2", prefix, base);
     }
+    // C struct types are referenced via their tag (`struct Name`), unlike
+    // C++ which allows the bare name; used to prefix pointer/type usages.
+    struct_kw := ifx is_c then "struct " else "";
 
     n_ports_name        := qualify(sym_prefix, "n_ports");
     n_children_name      := qualify(sym_prefix, "n_children");
@@ -641,9 +647,10 @@ generate_rtype_header :: (
     S_ref    := tprint("%S", vars_ref);
     zero_lit := ifx is_jai then "0.0" else "0.0f";
 
-    decl_const_int :: (builder: *String_Builder, is_jai: bool, name: string, value: string) {
-        if is_jai  print_to_builder(builder, "%1 :: %2;\n", name, value);
-        else       print_to_builder(builder, "static constexpr int %1 = %2;\n", name, value);
+    decl_const_int :: (builder: *String_Builder, is_jai: bool, is_c: bool, name: string, value: string) {
+        if is_jai       print_to_builder(builder, "%1 :: %2;\n", name, value);
+        else if is_c     print_to_builder(builder, "#define %1 (%2)\n", name, value);
+        else              print_to_builder(builder, "static constexpr int %1 = %2;\n", name, value);
     }
     struct_open :: (builder: *String_Builder, is_jai: bool, name: string) {
         if is_jai  print_to_builder(builder, "%1 :: struct {\n", name);
@@ -655,18 +662,23 @@ generate_rtype_header :: (
     }
     // default_str == "" means "value-initialize / zero-init only" (no
     // explicit value): Jai zero-inits by default, C++ needs an explicit {}.
-    struct_field :: (builder: *String_Builder, is_jai: bool, name: string, type_str: string, default_str: string) {
+    // C does not support either.
+    struct_field :: (builder: *String_Builder, is_jai: bool, is_c: bool, name: string, type_str: string, default_str: string) {
         if is_jai {
             if default_str.count == 0  print_to_builder(builder, "    %1: %2;\n", name, type_str);
             else                       print_to_builder(builder, "    %1: %2 = %3;\n", name, type_str, default_str);
+        } else if is_c {
+            print_to_builder(builder, "    %2 %1;\n", name, type_str);
         } else {
             if default_str.count == 0  print_to_builder(builder, "    %2 %1{};\n", name, type_str);
             else                       print_to_builder(builder, "    %2 %1 = %3;\n", name, type_str, default_str);
         }
     }
-    array_field :: (builder: *String_Builder, is_jai: bool, name: string, elem_type: string, size_expr: string, cpp_alignas: string) {
+    array_field :: (builder: *String_Builder, is_jai: bool, is_c: bool, name: string, elem_type: string, size_expr: string, cpp_alignas: string) {
         if is_jai {
             print_to_builder(builder, "    %1: [%2] %3;\n", name, size_expr, elem_type);
+        } else if is_c {
+            print_to_builder(builder, "    %1 %2[%3];\n", elem_type, name, size_expr);
         } else if cpp_alignas.count > 0 {
             print_to_builder(builder, "    alignas (%1) %2 %3[%4]{};\n", cpp_alignas, elem_type, name, size_expr);
         } else {
@@ -695,38 +707,38 @@ generate_rtype_header :: (
     } else {
         print_to_builder(*builder, "#pragma once\n\n");
         if use_helpers  print_to_builder(*builder, "#include <wdf_lib_rtype_helpers.h>\n\n");
-        print_to_builder(*builder, "namespace rtype_% {\n\n", node_name);
+        if !is_c  print_to_builder(*builder, "namespace rtype_% {\n\n", node_name);
     }
-    decl_const_int(*builder, is_jai, n_ports_name, tprint("%", n_ports));
-    decl_const_int(*builder, is_jai, n_children_name, tprint("%", n_children));
+    decl_const_int(*builder, is_jai, is_c, n_ports_name, tprint("%", n_ports));
+    decl_const_int(*builder, is_jai, is_c, n_children_name, tprint("%", n_children));
     if use_helpers {
         // Column stride for vars->S, padded to the SIMD width so
         // wdf_lib::aligned_matmul can load/store full vectors.
-        decl_const_int(*builder, is_jai, n_ports_padded_name, tprint("wdf_lib::pad_to_multiple (%, 4)", n_ports_name));
+        decl_const_int(*builder, is_jai, is_c, n_ports_padded_name, tprint("wdf_lib::pad_to_multiple (%, 4)", n_ports_name));
     }
     if adapt >= 0 {
         // use_helpers reindexes the up-port to local slot n_children (see
         // local_port[] above), so adapt_port must reflect that local index
         // there instead of the solver's physical port index.
         adapt_port_val := ifx use_helpers then n_children else adapt;
-        decl_const_int(*builder, is_jai, adapt_port_name, tprint("%", adapt_port_val));
+        decl_const_int(*builder, is_jai, is_c, adapt_port_name, tprint("%", adapt_port_val));
     }
     print_to_builder(*builder, "\n");
 
     // Structs.
     struct_open(*builder, is_jai, r_params_name);
     for name : extra_symbols {
-        struct_field(*builder, is_jai, name, "float", float_default("0.0", is_jai));
+        struct_field(*builder, is_jai, is_c, name, "float", float_default("0.0", is_jai));
     }
     struct_close(*builder, is_jai);
 
     struct_open(*builder, is_jai, r_vars_name);
     if use_helpers {
-        array_field(*builder, is_jai, "S", "float", tprint("% * %", n_ports_name, n_ports_padded_name), "16");
+        array_field(*builder, is_jai, is_c, "S", "float", tprint("% * %", n_ports_name, n_ports_padded_name), "16");
     } else {
-        array_field(*builder, is_jai, "S", "float", tprint("% * %", n_ports_name, n_ports_name), "");
+        array_field(*builder, is_jai, is_c, "S", "float", tprint("% * %", n_ports_name, n_ports_name), "");
     }
-    if adapt >= 0  struct_field(*builder, is_jai, "R_adapt", "float", "");
+    if adapt >= 0  struct_field(*builder, is_jai, is_c, "R_adapt", "float", "");
     struct_close(*builder, is_jai);
 
     // update_vars.
@@ -736,9 +748,9 @@ generate_rtype_header :: (
         print_to_builder(*builder, ") -> float {\n");
     } else {
         print_to_builder(*builder, "static inline float %(\n", update_vars_name);
-        print_to_builder(*builder, "    %* vars,\n", r_vars_name);
-        if extra_symbols.count > 0  print_to_builder(*builder, "    const %* params", r_params_name);
-        else                        print_to_builder(*builder, "    const %* /*params*/", r_params_name);
+        print_to_builder(*builder, "    %1%2* vars,\n", struct_kw, r_vars_name);
+        if extra_symbols.count > 0  print_to_builder(*builder, "    const %1%2* params", struct_kw, r_params_name);
+        else                        print_to_builder(*builder, "    const %1%2* /*params*/", struct_kw, r_params_name);
         for name : ordered_child_names  print_to_builder(*builder, ",\n    float %, float /*G_%*/", name, name);
         print_to_builder(*builder, "\n) {\n");
     }
@@ -793,7 +805,7 @@ generate_rtype_header :: (
             print_to_builder(*builder, "%1 :: (vars: *%2, a_in: *float) -> float {\n", reflected_name, r_vars_name);
         } else {
             print_to_builder(*builder, "static inline float %(\n", reflected_name);
-            print_to_builder(*builder, "    const %* vars,\n", r_vars_name);
+            print_to_builder(*builder, "    const %1%2* vars,\n", struct_kw, r_vars_name);
             print_to_builder(*builder, "    const float* a_in  // [n_children]\n");
             print_to_builder(*builder, ") {\n");
         }
@@ -820,7 +832,7 @@ generate_rtype_header :: (
             print_to_builder(*builder, "%1 :: (vars: *%2, a_up: float, a_in: *float, b_out: *float) {\n", incident_name, r_vars_name);
         } else {
             print_to_builder(*builder, "static inline void %(\n", incident_name);
-            print_to_builder(*builder, "    const %* vars,\n", r_vars_name);
+            print_to_builder(*builder, "    const %1%2* vars,\n", struct_kw, r_vars_name);
             print_to_builder(*builder, "    float a_up,\n");
             print_to_builder(*builder, "    const float* a_in,  // [n_children]\n");
             print_to_builder(*builder, "    float* b_out        // [n_children]\n");
@@ -863,7 +875,7 @@ generate_rtype_header :: (
             print_to_builder(*builder, "%1 :: (vars: *%2, a_in: *float, b_out: *float) {\n", compute_name, r_vars_name);
         } else {
             print_to_builder(*builder, "static inline void %(\n", compute_name);
-            print_to_builder(*builder, "    const %* vars,\n", r_vars_name);
+            print_to_builder(*builder, "    const %1%2* vars,\n", struct_kw, r_vars_name);
             print_to_builder(*builder, "    const float* a_in,  // [n_children]\n");
             print_to_builder(*builder, "    float* b_out        // [n_children]\n");
             print_to_builder(*builder, ") {\n");
@@ -896,7 +908,7 @@ generate_rtype_header :: (
         print_to_builder(*builder, "}\n\n");
     }
 
-    if !is_jai  print_to_builder(*builder, "} // namespace rtype_%\n", node_name);
+    if !is_jai && !is_c  print_to_builder(*builder, "} // namespace rtype_%\n", node_name);
     return builder_to_string(*builder);
 }
 

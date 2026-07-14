@@ -216,11 +216,11 @@ convert_netlist_to_wdf :: (file_str: string, output_file: string) -> string {
         if result.adapt_port >= 0 {
             n_children := result.n_ports - 1;
             spqr_nodes[rigid_idx].value = tprint(
-                "%1, cpp_prefix=rtype_%2::, jai_prefix=rtype_%2_, params=R_Params, vars=R_Vars, updater=update_vars, incident=incident, reflected=reflected",
+                "%1, cpp_prefix=rtype_%2::, c_prefix=rtype_%2_, jai_prefix=rtype_%2_, params=R_Params, vars=R_Vars, updater=update_vars, incident=incident, reflected=reflected",
                 n_children, node_name);
         } else {
             spqr_nodes[rigid_idx].value = tprint(
-                "%1, cpp_prefix=rtype_%2::, jai_prefix=rtype_%2_, params=R_Params, vars=R_Vars, updater=update_vars, compute=compute",
+                "%1, cpp_prefix=rtype_%2::, c_prefix=rtype_%2_, jai_prefix=rtype_%2_, params=R_Params, vars=R_Vars, updater=update_vars, compute=compute",
                 result.n_ports, node_name);
         }
 

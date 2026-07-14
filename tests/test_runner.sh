@@ -95,6 +95,21 @@ c_test () {
    "./${test}_c.exe"
 }
 
+netlist_c_test () {
+   test="$1"
+   echo "Running netlist C Test: $test"
+   cd "${SCRIPT_DIR}/${test}"
+
+   wdf_compiler_flags="-lang c -netlist"
+   if [[ "$test" == *"double"* ]]; then
+       wdf_compiler_flags="${wdf_compiler_flags} -dtype double"
+   fi
+
+   $wdf_compiler "${test}.net" "${test}_c.h" ${wdf_compiler_flags}
+   clang ${test}.c ${c_bench_flags} -D_CRT_SECURE_NO_WARNINGS -Wno-c2x-extensions -DNETLIST=1 -I../../lib -o ${test}_c.exe
+   "./${test}_c.exe"
+}
+
 jai_test () {
    test="$1"
    echo "Running JAI Test: $test"
@@ -159,6 +174,7 @@ test () {
    if [[ "$args" = *" rust "* ]]; then rust_test $test; fi
    if [[ "$args" = *" netlist "* ]]; then netlist_test $test; fi
    if [[ "$args" = *" netlist_jai "* ]]; then netlist_jai_test $test; fi
+   if [[ "$args" = *" netlist_c "* ]]; then netlist_c_test $test; fi
 }
 
 if [[ "$*" = *bench* ]]; then
@@ -196,13 +212,13 @@ elif [[ "$*" = *lang-perf* ]]; then
     c_test baxandall_eq
     rust_test baxandall_eq
 else
-   test rc_lowpass cpp jai c_lang rust netlist netlist_jai
+   test rc_lowpass cpp jai c_lang rust netlist netlist_jai netlist_c
    test rc_lowpass_double cpp jai c_lang rust
    test rc_lowpass_simd cpp
-   test rc_bandpass cpp jai c_lang rust netlist netlist_jai
+   test rc_bandpass cpp jai c_lang rust netlist netlist_jai netlist_c
    test rl_lowpass cpp jai c_lang rust
    test rc_lowpass_var cpp jai c_lang rust
-   test rl_lowpass_var cpp jai c_lang rust netlist netlist_jai
+   test rl_lowpass_var cpp jai c_lang rust netlist netlist_jai netlist_c
    test rc_bandpass_var cpp jai c_lang rust
    test rc_lowpass_2ins cpp jai c_lang rust
    test preamp_eq cpp jai c_lang rust
@@ -210,7 +226,7 @@ else
    test hard_clipper cpp jai c_lang rust
    test diode_circuit cpp jai netlist netlist_jai
    test simple_triode cpp jai
-   test bassman_tone_stack cpp jai c_lang rust netlist netlist_jai
+   test bassman_tone_stack cpp jai c_lang rust netlist netlist_jai netlist_c
    test sk_lpf cpp netlist netlist_jai
    test sk_lpf_ideal cpp netlist netlist_jai
    test baxandall_eq cpp jai c_lang rust
