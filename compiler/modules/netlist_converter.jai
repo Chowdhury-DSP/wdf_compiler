@@ -649,29 +649,27 @@ generate_wdf_string :: (nodes: []SPQR_Node, root: int, meta: []string) -> string
     return builder_to_string(*builder);
 }
 
+// Plain-text SPQR tree dump for the -verbose flag. This used to go straight to
+// the terminal via print_color() (raw ANSI escapes via write_string(), which
+// bypasses context.logger entirely and so can't be captured by a host
+// program) -- log() instead, with a bracketed tag replacing the color, so a
+// statically-linked caller can capture this the same way as any other
+// diagnostic output.
 print_spqr_graph :: (nodes: []SPQR_Node, root: int) {
 
-    print_element :: (nodes: []SPQR_Node, index: int, prefix: string, last: bool) {
+    node_tag :: (node: SPQR_Node) -> string {
+        if node.is_input  return " [input]";
+        if node.is_root    return " [root]";
+        if node.output == .VOLTAGE  return " [V]";
+        if node.output == .CURRENT  return " [I]";
+        return "";
+    }
+
+    log_element :: (nodes: []SPQR_Node, index: int, prefix: string, last: bool) {
         node := nodes[index];
         name := ifx node.kind == .LEAF then node.component_id else tprint("%", node.kind);
-
-        // print prefix
-        print("%", prefix);
-
-        // print branch
-        if last {
-            print("└── ");
-        } else {
-            print("├── ");
-        }
-
-        color := Console_Color.WHITE;
-        if node.is_input color = .RED;
-        else if node.is_root color = .YELLOW;
-        else if node.output == .VOLTAGE color = .GREEN;
-        else if node.output == .CURRENT color = .MAGENTA;
-
-        print_color("%\n", name, color=color);
+        branch := ifx last then "└── " else "├── ";
+        log("%1%2%3%4\n", prefix, branch, name, node_tag(node));
 
         // compute prefix for children
         child_prefix := prefix;
@@ -687,23 +685,20 @@ print_spqr_graph :: (nodes: []SPQR_Node, root: int) {
 
             child_last := i == node.children.count - 1;
 
-            print_element(nodes, child, child_prefix, child_last);
+            log_element(nodes, child, child_prefix, child_last);
         }
     }
 
     // root printed without prefix
     root_node := nodes[root];
     name := ifx root_node.kind == .LEAF then root_node.component_id else tprint("%", root_node.kind);
-    color := Console_Color.WHITE;
-    if root_node.is_input color = .RED;
-    else if root_node.is_root color = .YELLOW;
-    print_color("%\n", name, color=color);
+    log("%1%2\n", name, node_tag(root_node));
 
     for i: 0..root_node.children.count-1 {
         child := root_node.children[i];
         if child < 0 continue;
 
-        print_element(nodes, child, "", i == root_node.children.count-1);
+        log_element(nodes, child, "", i == root_node.children.count-1);
     }
 }
 
@@ -843,5 +838,4 @@ generate_rtype_netlist_string :: (nodes: []SPQR_Node, op_amps: []Op_Amp, r_node_
 #scope_file
 #import "Basic";
 String :: #import "String";
-#import "Print_Color";
 #import "r_solver";

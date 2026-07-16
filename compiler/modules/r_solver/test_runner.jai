@@ -444,5 +444,5 @@ main :: () {
 #scope_file
 #import "Basic";
 #import "r_solver";
-#import "sym_algebra";
+#import "wdf_sym_algebra";
 String :: #import "String";

@@ -166,9 +166,9 @@ parse_circuit :: (circuit_str: string, lang: string) -> [] Token {
 
         found_token_tag, tag, args := String.split_from_left(token_str, #char "(");
         error_assert(! String.contains(args, #char "("), tprint("Multiple tokens in one statement! Probably missing a semi-colon.\nStatement: %", token_str));
-        // remove closing parenthese from args
         error_assert(args[args.count - 1] == #char ")", tprint("Token % is missing closing parenthese", tag));
-        args.count = args.count - 1;
+        if compile_failed return .[];
+        args.count = args.count - 1; // remove closing parenthese from args
 
         num_children := 0;
         new_token: Token;
@@ -215,6 +215,7 @@ parse_circuit :: (circuit_str: string, lang: string) -> [] Token {
                 new_token.type = .Custom;
             case; error_assert(false, tprint("Unknown token type: %", tag));
         }
+        if compile_failed return .[];
 
         args_split := String.split(args, cast(u8) #char ",");
         new_token.name = args_split[0];
@@ -222,6 +223,7 @@ parse_circuit :: (circuit_str: string, lang: string) -> [] Token {
         for old_token : tokens {
             error_assert(new_token.name != old_token.name, tprint("Duplicate token name: %", new_token.name));
         }
+        if compile_failed return .[];
 
         new_token.args.data = args_split.data + 1;
         new_token.args.count = args_split.count - 1;
@@ -302,6 +304,7 @@ parse_circuit :: (circuit_str: string, lang: string) -> [] Token {
 
             case .Resistive_Capacitive_Voltage_Source;
                 error_assert(new_token.args.count >= 2, "RCVs requires at least 2 arguments");
+                if compile_failed return .[];
 
                 param_names := make_array(string, 3);
                 param_names[0] = tprint("%_v_value", new_token.name);
@@ -320,6 +323,7 @@ parse_circuit :: (circuit_str: string, lang: string) -> [] Token {
 
             case .Root_Capacitive_Voltage_Source_par_Resistor;
                 error_assert(new_token.args.count >= 2, "Root_CVs_par_R requires at least 2 arguments");
+                if compile_failed return .[];
 
                 param_names := make_array(string, 3);
                 param_names[0] = tprint("%_v_value", new_token.name);
@@ -438,6 +442,7 @@ parse_file_sections :: (file_str: string) -> File_Sections {
 get_value :: (val_str: string) -> float32 {
     val, success, remainder := string_to_float(val_str);
     error_assert (success, tprint("Unable to parse value string: %", val_str));
+    if compile_failed return 0;
     if remainder.count == 0 { return val; }
     if remainder[0] == {
         case #char "M";

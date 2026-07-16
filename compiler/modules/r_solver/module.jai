@@ -749,9 +749,17 @@ generate_rtype_header :: (
     } else {
         print_to_builder(*builder, "static inline float %(\n", update_vars_name);
         print_to_builder(*builder, "    %1%2* vars,\n", struct_kw, r_vars_name);
-        if extra_symbols.count > 0  print_to_builder(*builder, "    const %1%2* params", struct_kw, r_params_name);
-        else                        print_to_builder(*builder, "    const %1%2* /*params*/", struct_kw, r_params_name);
-        for name : ordered_child_names  print_to_builder(*builder, ",\n    float %, float /*G_%*/", name, name);
+        if extra_symbols.count > 0 {
+            print_to_builder(*builder, "    const %1%2* params", struct_kw, r_params_name);
+        } else {
+            if is_c  print_to_builder(*builder, "    const %1%2* params", struct_kw, r_params_name);
+               else  print_to_builder(*builder, "    const %1%2* /*params*/", struct_kw, r_params_name);
+        }
+        if is_c {
+            for name : ordered_child_names  print_to_builder(*builder, ",\n    float %, float G_%", name, name);
+        } else {
+            for name : ordered_child_names  print_to_builder(*builder, ",\n    float %, float /*G_%*/", name, name);
+        }
         print_to_builder(*builder, "\n) {\n");
     }
     for name : extra_symbols  decl_local_float(*builder, is_jai, name, tprint("params%1%2", mref, name));
@@ -1070,4 +1078,4 @@ print_rtype :: (result: R_Solver_Result, topo: R_Type_Topology) {
 
 #scope_file
 #import "Basic";
-#import "sym_algebra";
+#import "wdf_sym_algebra";

@@ -2,10 +2,9 @@
 File :: #import "File";
 String :: #import "String";
 Math :: #import "Math";
-#import "Print_Color";
 #import "netlist_converter";
 #import "r_solver";
-#import "sym_algebra";
+#import "wdf_sym_algebra";
 
 main :: () {
 
