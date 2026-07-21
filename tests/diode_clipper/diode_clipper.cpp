@@ -41,8 +41,10 @@ int main()
     ref.prepare (fs);
 
     Params params {
+#if ! NETLIST
         .C1_value = 1.0e-6f,
         .Vin_res_value = 1.0e3f,
+#endif
         .DP_params = {
             .Is = 1.0e-9f,
             .Vt = 25.85e-3f,
@@ -71,9 +73,11 @@ int main()
         return 1;
     }
 
+#if ! NETLIST
     std::ofstream ofp { "data.bin", std::ios::out | std::ios::binary };
     ofp.write(reinterpret_cast<const char*>(ref_output.data()), N * sizeof (float));
     ofp.close();
+#endif
 
 #if RUN_BENCH
     static constexpr int M = 10'000'000;

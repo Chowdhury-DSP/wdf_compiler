@@ -82,6 +82,14 @@ Op_Amp :: struct {
     model := Op_Amp_Model.FINITE_GAIN;
 }
 
+// A SPICE "D<name> n1 n2 <model>" line, resolved by resolve_diodes().
+Diode :: struct {
+    component_id: string;
+    n1: int;
+    n2: int;
+    model: string;
+}
+
 get_node_idx :: (node_names: *[..]string, name: string) -> int {
     found, idx := array_find(node_names.*, name);
     if found return idx;
@@ -92,7 +100,7 @@ get_node_idx :: (node_names: *[..]string, name: string) -> int {
 }
 
 add_component :: (graph: *Graph, spqr_nodes: *[..] SPQR_Node,
-                  op_amps: *[..] Op_Amp, node_names: *[..]string,
+                  op_amps: *[..] Op_Amp, diodes: *[..] Diode, node_names: *[..]string,
                   n1: int, n2: int, value_str: string,
                   meta: []string, parts: []string) {
 
@@ -151,6 +159,18 @@ add_component :: (graph: *Graph, spqr_nodes: *[..] SPQR_Node,
             };
             array_add(op_amps, op_amp);
             return;
+        case "D"; #through;
+        case "d";
+            error_assert(parts.count >= 4, tprint("Diode % needs a model name: \"D<name> n+ n- <model>\"", component_id));
+            if compile_failed return;
+            diode := Diode.{
+                component_id = component_id,
+                n1 = n1,
+                n2 = n2,
+                model = parts[3],
+            };
+            array_add(diodes, diode);
+            return;
         case;
             leaf.leaf = .CUSTOM;
             leaf.value = get_custom_meta(meta);
@@ -185,12 +205,65 @@ add_component :: (graph: *Graph, spqr_nodes: *[..] SPQR_Node,
     array_add(*graph.adjacency[n2], edge_id);
 }
 
+// Maps SPICE "D" lines onto the matching built-in wave-domain diode
+// element. A mismatched diode count/topology, or more than one node
+// pair is a compile error.
+resolve_diodes :: (graph: *Graph, spqr_nodes: *[..] SPQR_Node, node_names: [] string, diodes: [] Diode) {
+    if diodes.count == 0 return;
+
+    for existing : spqr_nodes.* {
+        error_assert(!existing.is_root, tprint("Netlist has diodes as well as an explicit root ('%'); can't have both.", existing.component_id));
+    }
+    if compile_failed return;
+
+    n1 := diodes[0].n1;
+    n2 := diodes[0].n2;
+    for d : diodes {
+        same_pair := (d.n1 == n1 && d.n2 == n2) || (d.n1 == n2 && d.n2 == n1);
+        error_assert(same_pair, "Diodes on more than one node pair aren't supported natively; use \"; root custom:...\" instead.");
+    }
+    if compile_failed return;
+
+    leaf := SPQR_Node.{ kind = .LEAF, leaf = .CUSTOM, is_root = true };
+
+    if diodes.count == 1 {
+        leaf.component_id = diodes[0].component_id;
+        leaf.value = "1,prefix=wdf_lib::diode::,jai_prefix=,params=Diode_Params,vars=Diode_Vars,updater=update_vars,compute=root_compute";
+    } else if diodes.count == 2 {
+        d0 := diodes[0];
+        d1 := diodes[1];
+        antiparallel := d0.n1 == d1.n2 && d0.n2 == d1.n1;
+        error_assert(antiparallel && d0.model == d1.model,
+                     tprint("Diodes % and % must be antiparallel (same two nodes, opposite polarity) with the same model to form a diode pair.", d0.component_id, d1.component_id));
+        if compile_failed return;
+
+        leaf.component_id = d0.component_id; // name the pair after the first diode, like hand-written "DP"
+        leaf.value = "1,prefix=wdf_lib::diode_pair::,jai_prefix=,params=Diode_Pair_Params,vars=Diode_Pair_Vars,updater=update_vars,compute=root_compute";
+    } else {
+        error_assert(false, tprint("% diodes share nodes % and %; only one diode or one antiparallel pair is supported natively.", diodes.count, node_names[n1], node_names[n2]));
+        return;
+    }
+
+    leaf_id := spqr_nodes.count;
+    array_add(spqr_nodes, leaf);
+
+    edge := Edge.{ n1 = n1, n2 = n2, spqr_node = leaf_id };
+    edge_id := graph.edges.count;
+    array_add(*graph.edges, edge);
+    if n1 >= graph.adjacency.count || n2 >= graph.adjacency.count {
+        array_resize(*graph.adjacency, max(n1, n2) + 1, initialize=true);
+    }
+    array_add(*graph.adjacency[n1], edge_id);
+    array_add(*graph.adjacency[n2], edge_id);
+}
+
 parse_netlist :: (netlist_str: string) -> Graph, [..] SPQR_Node, [..] Op_Amp, [..] string {
     lines := String.split(netlist_str, "\n");
 
     graph: Graph;
     spqr_nodes : [..] SPQR_Node;
     op_amps : [..] Op_Amp;
+    diodes : [..] Diode;
     circuit_meta : [..] string;
     array_reserve(*spqr_nodes, lines.count * 2);
 
@@ -205,7 +278,7 @@ parse_netlist :: (netlist_str: string) -> Graph, [..] SPQR_Node, [..] Op_Amp, [.
             array_add(*circuit_meta, String.slice(line_trim, 6, line_trim.count - 6));
         }
 
-        if line_trim[0] == "*" || line_trim[0] == "." { continue; } // comment or heading line
+        if line_trim[0] == "*" || line_trim[0] == "." { continue; } // comment or heading line (".model" cards included - we only need the model *name* referenced by a "D" line, not its params)
 
         raw_parts := String.split(line_trim, " ");
         parts: [..] string;
@@ -228,7 +301,7 @@ parse_netlist :: (netlist_str: string) -> Graph, [..] SPQR_Node, [..] Op_Amp, [.
             }
         }
 
-        add_component(*graph, *spqr_nodes, *op_amps, *node_names, node1, node2, value_str, meta, parts);
+        add_component(*graph, *spqr_nodes, *op_amps, *diodes, *node_names, node1, node2, value_str, meta, parts);
     }
 
     if op_amps.count > 0 {
@@ -240,6 +313,8 @@ parse_netlist :: (netlist_str: string) -> Graph, [..] SPQR_Node, [..] Op_Amp, [.
             graph.pinned[op_amp.n_gnd] = true;
         }
     }
+
+    resolve_diodes(*graph, *spqr_nodes, node_names, diodes);
 
     return graph, spqr_nodes, op_amps, circuit_meta;
 }
@@ -839,3 +914,4 @@ generate_rtype_netlist_string :: (nodes: []SPQR_Node, op_amps: []Op_Amp, r_node_
 #import "Basic";
 String :: #import "String";
 #import "r_solver";
+#import "utils";
