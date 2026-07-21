@@ -1,5 +1,5 @@
 circuit:
-Custom(DP, 1, prefix=wdf_lib::diode::, jai_prefix=, params=Diode_Params, vars=Diode_Vars, updater=update_vars, compute=root_compute);
+Custom(DP, 1, prefix=wdf_lib::diode::, c_prefix=wdf_lib_diode_, jai_prefix=, params=Diode_Params, vars=Diode_Vars, updater=update_vars, compute=root_compute);
     Parallel(P1);
         C(C1, 1n);
         RVs(Vin, 100);
@@ -11,5 +11,6 @@ outputs:
 V:C1
 
 meta:
-include:<wdf_lib_diode.h>
+include_cpp:<wdf_lib_diode.h>
+include_c:<wdf_lib_diode_c.h>
 load:"../../lib/wdf_lib_diode.jai"

@@ -1,12 +1,13 @@
 * Diode Clipper
-V1 P001 0 PULSE(0 1 1m 1u 1u 10m 20m 0) ; input
+Vin P001 0 PULSE(0 1 1m 1u 1u 10m 20m 0) ; input
 Rin P002 P001 1000
 C1 P002 0 1e-6 ; output:V
 DP P002 0 D1N914
 DP2 0 P002 D1N914
 .model D1N914 D (IS=1e-9 N=1)
 .tran 0 50m 0 10u
-.meta:include:<wdf_lib_diode_pair.h>
+.meta:include_cpp:<wdf_lib_diode_pair.h>
+.meta:include_c:<wdf_lib_diode_pair_c.h>
 .meta:load:"../../lib/wdf_lib_diode_pair.jai"
 .backanno
 .end

@@ -8,13 +8,12 @@ main :: () {
     context.print_style.default_format_float.mode = .SCIENTIFIC;
 
     fs : float32 : 48000.0;
-    params := Params.{
-        C1_value = 1.0e-6,
-        Vin_res_value = 1.0e3,
-        DP_params = .{
-            Is = 1.0e-9,
-        },
-    };
+    params : Params;
+    params.DP_params = .{ Is = 1.0e-9, };
+    #if ! NETLIST {
+        params.C1_value = 1.0e-6;
+        params.Vin_res_value = 1.0e3;
+    }
 
     impedances: Impedances;
     calc_impedances(*impedances, fs, params);

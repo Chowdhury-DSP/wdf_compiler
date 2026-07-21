@@ -228,7 +228,7 @@ resolve_diodes :: (graph: *Graph, spqr_nodes: *[..] SPQR_Node, node_names: [] st
 
     if diodes.count == 1 {
         leaf.component_id = diodes[0].component_id;
-        leaf.value = "1,prefix=wdf_lib::diode::,jai_prefix=,params=Diode_Params,vars=Diode_Vars,updater=update_vars,compute=root_compute";
+        leaf.value = "1,prefix=wdf_lib::diode::,c_prefix=wdf_lib_diode_,jai_prefix=,params=Diode_Params,vars=Diode_Vars,updater=update_vars,compute=root_compute";
     } else if diodes.count == 2 {
         d0 := diodes[0];
         d1 := diodes[1];
@@ -238,7 +238,7 @@ resolve_diodes :: (graph: *Graph, spqr_nodes: *[..] SPQR_Node, node_names: [] st
         if compile_failed return;
 
         leaf.component_id = d0.component_id; // name the pair after the first diode, like hand-written "DP"
-        leaf.value = "1,prefix=wdf_lib::diode_pair::,jai_prefix=,params=Diode_Pair_Params,vars=Diode_Pair_Vars,updater=update_vars,compute=root_compute";
+        leaf.value = "1,prefix=wdf_lib::diode_pair::,c_prefix=wdf_lib_diode_pair_,jai_prefix=,params=Diode_Pair_Params,vars=Diode_Pair_Vars,updater=update_vars,compute=root_compute";
     } else {
         error_assert(false, tprint("% diodes share nodes % and %; only one diode or one antiparallel pair is supported natively.", diodes.count, node_names[n1], node_names[n2]));
         return;
