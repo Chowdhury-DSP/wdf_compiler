@@ -12,7 +12,7 @@ main :: () {
         Vplus_v_value = 4.5,
         R26_params = .{ Ag = 100.0, Ro = 0.1, Ri = 10.0e6 },
         Rd_value = 50.0e3,
-        DP_params = .{
+        XP_params = .{
             Is = 5.0e-9,
             Vt = 25.85e-3,
             nabla = 2.0,

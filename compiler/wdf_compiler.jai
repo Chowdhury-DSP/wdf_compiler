@@ -40,7 +40,7 @@ main :: () {
     file_str, fread_success := File.read_entire_file(input_file);
     if !fread_success { exit (1); }
 
-    output_dir := directory_of_path(output_file);
+    output_dir := directory_of_path(File.get_absolute_path(output_file));
     success, gen_code := compile_wdf(file_str, args, output_dir);
     if !success { exit(1); }
 

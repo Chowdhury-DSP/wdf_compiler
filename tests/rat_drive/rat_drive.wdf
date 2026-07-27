@@ -1,5 +1,5 @@
 circuit:
-Custom(DP, 1, prefix=wdf_lib::diode_pair::, jai_prefix=, params=Diode_Pair_Params, vars=Diode_Pair_Vars, updater=update_vars, compute=root_compute);
+Custom(XP, 1, prefix=wdf_lib::diode_pair::, jai_prefix=, params=Diode_Pair_Params, vars=Diode_Pair_Vars, updater=update_vars, compute=root_compute);
     Series(Sd);
         Series(S_R6_C7);
             R(R6, 1k);
@@ -27,7 +27,7 @@ inputs:
 Vin_C1
 
 outputs:
-V:DP
+V:XP
 
 meta:
 include_cpp:"custom_rat_drive_rtype.h"

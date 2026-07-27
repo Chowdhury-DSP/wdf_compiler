@@ -1,6 +1,6 @@
 #pragma once
 
-// #include <stdint.h>
+#include <stdint.h>
 
 /**
  * Plain-C port of the Wright Omega approximations from wdf_lib_omega.h,

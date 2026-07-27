@@ -106,7 +106,7 @@ int main()
         },
 #endif
         .Rd_value = 0.5f * Reference_WDF::Rdistortion,
-        .DP_params = {
+        .XP_params = {
             .Is = 5.0e-9f,
             .Vt = 25.85e-3f,
             .nabla = 2.0f,
