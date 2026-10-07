@@ -1,0 +1,16 @@
+circuit:
+Custom(DP, 1,prefix=wdf_lib::diode::,params=Diode_Params,vars=Diode_Vars,updater=update_vars,compute=root_compute);
+    Parallel(P4);
+        C(C1, 1n);
+        Series(S5);
+            RVs(V1);
+            R(R1, 100);
+
+inputs:
+V1
+
+outputs:
+V:C1
+
+meta:
+include:<wdf_lib_diode.h>

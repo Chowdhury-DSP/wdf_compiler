@@ -1,0 +1,11 @@
+circuit:
+IVs(V1);
+    Series(S3);
+        R(R1, 1k);
+        C(C1, 1u);
+
+inputs:
+V1
+
+outputs:
+V:C1
