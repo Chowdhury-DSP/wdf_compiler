@@ -1,0 +1,105 @@
+b, R0 = wdf_resistor(a, R) {
+	b = 0
+	R0 = R
+}
+
+b, R0 = wdf_capacitor(a, C) {
+	b = delay1(a)
+	R0 = 0.5 / (C * fs)
+}
+
+b = wdf_voltage_source_root(a, voltage) {
+	b = 2 * voltage - a
+}
+
+bu, bl, br, R0 = wdf_3port_series(au, al, ar, Rl, Rr) {
+	sum = au + al + ar
+	R0 = Rl + Rr
+	bu = -(al + ar)
+	bl = al - (Rl / R0) * sum
+	br = ar - (Rr / R0) * sum
+}
+
+bu, bl, br, R0 = wdf_3port_parallel(au, al, ar, Rl, Rr) {
+	R0 = 1 / (1 / Rl + 1 / Rr)
+	bu = (R0 / Rl) * al + (R0 / Rr) * ar
+	junction = au + bu
+	bl = junction - al
+	br = junction - ar
+}
+
+y = paper_reductions_circuit(x) {
+	# Resistor combos
+	bR1, RR1 = wdf_resistor(aR1, 1000)
+	bR2, RR2 = wdf_resistor(aR2, 5000)
+	bS1, aR1, aR2, RS1 = wdf_3port_series(aS1, bR1, bR2, RR1, RR2)
+
+	bR3, RR3 = wdf_resistor(aR3, 4000)
+	bS2, aS1, aR3, RS2 = wdf_3port_series(aS2, bS1, bR3, RS1, RR3)
+
+	bR4, RR4 = wdf_resistor(aR4, 10000)
+	bR5, RR5 = wdf_resistor(aR5, 3000)
+	bP1, aR4, aR5, RP1 = wdf_3port_parallel(aP1, bR4, bR5, RR4, RR5)
+
+	bP2, aS2, aP1, RP2 = wdf_3port_parallel(aP2, bS2, bP1, RS2, RP1)
+
+	# Capacitor combos
+	bC1, RC1 = wdf_capacitor(aC1, 1e-6)
+	bC2, RC2 = wdf_capacitor(aC2, 5e-6)
+	bS4, aC1, aC2, RS4 = wdf_3port_series(aS4, bC1, bC2, RC1, RC2)
+
+	bC3, RC3 = wdf_capacitor(aC3, 4e-9)
+	bS5, aS4, aC3, RS5 = wdf_3port_series(aS5, bS4, bC3, RS4, RC3)
+
+	bC4, RC4 = wdf_capacitor(aC4, 10e-9)
+	bC5, RC5 = wdf_capacitor(aC5, 3e-6)
+	bP3, aC4, aC5, RP3 = wdf_3port_parallel(aP3, bC4, bC5, RC4, RC5)
+
+	bP4, aS5, aP3, RP4 = wdf_3port_parallel(aP4, bS5, bP3, RS5, RP3)
+
+	# Join resistor combos and capacitor combos
+	bS3, aP2, aP4, RS3 = wdf_3port_series(aS3, bP2, bP4, RP2, RP4)
+
+	# RC series + R, then + C
+	bR6, RR6 = wdf_resistor(aR6, 10000)
+	bS6, aS3, aR6, RS6 = wdf_3port_series(aS6, bS3, bR6, RS3, RR6)
+
+	bC6, RC6 = wdf_capacitor(aC6, 4e-6)
+	bS7, aS6, aC6, RS7 = wdf_3port_series(aS7, bS6, bC6, RS6, RC6)
+
+	# RC parallel, then + R, then + C
+	bR7, RR7 = wdf_resistor(aR7, 10000)
+	bC7, RC7 = wdf_capacitor(aC7, 10e-6)
+	bP5, aR7, aC7, RP5 = wdf_3port_parallel(aP5, bR7, bC7, RR7, RC7)
+
+	bR8, RR8 = wdf_resistor(aR8, 100000)
+	bP6, aP5, aR8, RP6 = wdf_3port_parallel(aP6, bP5, bR8, RP5, RR8)
+
+	bC8, RC8 = wdf_capacitor(aC8, 100e-9)
+	bP7, aP6, aC8, RP7 = wdf_3port_parallel(aP7, bP6, bC8, RP6, RC8)
+
+	# RC series + RC parallel
+	bS8, aS7, aP7, RS8 = wdf_3port_series(aS8, bS7, bP7, RS7, RP7)
+
+	# Load and source resistances
+	bRl, RRl = wdf_resistor(aRl, 100000)
+	bSl, aRl, aS8, RSl = wdf_3port_series(aSl, bRl, bS8, RRl, RS8)
+
+	bRv2, RRv2 = wdf_resistor(aRv2, 5000)
+	bSv2, aRv2, aSl, RSv2 = wdf_3port_series(aSv2, bRv2, bSl, RRv2, RSl)
+
+	bRv1, RRv1 = wdf_resistor(aRv1, 10000)
+	bV = wdf_voltage_source_root(aV, x)
+	aV, aRv1, aSv2, RRoot = wdf_3port_series(bV, bRv1, bSv2, RRv1, RSv2)
+
+	@aC1 = 0
+	@aC2 = 0
+	@aC3 = 0
+	@aC4 = 0
+	@aC5 = 0
+	@aC6 = 0
+	@aC7 = 0
+	@aC8 = 0
+
+	y = 0.5 * (aRl + bRl)
+}
