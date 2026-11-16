@@ -1,6 +1,7 @@
 #import "Basic";
 File :: #import "File";
-#load "../../compiler/wdf_parser.jai";
+String :: #import "String";
+#import "wdf_parser";
 
 Op :: enum {
     LOAD;
@@ -89,7 +90,7 @@ generate_op_info_table :: (cpu_type: CPU_Type) -> Op_Info_Table {
 
     return table;
 }
-op_info_table :: #run generate_op_info_table(.M1);
+op_info_table :: #run generate_op_info_table(.ZEN4);
 
 print_ops :: (ops_table: [] int) {
     ops_str := "Operations: [";
@@ -114,7 +115,7 @@ main :: () {
     sections := parse_file_sections(file_str);
     outputs := String.split(sections.outputs, "\n");
     for *output : outputs { output.* = String.trim(output.*); }
-    circuit_tokens := parse_circuit(sections.circuit);
+    circuit_tokens := parse_circuit(sections.circuit, "cpp");
 
     component_info_table := generate_component_info_table();
 

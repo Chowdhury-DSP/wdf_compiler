@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler rl_lowpass.wdf rl_lowpass.jai -lang jai
 
 Params :: struct {
@@ -44,7 +44,7 @@ process :: (state: *State, impedances: *Impedances, Iin: float) -> float {
     R1_b := cast(float) 0; // R1 reflected
     P1_b := L1_b - impedances.P1_pr * (L1_b - R1_b); // P1 reflected
     Iin_a := P1_b; // Iin incident
-    Iin_b := 2.0 * impedances.P1_R * Iin + Iin_a; // Iin reflected (@TODO: 2.0 * R?)
+    Iin_b := cast(float) 2 * impedances.P1_R * Iin + Iin_a; // Iin reflected (@TODO: 2 * R?)
     P1_a := Iin_b; // P1 incident
     R1_a := P1_b - R1_b + P1_a; // R1 incident
     L1_a := P1_b - L1_b + P1_a; // L1 incident

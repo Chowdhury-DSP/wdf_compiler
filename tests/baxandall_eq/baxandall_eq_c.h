@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler baxandall_eq.wdf baxandall_eq_c.h -lang c
 
 #pragma once
@@ -137,7 +137,7 @@ float process(struct State* state, const struct Impedances* impedances, float Vi
     _Alignas (16) const float R_ins[5] = { S4_b, P1_b, Resc_b, S3_b, S2_b }; // R inputs
     const float R_b = reflected(&(impedances->R_vars), R_ins); // R reflected
     const float Vin_a = R_b; // Vin incident
-    const float Vin_a0a1 = 2.0 * (Vin + state->Vin_z) + Vin_a; // Vin reflected
+    const float Vin_a0a1 = (float) 2 * (Vin + state->Vin_z) + Vin_a; // Vin reflected
     const float Vin_b = impedances->Vin_ca * Vin_a - impedances->Vin_ce * Vin_a0a1; // Vin reflected
     state->Vin_z += -Vin_b - Vin_a0a1; // Vin_z state update
     const float R_a = Vin_b; // R incident

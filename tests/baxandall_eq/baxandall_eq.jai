@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler baxandall_eq.wdf baxandall_eq.jai -lang jai
 
 #load "custom_baxandall_rtype.jai";
@@ -135,7 +135,7 @@ process :: (state: *State, impedances: *Impedances, Vin: float) -> float {
     R_ins := float.[S4_b, P1_b, Resc_b, S3_b, S2_b] #align 16; // R inputs
     R_b := reflected(*impedances.R_vars, R_ins.data); // R reflected
     Vin_a := R_b; // Vin incident
-    Vin_a0a1 := 2.0 * (Vin + state.Vin_z) + Vin_a; // Vin reflected
+    Vin_a0a1 := cast(float) 2 * (Vin + state.Vin_z) + Vin_a; // Vin reflected
     Vin_b := impedances.Vin_ca * Vin_a - impedances.Vin_ce * Vin_a0a1; // Vin reflected
     state.Vin_z += -Vin_b - Vin_a0a1; // Vin_z state update
     R_a := Vin_b; // R incident

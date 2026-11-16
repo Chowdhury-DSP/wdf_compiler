@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler rc_lowpass_var.wdf rc_lowpass_var.rs -lang rust
 
 #[derive(Default,Copy,Clone)]
@@ -87,7 +87,7 @@ pub fn process(state: &mut State, impedances: &Impedances, Vin: f32) -> f32 {
     let Vin_b : f32 = Vin; // Vin reflected
     let S1_b : f32 = -(Vin_b + S2_b); // S1 reflected
     let Vplus_a : f32 = S1_b; // Vplus incident
-    let Vplus_b : f32 = -Vplus_a + 2.0 * impedances.Vplus_V; // Vplus reflected
+    let Vplus_b : f32 = -Vplus_a + (2 as f32) * impedances.Vplus_V; // Vplus reflected
     let S1_a : f32 = Vplus_b; // S1 incident
     let Vin_a : f32 = Vin_b - impedances.S1_pr * (S1_a - S1_b); // Vin incident
     let S2_a : f32 = -S1_a - Vin_b + impedances.S1_pr * (S1_a - S1_b); // S2 incident

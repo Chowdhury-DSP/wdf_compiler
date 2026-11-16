@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler rc_lowpass_var.wdf rc_lowpass_var_c.h -lang c
 
 #pragma once
@@ -84,7 +84,7 @@ float process(struct State* state, const struct Impedances* impedances, float Vi
     const float Vin_b = Vin; // Vin reflected
     const float S1_b = -(Vin_b + S2_b); // S1 reflected
     const float Vplus_a = S1_b; // Vplus incident
-    const float Vplus_b = -Vplus_a + 2.0 * impedances->Vplus_V; // Vplus reflected
+    const float Vplus_b = -Vplus_a + (float) 2 * impedances->Vplus_V; // Vplus reflected
     const float S1_a = Vplus_b; // S1 incident
     const float Vin_a = Vin_b - impedances->S1_pr * (S1_a - S1_b); // Vin incident
     const float S2_a = -S1_a - Vin_b + impedances->S1_pr * (S1_a - S1_b); // S2 incident

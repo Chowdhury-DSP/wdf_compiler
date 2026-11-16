@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler rc_bandpass_var.wdf rc_bandpass_var.jai -lang jai
 
 Params :: struct {
@@ -144,7 +144,7 @@ process :: (state: *State, impedances: *Impedances, Vin: float) -> float {
     S1_b := -(C1_b + P1_b); // S1 reflected
     I1_b := -S1_b; // I1 reflected
     Vin_a := I1_b; // Vin incident
-    Vin_b := -Vin_a + 2.0 * Vin; // Vin reflected
+    Vin_b := -Vin_a + cast(float) 2 * Vin; // Vin reflected
     I1_a := Vin_b; // I1 incident
     S1_a := -I1_a; // S1 incident
     C1_a := C1_b - impedances.S1_pr * (S1_a - S1_b); // C1 incident

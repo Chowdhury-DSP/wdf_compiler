@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler analog_eq.wdf analog_eq.h
 
 #pragma once
@@ -198,7 +198,7 @@ inline float process(State& state, const Impedances& impedances, float Vin) {
     const auto Ra_b = 0; // Ra reflected
     const auto Pvin_b = SR_b - impedances.Pvin_pr * (SR_b - Ra_b); // Pvin reflected
     const auto Vin_a = Pvin_b; // Vin incident
-    const auto Vin_b = -Vin_a + 2.0 * Vin; // Vin reflected
+    const auto Vin_b = -Vin_a + (float) 2 * Vin; // Vin reflected
     const auto Pvin_a = Vin_b; // Pvin incident
     const auto Ra_a = Pvin_b - Ra_b + Pvin_a; // Ra incident
     const auto SR_a = Pvin_b - SR_b + Pvin_a; // SR incident

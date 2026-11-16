@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler reductions_circuit2.wdf reductions_circuit2.jai -lang jai
 
 Params :: struct {
@@ -124,7 +124,7 @@ process :: (state: *State, impedances: *Impedances, S8: float) -> float {
     Sr_b := state.Sr_z; // Sr reflected
     Pr_b := -(Sr_b + Sl_b); // Pr reflected
     Vb_a := Pr_b; // Vb incident
-    Vb_b := -Vb_a + 2.0 * impedances.Vb_V; // Vb reflected
+    Vb_b := -Vb_a + cast(float) 2 * impedances.Vb_V; // Vb reflected
     Pr_a := Vb_b; // Pr incident
     Sr_a := Sr_b - impedances.Pr_pr * (Pr_a - Pr_b); // Sr incident
     Sl_a := -Pr_a - Sr_b + impedances.Pr_pr * (Pr_a - Pr_b); // Sl incident

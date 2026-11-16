@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler analog_eq.wdf analog_eq.rs -lang rust
 
 use crate::custom_analog_eq_rtype;
@@ -198,7 +198,7 @@ pub fn process(state: &mut State, impedances: &Impedances, Vin: f32) -> f32 {
     let Ra_b : f32 = 0 as f32; // Ra reflected
     let Pvin_b : f32 = SR_b - impedances.Pvin_pr * (SR_b - Ra_b); // Pvin reflected
     let Vin_a : f32 = Pvin_b; // Vin incident
-    let Vin_b : f32 = -Vin_a + 2.0 * Vin; // Vin reflected
+    let Vin_b : f32 = -Vin_a + (2 as f32) * Vin; // Vin reflected
     let Pvin_a : f32 = Vin_b; // Pvin incident
     let Ra_a : f32 = Pvin_b - Ra_b + Pvin_a; // Ra incident
     let SR_a : f32 = Pvin_b - SR_b + Pvin_a; // SR incident

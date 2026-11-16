@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler rat_drive.net rat_drive.jai -lang jai -netlist
 
 #load "../../lib/wdf_lib_diode_pair.jai";

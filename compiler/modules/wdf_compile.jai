@@ -942,6 +942,10 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
         state_str = "state->";
     }
 
+    two_literal := tprint("(%) 2", global_args.dtype);
+    if global_args.lang == "jai" { two_literal = tprint("cast(%) 2", global_args.dtype); }
+    if global_args.lang == "rust" { two_literal = tprint("(2 as %)", global_args.dtype); }
+
     down_tree_statements : [..] string;
     up_tree_statements : [..] string;
     root_token := *tokens[0];
@@ -957,7 +961,7 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                                                                 tprint("%_b", child_token.name),
                                                                 tprint("% incident", token.name)));
                     array_add(*down_tree_statements, write_define(tprint("%_b", token.name),
-                                                                  tprint("-%1_a + 2.0 * %2", token.name, token.input),
+                                                                  tprint("-%1_a + %3 * %2", token.name, token.input, two_literal),
                                                                   tprint("%1 reflected", token.name)));
                     array_add(*down_tree_statements, write_define(tprint("%_a", child_token.name),
                                                                   tprint("%_b", token.name),
@@ -985,7 +989,7 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                                                                 tprint("%_b", child_token.name),
                                                                 tprint("% incident", token.name)));
                     array_add(*down_tree_statements, write_define(tprint("%_a0a1", token.name),
-                                                                  tprint("2.0 * (%2 + %3%1_z) + %1_a", token.name, input, state_str),
+                                                                  tprint("%4 * (%2 + %3%1_z) + %1_a", token.name, input, state_str, two_literal),
                                                                   tprint("%1 reflected", token.name)));
                     array_add(*down_tree_statements, write_define(tprint("%_b", token.name),
                                                                   tprint("%2%1_ca * %1_a - %2%1_ce * %1_a0a1", token.name, impedances_str),
@@ -1007,7 +1011,7 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                                                                   tprint("%2%1_cr * %1_a", token.name, impedances_str),
                                                                   tprint("%1_CVs incident", token.name)));
                     array_add(*down_tree_statements, write_define(tprint("%_a0a1", token.name),
-                                                                  tprint("2.0 * (%2 + %3%1_z) + %1_a_cvs", token.name, input, state_str),
+                                                                  tprint("%4 * (%2 + %3%1_z) + %1_a_cvs", token.name, input, state_str, two_literal),
                                                                   tprint("%1_CVs reflected", token.name)));
                     array_add(*down_tree_statements, write_define(tprint("%_b_cvs", token.name),
                                                                   tprint("%2%1_ca * %1_a_cvs - %2%1_ce * %1_a0a1", token.name, impedances_str),
@@ -1028,8 +1032,8 @@ generate_process :: (tokens: [] Token, inputs: [] string, outputs: [] string) ->
                                                                 tprint("%_b", child_token.name),
                                                                 tprint("% incident", token.name)));
                     array_add(*down_tree_statements, write_define(tprint("%_b", token.name),
-                                                                  tprint("2.0 * %4%3_R * %2 + %1_a", token.name, token.input, child_token.name, impedances_str),
-                                                                  tprint("%1 reflected (@TODO: 2.0 * R?)", token.name)));
+                                                                  tprint("%5 * %4%3_R * %2 + %1_a", token.name, token.input, child_token.name, impedances_str, two_literal),
+                                                                  tprint("%1 reflected (@TODO: 2 * R?)", token.name)));
                     array_add(*down_tree_statements, write_define(tprint("%_a", child_token.name),
                                                                   tprint("%_b", token.name),
                                                                   tprint("% incident", child_token.name)));

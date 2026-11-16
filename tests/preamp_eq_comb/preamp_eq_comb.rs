@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler preamp_eq_comb.wdf preamp_eq_comb.rs -lang rust
 
 #[derive(Default,Copy,Clone)]
@@ -119,7 +119,7 @@ pub fn process(state: &mut State, impedances: &Impedances, lfc_cap: f32) -> f32 
     state.lfc_cap_v1 = lfc_cap; // lfc_cap state update
     let s_i_b : f32 = -(lfc_cap_b + s_o_b); // s_i reflected
     let v_in_a : f32 = s_i_b; // v_in incident
-    let v_in_b : f32 = -v_in_a + 2.0 * impedances.v_in_V; // v_in reflected
+    let v_in_b : f32 = -v_in_a + (2 as f32) * impedances.v_in_V; // v_in reflected
     let s_i_a : f32 = v_in_b; // s_i incident
     let lfc_cap_a : f32 = lfc_cap_b - impedances.s_i_pr * (s_i_a - s_i_b); // lfc_cap incident
     let s_o_a : f32 = -s_i_a - lfc_cap_b + impedances.s_i_pr * (s_i_a - s_i_b); // s_o incident

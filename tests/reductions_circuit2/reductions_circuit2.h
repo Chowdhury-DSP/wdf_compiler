@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler reductions_circuit2.wdf reductions_circuit2.h
 
 #pragma once
@@ -126,7 +126,7 @@ inline float process(State& state, const Impedances& impedances, float S8) {
     const auto Sr_b = state.Sr_z; // Sr reflected
     const auto Pr_b = -(Sr_b + Sl_b); // Pr reflected
     const auto Vb_a = Pr_b; // Vb incident
-    const auto Vb_b = -Vb_a + 2.0 * impedances.Vb_V; // Vb reflected
+    const auto Vb_b = -Vb_a + (float) 2 * impedances.Vb_V; // Vb reflected
     const auto Pr_a = Vb_b; // Pr incident
     const auto Sr_a = Sr_b - impedances.Pr_pr * (Pr_a - Pr_b); // Sr incident
     const auto Sl_a = -Pr_a - Sr_b + impedances.Pr_pr * (Pr_a - Pr_b); // Sl incident

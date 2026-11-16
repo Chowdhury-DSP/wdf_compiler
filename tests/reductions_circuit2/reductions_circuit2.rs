@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler reductions_circuit2.wdf reductions_circuit2.rs -lang rust
 
 #[derive(Default,Copy,Clone)]
@@ -139,7 +139,7 @@ pub fn process(state: &mut State, impedances: &Impedances, S8: f32) -> f32 {
     let Sr_b : f32 = state.Sr_z; // Sr reflected
     let Pr_b : f32 = -(Sr_b + Sl_b); // Pr reflected
     let Vb_a : f32 = Pr_b; // Vb incident
-    let Vb_b : f32 = -Vb_a + 2.0 * impedances.Vb_V; // Vb reflected
+    let Vb_b : f32 = -Vb_a + (2 as f32) * impedances.Vb_V; // Vb reflected
     let Pr_a : f32 = Vb_b; // Pr incident
     let Sr_a : f32 = Sr_b - impedances.Pr_pr * (Pr_a - Pr_b); // Sr incident
     let Sl_a : f32 = -Pr_a - Sr_b + impedances.Pr_pr * (Pr_a - Pr_b); // Sl incident

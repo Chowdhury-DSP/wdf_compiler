@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler rl_lowpass.wdf rl_lowpass.h
 
 #pragma once
@@ -49,7 +49,7 @@ inline float process(State& state, const Impedances& impedances, float Iin) {
     const auto R1_b = 0; // R1 reflected
     const auto P1_b = L1_b - impedances.P1_pr * (L1_b - R1_b); // P1 reflected
     const auto Iin_a = P1_b; // Iin incident
-    const auto Iin_b = 2.0 * impedances.P1_R * Iin + Iin_a; // Iin reflected (@TODO: 2.0 * R?)
+    const auto Iin_b = (float) 2 * impedances.P1_R * Iin + Iin_a; // Iin reflected (@TODO: 2 * R?)
     const auto P1_a = Iin_b; // P1 incident
     const auto R1_a = P1_b - R1_b + P1_a; // R1 incident
     const auto L1_a = P1_b - L1_b + P1_a; // L1 incident

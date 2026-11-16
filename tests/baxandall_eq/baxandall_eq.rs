@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler baxandall_eq.wdf baxandall_eq.rs -lang rust
 
 use crate::custom_baxandall_rtype;
@@ -140,7 +140,7 @@ pub fn process(state: &mut State, impedances: &Impedances, Vin: f32) -> f32 {
     let R_ins : [f32; 5] = [S4_b, P1_b, Resc_b, S3_b, S2_b]; // R inputs
     let R_b = custom_baxandall_rtype::reflected(&impedances.R_vars, &R_ins); // R reflected
     let Vin_a : f32 = R_b; // Vin incident
-    let Vin_a0a1 : f32 = 2.0 * (Vin + state.Vin_z) + Vin_a; // Vin reflected
+    let Vin_a0a1 : f32 = (2 as f32) * (Vin + state.Vin_z) + Vin_a; // Vin reflected
     let Vin_b : f32 = impedances.Vin_ca * Vin_a - impedances.Vin_ce * Vin_a0a1; // Vin reflected
     state.Vin_z += -Vin_b - Vin_a0a1; // Vin_z state update
     let R_a : f32 = Vin_b; // R incident

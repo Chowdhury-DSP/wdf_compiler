@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler rc_bandpass.net rc_bandpass.h -netlist
 
 #pragma once
@@ -59,7 +59,7 @@ inline float process(State& state, const Impedances& impedances, float Vin) {
     const auto S7_b = -(C2_b + R2_b); // S7 reflected
     const auto Vin_a = S7_b; // Vin incident
     const auto Vin_a_cvs = impedances.Vin_cr * Vin_a; // Vin_CVs incident
-    const auto Vin_a0a1 = 2.0 * (Vin + state.Vin_z) + Vin_a_cvs; // Vin_CVs reflected
+    const auto Vin_a0a1 = (float) 2 * (Vin + state.Vin_z) + Vin_a_cvs; // Vin_CVs reflected
     const auto Vin_b_cvs = impedances.Vin_ca * Vin_a_cvs - impedances.Vin_ce * Vin_a0a1; // Vin_CVs reflected
     const auto Vin_b = Vin_b_cvs - Vin_a_cvs; // Vin reflected
     state.Vin_z += -Vin_b_cvs - Vin_a0a1; // Vin_z state update

@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler rc_bandpass.wdf rc_bandpass.rs -lang rust
 
 #[derive(Default,Copy,Clone)]
@@ -62,7 +62,7 @@ pub fn process(state: &mut State, impedances: &Impedances, Vin: f32) -> f32 {
     let S2_b : f32 = -(R2_b + C2_b); // S2 reflected
     let Vin_a : f32 = S2_b; // Vin incident
     let Vin_a_cvs : f32 = impedances.Vin_cr * Vin_a; // Vin_CVs incident
-    let Vin_a0a1 : f32 = 2.0 * (Vin + state.Vin_z) + Vin_a_cvs; // Vin_CVs reflected
+    let Vin_a0a1 : f32 = (2 as f32) * (Vin + state.Vin_z) + Vin_a_cvs; // Vin_CVs reflected
     let Vin_b_cvs : f32 = impedances.Vin_ca * Vin_a_cvs - impedances.Vin_ce * Vin_a0a1; // Vin_CVs reflected
     let Vin_b : f32 = Vin_b_cvs - Vin_a_cvs; // Vin reflected
     state.Vin_z += -Vin_b_cvs - Vin_a0a1; // Vin_z state update

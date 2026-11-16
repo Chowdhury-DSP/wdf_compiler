@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler preamp_eq_comb.wdf preamp_eq_comb.h
 
 #pragma once
@@ -112,7 +112,7 @@ inline float process(State& state, const Impedances& impedances, float lfc_cap) 
     state.lfc_cap_v1 = lfc_cap; // lfc_cap state update
     const auto s_i_b = -(lfc_cap_b + s_o_b); // s_i reflected
     const auto v_in_a = s_i_b; // v_in incident
-    const auto v_in_b = -v_in_a + 2.0 * impedances.v_in_V; // v_in reflected
+    const auto v_in_b = -v_in_a + (float) 2 * impedances.v_in_V; // v_in reflected
     const auto s_i_a = v_in_b; // s_i incident
     const auto lfc_cap_a = lfc_cap_b - impedances.s_i_pr * (s_i_a - s_i_b); // lfc_cap incident
     const auto s_o_a = -s_i_a - lfc_cap_b + impedances.s_i_pr * (s_i_a - s_i_b); // s_o incident

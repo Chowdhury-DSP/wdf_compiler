@@ -1,4 +1,4 @@
-// Auto-generated with wdf_compiler version 1.1.0.636c5ce.
+// Auto-generated with wdf_compiler version 1.1.0.b358f22.
 // Command: wdf_compiler reductions_circuit2.wdf reductions_circuit2_c.h -lang c
 
 #pragma once
@@ -136,7 +136,7 @@ float process(struct State* state, const struct Impedances* impedances, float S8
     const float Sr_b = state->Sr_z; // Sr reflected
     const float Pr_b = -(Sr_b + Sl_b); // Pr reflected
     const float Vb_a = Pr_b; // Vb incident
-    const float Vb_b = -Vb_a + 2.0 * impedances->Vb_V; // Vb reflected
+    const float Vb_b = -Vb_a + (float) 2 * impedances->Vb_V; // Vb reflected
     const float Pr_a = Vb_b; // Pr incident
     const float Sr_a = Sr_b - impedances->Pr_pr * (Pr_a - Pr_b); // Sr incident
     const float Sl_a = -Pr_a - Sr_b + impedances->Pr_pr * (Pr_a - Pr_b); // Sl incident
